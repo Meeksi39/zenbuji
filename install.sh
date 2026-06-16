@@ -72,6 +72,24 @@ if [[ "$MODE" == uninstall ]]; then
             fi
         done
     fi
+    # Remove our app-id from Blur My Shell's whitelist (leaves others intact).
+    BMS_DIR="$HOME/.local/share/gnome-shell/extensions/blur-my-shell@aunetx"
+    BMS_SCHEMA="org.gnome.shell.extensions.blur-my-shell.applications"
+    if command -v gsettings >/dev/null && [[ -d "$BMS_DIR/schemas" ]]; then
+        cur="$(GSETTINGS_SCHEMA_DIR="$BMS_DIR/schemas" gsettings get "$BMS_SCHEMA" whitelist 2>/dev/null || echo '@as []')"
+        if [[ "$cur" == *"'com.meeksi39.zenbuji'"* ]]; then
+            new="$(python3 - "$cur" <<'PY'
+import sys, ast
+s = sys.argv[1].strip()
+s = s[4:].strip() if s.startswith("@as ") else s
+lst = [x for x in (ast.literal_eval(s) if s else []) if x != "com.meeksi39.zenbuji"]
+print(lst)
+PY
+)"
+            GSETTINGS_SCHEMA_DIR="$BMS_DIR/schemas" gsettings set "$BMS_SCHEMA" whitelist "$new"
+            echo "Removed com.meeksi39.zenbuji from the Blur My Shell whitelist."
+        fi
+    fi
     echo "Removed CLI, extension and Nautilus integration."
     echo "Kept: venv at $VENV (delete by hand to reclaim space),"
     echo "      config at ~/.config/zenbuji."
@@ -173,6 +191,46 @@ if command -v gsettings >/dev/null; then
     register_keybinding zenbuji-ocr 'zenbuji: look up screen region (OCR)' \
         "$BIN_DIR/zenbuji popup --ocr" '<Super><Shift>j'
     echo "  bound Super+Shift+J → zenbuji popup --ocr (GNOME custom shortcut)"
+fi
+
+# --- Blur My Shell integration (frosted-glass popup) --------------------- #
+# The popup window is transparent; GNOME can't blur behind a client window on
+# its own, so Blur My Shell's "Applications" component supplies the blur. Add
+# our app-id to its whitelist (idempotent). Without it the popup is simply a
+# clean translucent panel.
+BMS_DIR="$HOME/.local/share/gnome-shell/extensions/blur-my-shell@aunetx"
+BMS_APP_ID="com.meeksi39.zenbuji"
+BMS_SCHEMA="org.gnome.shell.extensions.blur-my-shell.applications"
+if command -v gsettings >/dev/null && [[ -d "$BMS_DIR/schemas" ]]; then
+    cur="$(GSETTINGS_SCHEMA_DIR="$BMS_DIR/schemas" gsettings get "$BMS_SCHEMA" whitelist 2>/dev/null || echo '@as []')"
+    if [[ "$cur" == *"'$BMS_APP_ID'"* ]]; then
+        echo "  Blur My Shell already knows $BMS_APP_ID"
+    else
+        new="$(python3 - "$cur" "$BMS_APP_ID" <<'PY'
+import sys, ast
+s = sys.argv[1].strip()
+s = s[4:].strip() if s.startswith("@as ") else s
+lst = ast.literal_eval(s) if s else []
+if sys.argv[2] not in lst:
+    lst.append(sys.argv[2])
+print(lst)
+PY
+)"
+        if [[ -n "$new" ]]; then
+            GSETTINGS_SCHEMA_DIR="$BMS_DIR/schemas" gsettings set "$BMS_SCHEMA" whitelist "$new"
+            echo "  registered $BMS_APP_ID with Blur My Shell (frosted-glass popup)"
+        fi
+    fi
+    if [[ "$(GSETTINGS_SCHEMA_DIR="$BMS_DIR/schemas" gsettings get "$BMS_SCHEMA" blur 2>/dev/null)" == "false" ]]; then
+        echo "  note: turn on Blur My Shell ▸ Applications blur to see the glass effect"
+    fi
+    if [[ "$(GSETTINGS_SCHEMA_DIR="$BMS_DIR/schemas" gsettings get "$BMS_SCHEMA" static-blur 2>/dev/null)" == "true" ]]; then
+        echo "  tip: Blur My Shell ▸ Applications ▸ 'static blur' is on — turn it off for"
+        echo "       live blur of the windows behind the popup (vs. the wallpaper image)"
+    fi
+else
+    echo "  (Blur My Shell not found — the popup will be translucent without blur;"
+    echo "   install blur-my-shell from extensions.gnome.org for frosted glass)"
 fi
 
 # --- Offline models ------------------------------------------------------ #

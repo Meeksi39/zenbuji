@@ -19,7 +19,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
 
 # Target-language section labels, shown in the interface language.
 LANG_NAMES_BY_UI = {
@@ -47,11 +48,51 @@ def _make_tr(ui_language):
         return entry.get(ui_language) or entry.get("en") or key
     return t
 
+# Apple-style frosted glass. The window surface is fully transparent; the
+# `.zenbuji-card` is a translucent, rounded, hairline-bordered panel. Real blur
+# behind the transparent card is provided by GNOME's Blur My Shell "Applications"
+# component (the card's radius tracks its corner-radius, ~15px). Without it the
+# card simply degrades to a clean translucent panel.
 CSS = b"""
+window.zenbuji-window { background-color: transparent; box-shadow: none; }
+.zenbuji-window windowhandle { background-color: transparent; }
+
+.zenbuji-card {
+    border-radius: 15px;
+    padding: 18px 18px 16px 18px;
+    background-image: linear-gradient(to bottom,
+        alpha(#ffffff, 0.06), alpha(#ffffff, 0.0));
+}
+.zenbuji-card.dark {
+    background-color: rgba(34, 34, 38, 0.55);
+    color: #f2f2f7;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.zenbuji-card.light {
+    background-color: rgba(250, 250, 252, 0.66);
+    color: #1c1c1e;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.zenbuji-entry {
+    border-radius: 10px;
+    min-height: 34px;
+    padding: 2px 10px;
+    border: none;
+    box-shadow: none;
+    background-color: alpha(currentColor, 0.07);
+}
+.zenbuji-entry:focus-within { background-color: alpha(currentColor, 0.11); }
+
+.zenbuji-lookup { border-radius: 10px; font-weight: 600; }
+
+.zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
+
 .zenbuji-original { font-size: 20px; font-weight: 600; }
 .zenbuji-reading  { font-size: 15px; color: alpha(currentColor, 0.7); }
 .zenbuji-token-kanji { font-size: 15px; }
-.zenbuji-lang-label { font-weight: 700; opacity: 0.6; font-size: 11px; }
+.zenbuji-lang-label { font-weight: 700; opacity: 0.55; font-size: 11px;
+    letter-spacing: 0.04em; }
 .zenbuji-translation { font-size: 15px; }
 .zenbuji-note { font-size: 11px; opacity: 0.6; font-style: italic; }
 .zenbuji-status { font-size: 12px; opacity: 0.7; }
@@ -96,7 +137,7 @@ def show_popup(languages, *, result=None, ocr_image=None,
     """
     t = _make_tr(ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
-    app = Gtk.Application(application_id="com.meeksi39.zenbuji")
+    app = Adw.Application(application_id="com.meeksi39.zenbuji")
 
     def on_activate(application):
         provider = Gtk.CssProvider()
@@ -104,26 +145,46 @@ def show_popup(languages, *, result=None, ocr_image=None,
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
             provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+            Gtk.STYLE_PROVIDER_PRIORITY_USER,
         )
 
         win = Gtk.ApplicationWindow(application=application)
         win.set_title("zenbuji 全部字")
         win.set_default_size(460, -1)
-        win.set_resizable(True)
+        win.set_decorated(False)   # headerless floating overlay
+        win.set_resizable(False)
+        win.add_css_class("zenbuji-window")  # transparent surface (see CSS)
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        box.set_margin_top(16)
-        box.set_margin_bottom(16)
-        box.set_margin_start(18)
-        box.set_margin_end(18)
-        win.set_child(box)
+        # The frosted glass card is the only visible surface; padding lives in CSS.
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.add_css_class("zenbuji-card")
+
+        # Tint follows the system light/dark scheme, live.
+        style_mgr = Adw.StyleManager.get_default()
+
+        def apply_scheme(*_a):
+            box.remove_css_class("dark")
+            box.remove_css_class("light")
+            box.add_css_class("dark" if style_mgr.get_dark() else "light")
+
+        apply_scheme()
+        style_mgr.connect("notify::dark", apply_scheme)
+
+        # WindowHandle lets the headerless card be dragged; child widgets (entry,
+        # buttons) keep working normally.
+        handle = Gtk.WindowHandle()
+        handle.set_child(box)
+        win.set_child(handle)
 
         # --- Editable input row ------------------------------------------- //
-        input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         entry = Gtk.Entry(hexpand=True, placeholder_text=t("placeholder"))
         entry.add_css_class("zenbuji-original")
+        entry.add_css_class("zenbuji-entry")
         lookup_btn = Gtk.Button(label=t("look_up"))
+        lookup_btn.add_css_class("suggested-action")
+        lookup_btn.add_css_class("zenbuji-lookup")
+        lookup_btn.set_valign(Gtk.Align.CENTER)
         input_row.append(entry)
         input_row.append(lookup_btn)
         box.append(input_row)
@@ -138,7 +199,11 @@ def show_popup(languages, *, result=None, ocr_image=None,
         status_row.set_visible(False)
         box.append(status_row)
 
-        box.append(Gtk.Separator())
+        hairline = Gtk.Box()
+        hairline.add_css_class("zenbuji-hairline")
+        hairline.set_margin_top(2)
+        hairline.set_margin_bottom(2)
+        box.append(hairline)
 
         # --- Result area (rebuilt on each lookup) ------------------------- //
         result_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -256,6 +321,18 @@ def show_popup(languages, *, result=None, ocr_image=None,
 
         key.connect("key-pressed", on_key)
         win.add_controller(key)
+
+        # Dismiss when the window loses focus (overlay/HUD behaviour). Only after
+        # it has actually been focused once, so it doesn't self-close on startup.
+        focus_state = {"was_active": False}
+
+        def on_active_changed(*_a):
+            if win.is_active():
+                focus_state["was_active"] = True
+            elif focus_state["was_active"]:
+                win.close()
+
+        win.connect("notify::is-active", on_active_changed)
 
         win.present()
 

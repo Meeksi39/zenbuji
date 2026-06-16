@@ -178,6 +178,23 @@ otherwise the offline backend. Recent lookups are stored in
 
 The popup window has **copy buttons** next to the reading and each translation.
 
+### Frosted-glass popup
+
+The popup is a headerless, translucent floating card that follows your system
+light/dark theme, can be dragged from any empty spot, and dismisses on **Escape**
+or when it loses focus. Its tint tracks the ~15px corner radius of GNOME's
+[Blur My Shell] "Applications" component.
+
+GNOME/Mutter has no way for an app to blur what's behind its own window, so the
+real blur is supplied by Blur My Shell. `install.sh` adds `com.meeksi39.zenbuji`
+to its **Applications ▸ whitelist** automatically (idempotent; removed on
+uninstall). For the effect you need Blur My Shell installed with **Applications
+blur enabled**; turn **static blur off** under that section so it blurs the live
+windows behind the popup rather than the wallpaper. Without Blur My Shell the
+popup degrades gracefully to a clean translucent panel.
+
+[Blur My Shell]: https://extensions.gnome.org/extension/3193/blur-my-shell/
+
 ### Offline models
 
 ```sh
