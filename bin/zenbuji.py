@@ -27,6 +27,11 @@ CONFIG_DIR = Path(
 ) / "zenbuji"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
+DATA_DIR = Path(
+    os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
+) / "zenbuji"
+HISTORY_PATH = DATA_DIR / "history.json"
+
 DEFAULT_CONFIG = {
     # "argos" (offline), "deepl" (online), or "auto" (deepl if a key is set,
     # otherwise argos).
@@ -35,6 +40,10 @@ DEFAULT_CONFIG = {
     "languages": ["en", "de"],
     # DeepL API key (free tier works). Can also come from $DEEPL_API_KEY.
     "deepl_api_key": "",
+    # Remember recent lookups (shown in the extension's "Recent" menu).
+    "history": True,
+    # Maximum number of recent lookups to keep.
+    "history_size": 20,
 }
 
 
@@ -58,6 +67,51 @@ def save_config(cfg: dict) -> None:
     CONFIG_PATH.write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+
+
+# --------------------------------------------------------------------------- #
+# History
+# --------------------------------------------------------------------------- #
+def load_history() -> list:
+    try:
+        if HISTORY_PATH.exists():
+            data = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return data
+    except (OSError, ValueError):
+        pass
+    return []
+
+
+def clear_history() -> None:
+    try:
+        HISTORY_PATH.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
+
+
+def append_history(result: "Result", limit: int = 20) -> None:
+    """Record a lookup, newest-first, deduped by text and capped at `limit`."""
+    if not result.text:
+        return
+    entry = {
+        "text": result.text,
+        "reading": result.reading,
+        "translations": result.translations,
+    }
+    history = [e for e in load_history() if e.get("text") != result.text]
+    history.insert(0, entry)
+    del history[max(0, limit):]
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        HISTORY_PATH.write_text(
+            json.dumps(history, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -182,6 +236,33 @@ def translate_deepl(text: str, targets: list[str], api_key: str) -> dict:
         except Exception as exc:  # noqa: BLE001
             raise TranslationError(f"DeepL request failed: {exc}") from exc
     return out
+
+
+def deepl_usage(api_key: str) -> dict:
+    """Query the DeepL account usage endpoint to validate a key.
+
+    Returns {"ok": bool, "used": int, "limit": int, "error": str}.
+    """
+    import urllib.request
+
+    if not api_key:
+        return {"ok": False, "used": 0, "limit": 0, "error": "no API key set"}
+    host = "api-free.deepl.com" if api_key.endswith(":fx") else "api.deepl.com"
+    req = urllib.request.Request(
+        f"https://{host}/v2/usage",
+        headers={"Authorization": f"DeepL-Auth-Key {api_key}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return {
+            "ok": True,
+            "used": int(payload.get("character_count", 0)),
+            "limit": int(payload.get("character_limit", 0)),
+            "error": "",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "used": 0, "limit": 0, "error": str(exc)}
 
 
 _ARGOS_LANGS = None
@@ -310,13 +391,16 @@ def process(text: str, languages: list[str], cfg: dict, do_translate: bool = Tru
     notes: list[str] = []
     if do_translate and text:
         translations, notes = translate(text, languages, cfg)
-    return Result(
+    result = Result(
         text=text,
         reading=reading,
         tokens=tokens,
         translations=translations,
         notes=notes,
     )
+    if cfg.get("history", True) and translations:
+        append_history(result, limit=int(cfg.get("history_size", 20)))
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -384,6 +468,7 @@ Usage:
   zenbuji popup [text]        Show a GUI popup (reads selection if no text)
   zenbuji selection           Process the current text selection
   zenbuji config              Show or set configuration
+  zenbuji usage               Check the DeepL key and show remaining quota
   zenbuji models --install    Download offline Argos models (ja->en, en->de)
 
 Input: if no <text> is given, zenbuji reads the current selection (with
@@ -444,14 +529,37 @@ def cmd_config(args, cfg) -> int:
     if args.deepl_key is not None:
         cfg["deepl_api_key"] = args.deepl_key
         changed = True
+    if args.history:
+        cfg["history"] = args.history == "on"
+        changed = True
     if changed:
         save_config(cfg)
+    if args.clear_history:
+        clear_history()
+    if args.json:
+        # Machine-readable: the real, unredacted config (used by the prefs UI,
+        # which reads the same local file anyway).
+        print(json.dumps(cfg, ensure_ascii=False))
+        return 0
+    if changed:
         print(f"saved {CONFIG_PATH}")
     redacted = dict(cfg)
     if redacted.get("deepl_api_key"):
         redacted["deepl_api_key"] = "***set***"
     print(json.dumps(redacted, ensure_ascii=False, indent=2))
     return 0
+
+
+def cmd_usage(args, cfg) -> int:
+    key = args.key if args.key is not None else cfg.get("deepl_api_key", "")
+    info = deepl_usage(key)
+    if args.json:
+        print(json.dumps(info, ensure_ascii=False))
+    elif info["ok"]:
+        print(f"DeepL key OK — {info['used']:,} / {info['limit']:,} characters used")
+    else:
+        print(f"DeepL key check failed: {info['error']}", file=sys.stderr)
+    return 0 if info["ok"] else 1
 
 
 def main(argv=None) -> int:
@@ -472,7 +580,7 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models",
+        "config", "models", "usage",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -490,7 +598,16 @@ def main(argv=None) -> int:
         p.add_argument("--backend", choices=["argos", "deepl", "auto"])
         p.add_argument("--lang")
         p.add_argument("--deepl-key", dest="deepl_key")
+        p.add_argument("--history", choices=["on", "off"])
+        p.add_argument("--clear-history", action="store_true")
+        p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
+
+    if command == "usage":
+        p = argparse.ArgumentParser(prog="zenbuji usage")
+        p.add_argument("--key")
+        p.add_argument("--json", action="store_true")
+        return cmd_usage(p.parse_args(rest), cfg)
 
     if command == "models":
         p = argparse.ArgumentParser(prog="zenbuji models")

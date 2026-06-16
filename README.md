@@ -39,7 +39,7 @@ menu, so "omni-available" is delivered the way that actually works everywhere:
 | Surface | What it does |
 |---|---|
 | **Global hotkey** (`Super+J`) | Reads the current PRIMARY selection (`wl-paste -p`) and shows a popup. Select text in any app, press the key. |
-| **Top-bar menu** | Click the `振` icon, type or paste Japanese, get furigana + EN/DE inline. |
+| **Top-bar menu** | Click the `振` icon, type or paste Japanese, get furigana + EN/DE inline, and re-open any **recent** lookup. |
 | **Files context menu** | Right-click a text file ▸ *Scripts ▸ zenbuji*, or (with `nautilus-python`) a direct context-menu entry. |
 | **CLI** | `zenbuji <text>` / pipe stdin / `--selection`. |
 
@@ -125,16 +125,31 @@ gsettings set "$P" binding '<Super>F9'
 
 ### Configuration
 
+The easiest way is the **extension settings UI** (`gnome-extensions prefs
+zenbuji@meeksi39`, or *Extensions ▸ zenbuji ▸ Settings*): set the **DeepL API
+key**, pick the **backend** and **languages**, **verify** the key (shows your
+remaining DeepL quota), and toggle/clear the recent-lookup **history**. The UI
+reads and writes the same config file the CLI uses, so every surface stays in
+sync.
+
+From the command line:
+
 ```sh
 zenbuji config                          # show current config
 zenbuji config --backend argos          # offline (default)
 zenbuji config --backend deepl --deepl-key <KEY>
 zenbuji config --lang en,de             # which languages to show
+zenbuji config --history off            # stop recording recent lookups
+zenbuji config --clear-history          # forget recorded lookups
+zenbuji usage                           # check the DeepL key + remaining quota
 ```
 
 Config lives in `~/.config/zenbuji/config.json`. The DeepL key can also come
 from `$DEEPL_API_KEY`. `auto` (the default) uses DeepL when a key is set,
-otherwise the offline backend.
+otherwise the offline backend. Recent lookups are stored in
+`~/.local/share/zenbuji/history.json`.
+
+The popup window has **copy buttons** next to the reading and each translation.
 
 ### Offline models
 

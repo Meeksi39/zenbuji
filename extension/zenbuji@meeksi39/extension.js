@@ -78,6 +78,12 @@ class ZenbujiIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
+        // --- Recent lookups ----------------------------------------------- //
+        this._recentSub = new PopupMenu.PopupSubMenuMenuItem(_('Recent'));
+        this.menu.addMenuItem(this._recentSub);
+
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
         const selItem = new PopupMenu.PopupMenuItem(_('Look up current selection'));
         selItem.connect('activate', () => this._extension.lookupSelection());
         this.menu.addMenuItem(selItem);
@@ -90,6 +96,7 @@ class ZenbujiIndicator extends PanelMenu.Button {
         this.menu.connect('open-state-changed', (_m, open) => {
             if (open) {
                 this._clearResult();
+                this._populateRecent();
                 GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
                     global.stage.set_key_focus(this._entry.clutter_text);
                     return GLib.SOURCE_REMOVE;
@@ -100,6 +107,26 @@ class ZenbujiIndicator extends PanelMenu.Button {
 
     _clearResult() {
         this._resultSection.removeAll();
+    }
+
+    _populateRecent() {
+        const menu = this._recentSub.menu;
+        menu.removeAll();
+        const history = this._extension.readHistory();
+        if (!history.length) {
+            const empty = new PopupMenu.PopupMenuItem(_('No recent lookups'));
+            empty.sensitive = false;
+            menu.addMenuItem(empty);
+            return;
+        }
+        for (const entry of history) {
+            const item = new PopupMenu.PopupMenuItem(entry.text || '');
+            if (entry.reading && entry.reading !== entry.text) {
+                item.label.text = `${entry.text}（${entry.reading}）`;
+            }
+            item.connect('activate', () => this._extension.lookupText(entry.text || ''));
+            menu.addMenuItem(item);
+        }
     }
 
     _addInfo(text, style) {
@@ -168,15 +195,54 @@ export default class ZenbujiExtension extends Extension {
         return [...base, ...args];
     }
 
+    // Read the canonical CLI config file directly (no Python startup needed).
+    _readConfig() {
+        try {
+            const path = GLib.build_filenamev(
+                [GLib.get_user_config_dir(), 'zenbuji', 'config.json']);
+            const [ok, bytes] = GLib.file_get_contents(path);
+            if (!ok)
+                return {};
+            return JSON.parse(new TextDecoder().decode(bytes)) || {};
+        } catch (_e) {
+            return {};
+        }
+    }
+
+    // Recent lookups recorded by the CLI in its data dir.
+    readHistory() {
+        try {
+            const path = GLib.build_filenamev(
+                [GLib.get_user_data_dir(), 'zenbuji', 'history.json']);
+            const [ok, bytes] = GLib.file_get_contents(path);
+            if (!ok)
+                return [];
+            const data = JSON.parse(new TextDecoder().decode(bytes));
+            return Array.isArray(data) ? data : [];
+        } catch (_e) {
+            return [];
+        }
+    }
+
     getLanguages() {
-        // The CLI owns the canonical config; default to en/de for the menu.
-        return ['en', 'de'];
+        const langs = this._readConfig().languages;
+        return Array.isArray(langs) && langs.length ? langs : ['en', 'de'];
     }
 
     lookupSelection() {
+        this._spawnPopup(['popup', '--selection']);
+    }
+
+    lookupText(text) {
+        if (!text)
+            return;
+        this._spawnPopup(['popup', text]);
+    }
+
+    _spawnPopup(args) {
         try {
             const proc = new Gio.Subprocess({
-                argv: this.cliArgv(['popup', '--selection']),
+                argv: this.cliArgv(args),
                 flags: Gio.SubprocessFlags.STDERR_PIPE,
             });
             proc.init(null);

@@ -41,6 +41,20 @@ def _ruby_markup(tokens) -> str:
     return "".join(parts)
 
 
+def _copy_row(window, label_widget, text):
+    """Wrap a label in a row with a flat copy-to-clipboard button."""
+    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+    label_widget.set_hexpand(True)
+    row.append(label_widget)
+    btn = Gtk.Button(icon_name="edit-copy-symbolic")
+    btn.add_css_class("flat")
+    btn.set_valign(Gtk.Align.START)
+    btn.set_tooltip_text("Copy")
+    btn.connect("clicked", lambda _b: window.get_clipboard().set(text))
+    row.append(btn)
+    return row
+
+
 def show_popup(result, languages) -> int:
     app = Gtk.Application(application_id="com.meeksi39.zenbuji")
 
@@ -73,7 +87,7 @@ def show_popup(result, languages) -> int:
             reading = Gtk.Label(label=result.reading, wrap=True, xalign=0,
                                 selectable=True)
             reading.add_css_class("zenbuji-reading")
-            box.append(reading)
+            box.append(_copy_row(win, reading, result.reading))
 
         if any(getattr(t, "has_kanji", False) for t in result.tokens):
             ruby = Gtk.Label(wrap=True, xalign=0, selectable=True)
@@ -91,7 +105,10 @@ def show_popup(result, languages) -> int:
             tr = Gtk.Label(label=val if val else "—", wrap=True, xalign=0,
                            selectable=True)
             tr.add_css_class("zenbuji-translation")
-            box.append(tr)
+            if val:
+                box.append(_copy_row(win, tr, val))
+            else:
+                box.append(tr)
 
         for note in result.notes:
             n = Gtk.Label(label=note, wrap=True, xalign=0)
