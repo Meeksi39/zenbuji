@@ -99,7 +99,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         title.add_css_class("zenbuji-title")
         title.set_hexpand(True)
         clear_btn = Gtk.Button(label=t("clear_all"))
-        clear_btn.add_css_class("flat")
+        clear_btn.add_css_class("zenbuji-secondary")
+        clear_btn.add_css_class("zenbuji-icon-danger")  # destructive: red text
         clear_btn.set_valign(Gtk.Align.CENTER)
         header.append(title)
         header.append(clear_btn)
@@ -180,6 +181,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     continue
                 b = Gtk.Button(icon_name=icon)
                 b.add_css_class("flat")
+                b.add_css_class("zenbuji-icon-danger" if key == "delete"
+                                else "zenbuji-icon")
                 b.set_valign(Gtk.Align.CENTER)
                 b.set_tooltip_text(t(key))
                 b.connect("clicked", cb)

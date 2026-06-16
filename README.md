@@ -136,9 +136,9 @@ gsettings set "$P" binding '<Super>F9'
 Lots of Japanese on screen isn't selectable — text baked into a UI, a game, a
 video frame, an image. Press **`Super+Shift+J`** (or top-bar ▸ *Look up screen
 region*), **draw a box** around the text, and zenbuji reads it with OCR, then
-shows furigana + EN/DE in the usual popup. The recognized text sits in an
-**editable field** — OCR isn't perfect, so fix a stray character and press Enter
-to look it up again.
+shows furigana + EN/DE in the usual popup. The **captured screenshot is shown**
+at the top for reference, and the recognized text sits in an **editable field** —
+OCR isn't perfect, so fix a stray character and press Enter to look it up again.
 
 ```sh
 zenbuji ocr                  # capture a region interactively
@@ -173,6 +173,7 @@ zenbuji config --lang en,de             # which languages to show
 zenbuji config --ui-language ja         # interface language (en or ja)
 zenbuji config --popup-close-on-focus-loss off   # keep popup open until Escape
 zenbuji config --dictionary off         # stop caching DeepL translations
+zenbuji config --translation-char-limit 200   # max characters per lookup
 zenbuji config --learn-show-translation off   # quiz reading AND translation
 zenbuji config --learn-on-login on      # open a practice round once a day on login
 zenbuji config --history off            # stop recording recent lookups
@@ -192,8 +193,9 @@ The popup window has **copy buttons** next to the reading and each translation.
 The popup is a headerless, translucent floating card that follows your system
 light/dark theme, can be **dragged** from any empty spot, and dismisses on
 **Escape** — and, optionally, when it loses focus (toggle *Close when it loses
-focus* in the settings). Its tint tracks the ~15px corner radius of GNOME's
-[Blur My Shell] "Applications" component.
+focus* in the settings). Furigana and the action buttons use your **system accent
+color**, with secondary buttons in a translucent glass style. Its tint tracks the
+~15px corner radius of GNOME's [Blur My Shell] "Applications" component.
 
 GNOME/Mutter has no way for an app to blur what's behind its own window, so the
 real blur is supplied by Blur My Shell. `install.sh` adds `com.meeksi39.zenbuji`

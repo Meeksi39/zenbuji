@@ -53,6 +53,9 @@ const UI_JA = {
     'zenbuji command': 'zenbuji コマンド',
     'Could not read zenbuji config — check the command in Advanced.':
         'zenbuji の設定を読み込めませんでした — 詳細設定のコマンドを確認してください。',
+    'Translation length limit': '翻訳の文字数上限',
+    'Maximum characters sent to translate in one lookup.':
+        '1回の翻訳で送信する最大文字数。',
     'Build a local dictionary': 'ローカル辞書を作成',
     'Cache DeepL translations and reuse them (saves quota); browse them in the Dictionary window.':
         'DeepL 翻訳をキャッシュして再利用します（クォータ節約）。辞書ウィンドウで閲覧できます。',
@@ -318,6 +321,21 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         trGroup.add(dictRow);
 
+        const charRow = new Adw.SpinRow({
+            title: _('Translation length limit'),
+            subtitle: _('Maximum characters sent to translate in one lookup.'),
+            adjustment: new Gtk.Adjustment({
+                lower: 10, upper: 2000, step_increment: 10, page_increment: 50,
+            }),
+        });
+        charRow.get_adjustment().connect('value-changed', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--translation-char-limit', String(charRow.get_value())]);
+        });
+        trGroup.add(charRow);
+
         const enRow = new Adw.SwitchRow({title: _('English')});
         const deRow = new Adw.SwitchRow({title: _('German')});
         const applyLangs = () => {
@@ -451,6 +469,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 histRow.set_active(cfg.history !== false);
                 closeRow.set_active(cfg.popup_close_on_focus_loss !== false);
                 dictRow.set_active(cfg.dictionary !== false);
+                charRow.set_value(cfg.translation_char_limit || 200);
                 learnHintRow.set_active(cfg.learn_show_translation !== false);
                 learnLoginRow.set_active(cfg.learn_on_login === true);
             } else if (err) {

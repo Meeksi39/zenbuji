@@ -50,12 +50,37 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border: 1px solid rgba(0, 0, 0, 0.22);
 }
 
-.zenbuji-lookup { border-radius: 10px; font-weight: 600; }
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
+
+/* --- buttons: Apple-style glass --- */
+/* Primary action: filled with the system accent. */
+.zenbuji-action {
+    border-radius: 10px;
+    font-weight: 600;
+    border: none;
+    background-image: none;
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+.zenbuji-action:hover { background-color: shade(@accent_bg_color, 1.08); }
+.zenbuji-action:active { background-color: shade(@accent_bg_color, 0.94); }
+/* Secondary: translucent glass. */
+.zenbuji-secondary {
+    border-radius: 10px;
+    font-weight: 500;
+    background-image: none;
+    background-color: alpha(currentColor, 0.10);
+    border: 1px solid alpha(currentColor, 0.14);
+}
+.zenbuji-secondary:hover { background-color: alpha(currentColor, 0.16); }
+/* Flat icon buttons tinted with the accent (or red for destructive). */
+.zenbuji-icon { color: @accent_color; }
+.zenbuji-icon-danger { color: #e01b24; }
 
 /* --- shared text styles (popup + dictionary) --- */
 .zenbuji-original { font-size: 20px; font-weight: 600; }
-.zenbuji-reading  { font-size: 15px; color: alpha(currentColor, 0.7); }
+.zenbuji-reading  { font-size: 15px; color: @accent_color; }
+.zenbuji-ocr-image { border-radius: 10px; }
 .zenbuji-token-kanji { font-size: 15px; }
 .zenbuji-lang-label { font-weight: 700; opacity: 0.55; font-size: 11px;
     letter-spacing: 0.04em; }
@@ -109,6 +134,19 @@ def install_css() -> None:
         Gtk.STYLE_PROVIDER_PRIORITY_USER,
     )
     _CSS_INSTALLED = True
+
+
+def accent_hex(dark: bool = False) -> str | None:
+    """The system accent color as #rrggbb, for places CSS can't reach (Pango
+    markup). Returns None if the accent API is unavailable."""
+    try:
+        accent = Adw.StyleManager.get_default().get_accent_color()
+        rgba = accent.to_standalone_rgba(dark)
+        return "#%02x%02x%02x" % (round(rgba.red * 255),
+                                  round(rgba.green * 255),
+                                  round(rgba.blue * 255))
+    except Exception:  # noqa: BLE001  (older libadwaita without accent API)
+        return None
 
 
 def _install_focus_loss_close(win: Gtk.Window) -> None:

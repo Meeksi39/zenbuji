@@ -43,6 +43,8 @@ LEARN_STRINGS = {
     "got_it":       {"en": "✓ Got it",        "ja": "✓ 正解"},
     "missed":       {"en": "✗ Missed",        "ja": "✗ 不正解"},
     "reading_lbl":  {"en": "Reading",         "ja": "読み"},
+    "you":          {"en": "You typed",       "ja": "あなたの入力"},
+    "blank":        {"en": "(blank)",         "ja": "（空欄）"},
     "score":        {"en": "Score",           "ja": "スコア"},
     "done":         {"en": "Done!",           "ja": "完了！"},
     "again":        {"en": "Practice again",  "ja": "もう一度"},
@@ -189,8 +191,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 trans_entry = Gtk.Entry(placeholder_text=t("translation"))
                 phase.append(trans_entry)
             check_btn = Gtk.Button(label=t("check"))
-            check_btn.add_css_class("suggested-action")
-            check_btn.add_css_class("zenbuji-lookup")
+            check_btn.add_css_class("zenbuji-action")
             phase.append(check_btn)
 
             def submit(*_a):
@@ -216,8 +217,16 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 row.add_css_class("zenbuji-correct" if ok else "zenbuji-wrong")
                 return row
 
+            def you_row(answer):
+                row = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
+                row.set_max_width_chars(40)
+                row.set_text(f"{t('you')}: {answer.strip() or t('blank')}")
+                row.add_css_class("zenbuji-meta")
+                return row
+
             phase.append(verdict_row(t("reading_lbl"), res["reading_ok"],
                                      res["correct_reading"]))
+            phase.append(you_row(reading_in))
             for lang in languages:
                 val = res["correct_translations"].get(lang)
                 if not val:
@@ -227,15 +236,17 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 lbl.set_text(f"{lang_names.get(lang, lang.upper())}: {val}")
                 lbl.add_css_class("zenbuji-translation")
                 phase.append(lbl)
+            # When the translation was tested, show what the user typed too.
+            if res["translation_ok"] is not None:
+                phase.append(you_row(translation_in))
 
             btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                            homogeneous=True)
             btns.set_margin_top(6)
             got = Gtk.Button(label=t("got_it"))
-            got.add_css_class("zenbuji-lookup")
+            got.add_css_class("zenbuji-action")
             missed = Gtk.Button(label=t("missed"))
-            missed.add_css_class("zenbuji-lookup")
-            (got if auto else missed).add_css_class("suggested-action")
+            missed.add_css_class("zenbuji-secondary")
             got.connect("clicked", lambda _b: finalize(cur, True))
             missed.connect("clicked", lambda _b: finalize(cur, False))
             btns.append(missed)
@@ -290,11 +301,10 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                           homogeneous=True)
             again = Gtk.Button(label=t("again"))
-            again.add_css_class("suggested-action")
-            again.add_css_class("zenbuji-lookup")
+            again.add_css_class("zenbuji-action")
             again.connect("clicked", lambda _b: (_spawn_learn(), win.close()))
             close = Gtk.Button(label=t("close"))
-            close.add_css_class("zenbuji-lookup")
+            close.add_css_class("zenbuji-secondary")
             close.connect("clicked", lambda _b: win.close())
             row.append(close)
             row.append(again)

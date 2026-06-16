@@ -67,6 +67,8 @@ DEFAULT_CONFIG = {
     # Cache DeepL translations locally and reuse them (builds a personal
     # dictionary, saves quota). Only affects the DeepL backend.
     "dictionary": True,
+    # Max characters accepted in the popup's translation input.
+    "translation_char_limit": 200,
     # Learning quiz: show the translation as a hint (test reading only) vs hide
     # it (test reading + translation); open once a day on login; cards per round.
     "learn_show_translation": True,
@@ -1079,6 +1081,9 @@ def cmd_config(args, cfg) -> int:
     if args.dictionary:
         cfg["dictionary"] = args.dictionary == "on"
         changed = True
+    if args.char_limit is not None:
+        cfg["translation_char_limit"] = max(10, int(args.char_limit))
+        changed = True
     if args.learn_show:
         cfg["learn_show_translation"] = args.learn_show == "on"
         changed = True
@@ -1157,6 +1162,7 @@ def main(argv=None) -> int:
         p.add_argument("--popup-close-on-focus-loss", dest="popup_close",
                        choices=["on", "off"])
         p.add_argument("--dictionary", choices=["on", "off"])
+        p.add_argument("--translation-char-limit", dest="char_limit", type=int)
         p.add_argument("--learn-show-translation", dest="learn_show",
                        choices=["on", "off"])
         p.add_argument("--learn-on-login", dest="learn_on_login",
@@ -1306,6 +1312,7 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
 
     ui_language = cfg.get("ui_language", "en")
     close_on_focus_loss = bool(cfg.get("popup_close_on_focus_loss", True))
+    char_limit = int(cfg.get("translation_char_limit", 200) or 200)
 
     def quota_fn():
         # Background DeepL quota for the popup's small status node; None when no
@@ -1318,13 +1325,13 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
                           process_fn=process_fn, ocr_fn=ocr_fn,
                           ui_language=ui_language,
                           close_on_focus_loss=close_on_focus_loss,
-                          quota_fn=quota_fn)
+                          quota_fn=quota_fn, char_limit=char_limit)
     result = process_fn(text) if text else None
     return show_popup(languages, result=result,
                       process_fn=process_fn, ocr_fn=ocr_fn,
                       ui_language=ui_language,
                       close_on_focus_loss=close_on_focus_loss,
-                      quota_fn=quota_fn)
+                      quota_fn=quota_fn, char_limit=char_limit)
 
 
 def launch_dictionary(cfg: dict) -> int:

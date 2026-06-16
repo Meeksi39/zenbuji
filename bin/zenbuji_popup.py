@@ -27,10 +27,10 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 try:
-    from zenbuji_glass import make_glass_window
+    from zenbuji_glass import accent_hex, make_glass_window
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import make_glass_window
+    from zenbuji_glass import accent_hex, make_glass_window
 
 # Target-language section labels, shown in the interface language.
 LANG_NAMES_BY_UI = {
@@ -70,14 +70,16 @@ def _spawn_dictionary():
         pass
 
 
-def _ruby_markup(tokens) -> str:
-    """Build Pango markup approximating furigana: reading shown small in-line."""
+def _ruby_markup(tokens, accent=None) -> str:
+    """Build Pango markup approximating furigana: reading shown small in-line,
+    in the system accent color when available."""
+    fg = f" foreground='{accent}'" if accent else ""
     parts = []
     for t in tokens:
         surf = html.escape(t.surface)
         if t.has_kanji and t.reading and t.reading != t.surface:
             rd = html.escape(t.reading)
-            parts.append(f"{surf}<span size='x-small'> [{rd}]</span>")
+            parts.append(f"{surf}<span size='x-small'{fg}> [{rd}]</span>")
         else:
             parts.append(surf)
     return "".join(parts)
@@ -90,6 +92,7 @@ def _copy_row(window, label_widget, text, copy_label="Copy"):
     row.append(label_widget)
     btn = Gtk.Button(icon_name="edit-copy-symbolic")
     btn.add_css_class("flat")
+    btn.add_css_class("zenbuji-icon")
     btn.set_valign(Gtk.Align.START)
     btn.set_tooltip_text(copy_label)
     btn.connect("clicked", lambda _b: window.get_clipboard().set(text))
@@ -99,7 +102,7 @@ def _copy_row(window, label_widget, text, copy_label="Copy"):
 
 def show_popup(languages, *, result=None, ocr_image=None,
                process_fn=None, ocr_fn=None, ui_language="en",
-               close_on_focus_loss=True, quota_fn=None) -> int:
+               close_on_focus_loss=True, quota_fn=None, char_limit=200) -> int:
     """Display the popup.
 
     Exactly one of `result` (already-processed) or `ocr_image` (recognise text
@@ -124,18 +127,32 @@ def show_popup(languages, *, result=None, ocr_image=None,
             resizable=False, draggable=True,
             close_on_focus_loss=close_on_focus_loss)
 
+        # --- Optional OCR screenshot preview ------------------------------ //
+        if ocr_image:
+            try:
+                texture = Gdk.Texture.new_from_filename(ocr_image)
+                pic = Gtk.Picture.new_for_paintable(texture)
+                pic.set_content_fit(Gtk.ContentFit.CONTAIN)
+                pic.set_can_shrink(True)
+                pic.set_size_request(-1, 120)
+                pic.add_css_class("zenbuji-ocr-image")
+                box.append(pic)
+            except Exception:  # noqa: BLE001  (unreadable capture)
+                pass
+
         # --- Editable input row ------------------------------------------- //
         input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         entry = Gtk.Entry(hexpand=True, placeholder_text=t("placeholder"))
         entry.add_css_class("zenbuji-original")
+        entry.set_max_length(int(char_limit) if char_limit else 0)
         dict_btn = Gtk.Button(icon_name="accessories-dictionary-symbolic")
         dict_btn.add_css_class("flat")
+        dict_btn.add_css_class("zenbuji-icon")
         dict_btn.set_valign(Gtk.Align.CENTER)
         dict_btn.set_tooltip_text(t("dictionary"))
         dict_btn.connect("clicked", lambda _b: _spawn_dictionary())
         lookup_btn = Gtk.Button(label=t("look_up"))
-        lookup_btn.add_css_class("suggested-action")
-        lookup_btn.add_css_class("zenbuji-lookup")
+        lookup_btn.add_css_class("zenbuji-action")
         lookup_btn.set_valign(Gtk.Align.CENTER)
         input_row.append(entry)
         input_row.append(dict_btn)
@@ -223,7 +240,8 @@ def show_popup(languages, *, result=None, ocr_image=None,
 
             if any(getattr(t, "has_kanji", False) for t in res.tokens):
                 ruby = Gtk.Label(wrap=True, xalign=0, selectable=True)
-                ruby.set_markup(_ruby_markup(res.tokens))
+                accent = accent_hex(Adw.StyleManager.get_default().get_dark())
+                ruby.set_markup(_ruby_markup(res.tokens, accent))
                 ruby.add_css_class("zenbuji-token-kanji")
                 result_box.append(ruby)
 
