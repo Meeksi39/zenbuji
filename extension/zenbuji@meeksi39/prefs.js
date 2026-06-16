@@ -53,6 +53,9 @@ const UI_JA = {
     'zenbuji command': 'zenbuji コマンド',
     'Could not read zenbuji config — check the command in Advanced.':
         'zenbuji の設定を読み込めませんでした — 詳細設定のコマンドを確認してください。',
+    'Build a local dictionary': 'ローカル辞書を作成',
+    'Cache DeepL translations and reuse them (saves quota); browse them in the Dictionary window.':
+        'DeepL 翻訳をキャッシュして再利用します（クォータ節約）。辞書ウィンドウで閲覧できます。',
     'Popup': 'ポップアップ',
     'Close when it loses focus': 'フォーカスを失ったら閉じる',
     'Dismiss the popup automatically when you click elsewhere.':
@@ -295,6 +298,18 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         verifyRow.set_activatable_widget(verifyBtn);
         trGroup.add(verifyRow);
 
+        const dictRow = new Adw.SwitchRow({
+            title: _('Build a local dictionary'),
+            subtitle: _('Cache DeepL translations and reuse them (saves quota); ' +
+                'browse them in the Dictionary window.'),
+        });
+        dictRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings, ['--dictionary', dictRow.get_active() ? 'on' : 'off']);
+        });
+        trGroup.add(dictRow);
+
         const enRow = new Adw.SwitchRow({title: _('English')});
         const deRow = new Adw.SwitchRow({title: _('German')});
         const applyLangs = () => {
@@ -398,6 +413,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 deRow.set_active(langs.includes('de'));
                 histRow.set_active(cfg.history !== false);
                 closeRow.set_active(cfg.popup_close_on_focus_loss !== false);
+                dictRow.set_active(cfg.dictionary !== false);
             } else if (err) {
                 trGroup.set_description(
                     _('Could not read zenbuji config — check the command in Advanced.'));

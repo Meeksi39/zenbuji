@@ -34,6 +34,7 @@ const UI_JA = {
     'No recent lookups': '履歴はありません',
     'Look up current selection': '選択テキストを調べる',
     'Look up screen region (OCR)': '画面領域を調べる（OCR）',
+    'Dictionary': '辞書',
     'Settings…': '設定…',
     'Looking up…': '検索中…',
 };
@@ -110,6 +111,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
         const ocrItem = new PopupMenu.PopupMenuItem(_('Look up screen region (OCR)'));
         ocrItem.connect('activate', () => this._extension.lookupRegion());
         this.menu.addMenuItem(ocrItem);
+
+        const dictItem = new PopupMenu.PopupMenuItem(_('Dictionary'));
+        dictItem.connect('activate', () => this._extension.openDictionary());
+        this.menu.addMenuItem(dictItem);
 
         const prefsItem = new PopupMenu.PopupMenuItem(_('Settings…'));
         prefsItem.connect('activate', () => this._extension.openPreferences());
@@ -271,6 +276,10 @@ export default class ZenbujiExtension extends Extension {
 
     lookupRegion() {
         this._spawnPopup(['popup', '--ocr']);
+    }
+
+    openDictionary() {
+        this._spawnPopup(['dict']);
     }
 
     _spawnPopup(args) {

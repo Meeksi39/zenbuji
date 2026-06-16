@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
+from datetime import datetime
 from pathlib import Path
 
 CONFIG_DIR = Path(
@@ -31,6 +32,8 @@ DATA_DIR = Path(
     os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
 ) / "zenbuji"
 HISTORY_PATH = DATA_DIR / "history.json"
+# Local dictionary of cached DeepL translations (see the Dictionary section).
+DICT_PATH = DATA_DIR / "dictionary.json"
 
 DEFAULT_CONFIG = {
     # "argos" (offline), "deepl" (online), or "auto" (deepl if a key is set,
@@ -52,6 +55,9 @@ DEFAULT_CONFIG = {
     # Dismiss the popup when it loses focus (HUD-style). Turn off to keep it
     # open until Escape/closed.
     "popup_close_on_focus_loss": True,
+    # Cache DeepL translations locally and reuse them (builds a personal
+    # dictionary, saves quota). Only affects the DeepL backend.
+    "dictionary": True,
 }
 
 
@@ -120,6 +126,93 @@ def append_history(result: "Result", limit: int = 20) -> None:
         )
     except OSError:
         pass
+
+
+# --------------------------------------------------------------------------- #
+# Dictionary (persistent cache of DeepL translations + usage stats)
+# --------------------------------------------------------------------------- #
+def load_dict() -> dict:
+    """Load the local dictionary: {text: {reading, translations, count, …}}."""
+    try:
+        if DICT_PATH.exists():
+            data = json.loads(DICT_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def save_dict(data: dict) -> None:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        DICT_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def dict_get(text: str) -> dict | None:
+    return load_dict().get(text.strip())
+
+
+def dict_delete(text: str) -> None:
+    data = load_dict()
+    if data.pop(text.strip(), None) is not None:
+        save_dict(data)
+
+
+def clear_dict() -> None:
+    try:
+        DICT_PATH.unlink()
+    except (FileNotFoundError, OSError):
+        pass
+
+
+def dict_stats() -> dict:
+    """Totals for the dictionary window header."""
+    data = load_dict()
+    total_lookups = sum(int(e.get("count", 0)) for e in data.values())
+    return {
+        "entries": len(data),
+        "lookups": total_lookups,
+        # Every lookup beyond the first of each entry was served from cache.
+        "saved": max(0, total_lookups - len(data)),
+    }
+
+
+def dict_record(text: str, reading: str, deepl_translations: dict) -> dict:
+    """Create or update a dictionary entry from DeepL output.
+
+    Merges new target languages into the stored translations, bumps the lookup
+    count, and stamps first/last seen. Only DeepL-sourced translations are ever
+    passed here. Returns the updated entry.
+    """
+    text = text.strip()
+    if not text:
+        return {}
+    now = datetime.now().isoformat(timespec="seconds")
+    data = load_dict()
+    entry = data.get(text) or {
+        "text": text,
+        "reading": reading,
+        "translations": {},
+        "count": 0,
+        "first_seen": now,
+        "last_seen": now,
+    }
+    entry["reading"] = reading or entry.get("reading", "")
+    merged = dict(entry.get("translations", {}))
+    merged.update({k: v for k, v in deepl_translations.items() if v})
+    entry["translations"] = merged
+    entry["count"] = int(entry.get("count", 0)) + 1
+    entry["last_seen"] = now
+    entry.setdefault("first_seen", now)
+    data[text] = entry
+    save_dict(data)
+    return entry
 
 
 # --------------------------------------------------------------------------- #
@@ -576,6 +669,51 @@ def translate(text: str, targets: list[str], cfg: dict) -> tuple[dict, list[str]
         return {}, notes
 
 
+def translate_cached(text: str, targets: list[str], cfg: dict,
+                     reading: str) -> tuple[dict, list[str]]:
+    """Like translate(), but for the DeepL backend reuse/record a local cache.
+
+    Strings already translated by DeepL are served from the dictionary instead
+    of re-requesting DeepL (faster, saves quota); only the missing target
+    languages are fetched. Each lookup bumps the entry's count. Argos (offline)
+    is never cached and falls straight through to translate().
+    """
+    backend = cfg.get("backend", "auto")
+    key = cfg.get("deepl_api_key", "")
+    lang = cfg.get("ui_language", "en")
+    effective = ("deepl" if key else "argos") if backend == "auto" else backend
+
+    if not cfg.get("dictionary", True) or effective != "deepl" or not key:
+        return translate(text, targets, cfg)
+
+    entry = dict_get(text)
+    cached = dict(entry.get("translations", {})) if entry else {}
+    missing = [t for t in targets if not cached.get(t)]
+    notes: list[str] = []
+    fresh: dict = {}
+    fallback: dict = {}
+    if missing:
+        try:
+            fresh = translate_deepl(text, missing, key, lang)
+        except TranslationError as exc:
+            notes.append(str(exc))
+            # Offline fallback for the missing langs — shown, but NOT cached.
+            try:
+                fallback = translate_argos(text, missing, lang)
+                notes.append(_note("fell_back_argos", lang))
+            except TranslationError:
+                pass
+
+    deepl_only = {**cached, **fresh}
+    # Record/refresh the entry (count++ even on a pure cache hit) when we have
+    # any DeepL-sourced translation for this string.
+    if deepl_only:
+        dict_record(text, reading, deepl_only)
+
+    merged = {**deepl_only, **fallback}
+    return {t: merged.get(t) for t in targets if merged.get(t)}, notes
+
+
 # --------------------------------------------------------------------------- #
 # High-level
 # --------------------------------------------------------------------------- #
@@ -585,7 +723,7 @@ def process(text: str, languages: list[str], cfg: dict, do_translate: bool = Tru
     translations: dict = {}
     notes: list[str] = []
     if do_translate and text:
-        translations, notes = translate(text, languages, cfg)
+        translations, notes = translate_cached(text, languages, cfg, reading)
     result = Result(
         text=text,
         reading=reading,
@@ -663,6 +801,7 @@ Usage:
   zenbuji popup [text]        Show a GUI popup (reads selection if no text)
   zenbuji selection           Process the current text selection
   zenbuji ocr [image]         OCR a screen region (or image file) and look it up
+  zenbuji dict                Open the local dictionary (cached DeepL lookups)
   zenbuji config              Show or set configuration
   zenbuji usage               Check the DeepL key and show remaining quota
   zenbuji models --install    Download offline Argos models (ja->en, en->de)
@@ -736,6 +875,9 @@ def cmd_config(args, cfg) -> int:
     if args.popup_close:
         cfg["popup_close_on_focus_loss"] = args.popup_close == "on"
         changed = True
+    if args.dictionary:
+        cfg["dictionary"] = args.dictionary == "on"
+        changed = True
     if changed:
         save_config(cfg)
     if args.clear_history:
@@ -784,7 +926,7 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models", "usage", "ocr",
+        "config", "models", "usage", "ocr", "dict",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -806,6 +948,7 @@ def main(argv=None) -> int:
         p.add_argument("--ui-language", dest="ui_language", choices=["en", "ja"])
         p.add_argument("--popup-close-on-focus-loss", dest="popup_close",
                        choices=["on", "off"])
+        p.add_argument("--dictionary", choices=["on", "off"])
         p.add_argument("--clear-history", action="store_true")
         p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
@@ -821,6 +964,22 @@ def main(argv=None) -> int:
         p.add_argument("--install", action="store_true")
         p.add_argument("--list", action="store_true")
         return cmd_models(p.parse_args(rest), cfg)
+
+    if command == "dict":
+        p = argparse.ArgumentParser(prog="zenbuji dict")
+        p.add_argument("--json", action="store_true",
+                       help="print the dictionary as JSON")
+        p.add_argument("--clear", action="store_true",
+                       help="erase the whole local dictionary")
+        a = p.parse_args(rest)
+        if a.clear:
+            clear_dict()
+            print("dictionary cleared")
+            return 0
+        if a.json:
+            print(json.dumps(load_dict(), ensure_ascii=False))
+            return 0
+        return launch_dictionary(cfg)
 
     # Shared options for the text commands.
     p = argparse.ArgumentParser(prog=f"zenbuji {command}", add_help=False)
@@ -915,16 +1074,56 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
 
     ui_language = cfg.get("ui_language", "en")
     close_on_focus_loss = bool(cfg.get("popup_close_on_focus_loss", True))
+
+    def quota_fn():
+        # Background DeepL quota for the popup's small status node; None when no
+        # key (the popup then hides the node).
+        key = cfg.get("deepl_api_key", "")
+        return deepl_usage(key) if key else None
+
     if ocr_image:
         return show_popup(languages, ocr_image=ocr_image,
                           process_fn=process_fn, ocr_fn=ocr_fn,
                           ui_language=ui_language,
-                          close_on_focus_loss=close_on_focus_loss)
+                          close_on_focus_loss=close_on_focus_loss,
+                          quota_fn=quota_fn)
     result = process_fn(text) if text else None
     return show_popup(languages, result=result,
                       process_fn=process_fn, ocr_fn=ocr_fn,
                       ui_language=ui_language,
-                      close_on_focus_loss=close_on_focus_loss)
+                      close_on_focus_loss=close_on_focus_loss,
+                      quota_fn=quota_fn)
+
+
+def launch_dictionary(cfg: dict) -> int:
+    """Show the GTK dictionary window (browse/manage cached DeepL lookups)."""
+    try:
+        from zenbuji_dict import show_dictionary
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from zenbuji_dict import show_dictionary
+
+    def refresh_fn(text, targets):
+        """Force a fresh DeepL translation for `text` and re-cache it."""
+        key = cfg.get("deepl_api_key", "")
+        lang = cfg.get("ui_language", "en")
+        if not key:
+            return None
+        reading, _tokens = analyze(text)
+        fresh = translate_deepl(text, targets, key, lang)
+        return dict_record(text, reading, fresh)
+
+    return show_dictionary(
+        ui_language=cfg.get("ui_language", "en"),
+        languages=cfg.get("languages", ["en", "de"]),
+        load_fn=load_dict,
+        delete_fn=dict_delete,
+        clear_fn=clear_dict,
+        stats_fn=dict_stats,
+        refresh_fn=refresh_fn,
+        quota_fn=lambda: (deepl_usage(cfg.get("deepl_api_key", ""))
+                          if cfg.get("deepl_api_key") else None),
+    )
 
 
 if __name__ == "__main__":

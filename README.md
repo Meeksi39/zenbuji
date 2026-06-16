@@ -103,6 +103,8 @@ zenbuji --json 速い               # machine-readable output
 zenbuji popup 速い                # GTK popup window
 zenbuji ocr                       # capture a screen region and OCR it
 zenbuji ocr screenshot.png        # OCR an existing image file
+zenbuji dict                      # open the local dictionary window
+zenbuji dict --json               # dump the cached dictionary as JSON
 ```
 
 `zb` is a short alias for `zenbuji`. Example output:
@@ -169,6 +171,7 @@ zenbuji config --backend deepl --deepl-key <KEY>
 zenbuji config --lang en,de             # which languages to show
 zenbuji config --ui-language ja         # interface language (en or ja)
 zenbuji config --popup-close-on-focus-loss off   # keep popup open until Escape
+zenbuji config --dictionary off         # stop caching DeepL translations
 zenbuji config --history off            # stop recording recent lookups
 zenbuji config --clear-history          # forget recorded lookups
 zenbuji usage                           # check the DeepL key + remaining quota
@@ -202,6 +205,23 @@ uninstall). For the best effect, in Blur My Shell:
 Without Blur My Shell the popup degrades gracefully to a clean translucent panel.
 
 [Blur My Shell]: https://extensions.gnome.org/extension/3193/blur-my-shell/
+
+### Local dictionary (DeepL cache)
+
+When the **DeepL** backend is active, every translated string is cached locally
+in `~/.local/share/zenbuji/dictionary.json`. Repeat lookups are served from that
+cache instead of re-calling DeepL — faster, and it preserves your free-tier
+**quota** — while building up a personal dictionary. Only DeepL translations are
+cached (Argos is offline and free). Each entry records how often it was looked up
+and the **first** and **last** lookup time, so you can see your progress.
+
+Browse it in the **Dictionary window** — a glass window reachable from the 📖
+icon in the popup, the top-bar menu, or `zenbuji dict`. It shows each word with
+its reading, translations, lookup count and timestamps, and lets you **search**,
+**delete** an entry, **clear all**, **re-translate** (a fresh DeepL call), or open
+an entry back in the lookup popup. The popup also shows your remaining DeepL quota
+as a small node when a key is set. Turn caching off with `zenbuji config
+--dictionary off` (or the *Build a local dictionary* switch in settings).
 
 ### Offline models
 

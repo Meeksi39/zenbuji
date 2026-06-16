@@ -13,14 +13,24 @@ responsive and appears immediately even while the OCR model loads.
 from __future__ import annotations
 
 import html
+import os
+import subprocess
+import sys
 import threading
+from pathlib import Path
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+try:
+    from zenbuji_glass import make_glass_window
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from zenbuji_glass import make_glass_window
 
 # Target-language section labels, shown in the interface language.
 LANG_NAMES_BY_UI = {
@@ -38,6 +48,7 @@ UI_STRINGS = {
     "recognising":   {"en": "Recognising…",          "ja": "認識中…"},
     "lookup_failed": {"en": "Lookup failed.",        "ja": "検索に失敗しました。"},
     "no_text":       {"en": "No text recognised.",   "ja": "テキストを認識できませんでした。"},
+    "dictionary":    {"en": "Dictionary",            "ja": "辞書"},
 }
 
 
@@ -48,45 +59,15 @@ def _make_tr(ui_language):
         return entry.get(ui_language) or entry.get("en") or key
     return t
 
-# Apple-style frosted glass. The window surface is fully transparent; the
-# `.zenbuji-card` is a translucent, rounded, hairline-bordered panel. Real blur
-# behind the transparent card is provided by GNOME's Blur My Shell "Applications"
-# component (the card's radius tracks its corner-radius, ~15px). Without it the
-# card simply degrades to a clean translucent panel.
-CSS = b"""
-window.zenbuji-window { background-color: transparent; box-shadow: none; }
-.zenbuji-window windowhandle { background-color: transparent; }
 
-.zenbuji-card {
-    border-radius: 15px;
-    padding: 18px 18px 16px 18px;
-    background-image: linear-gradient(to bottom,
-        alpha(#ffffff, 0.06), alpha(#ffffff, 0.0));
-}
-.zenbuji-card.dark {
-    background-color: rgba(34, 34, 38, 0.55);
-    color: #f2f2f7;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-}
-.zenbuji-card.light {
-    background-color: rgba(250, 250, 252, 0.66);
-    color: #1c1c1e;
-    border: 1px solid rgba(255, 255, 255, 0.55);
-}
-
-.zenbuji-lookup { border-radius: 10px; font-weight: 600; }
-
-.zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
-
-.zenbuji-original { font-size: 20px; font-weight: 600; }
-.zenbuji-reading  { font-size: 15px; color: alpha(currentColor, 0.7); }
-.zenbuji-token-kanji { font-size: 15px; }
-.zenbuji-lang-label { font-weight: 700; opacity: 0.55; font-size: 11px;
-    letter-spacing: 0.04em; }
-.zenbuji-translation { font-size: 15px; }
-.zenbuji-note { font-size: 11px; opacity: 0.6; font-style: italic; }
-.zenbuji-status { font-size: 12px; opacity: 0.7; }
-"""
+def _spawn_dictionary():
+    """Open the dictionary window in a separate process (self-reinvocation)."""
+    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    try:
+        subprocess.Popen([sys.executable, cli, "dict"],
+                         start_new_session=True)
+    except OSError:
+        pass
 
 
 def _ruby_markup(tokens) -> str:
@@ -118,7 +99,7 @@ def _copy_row(window, label_widget, text, copy_label="Copy"):
 
 def show_popup(languages, *, result=None, ocr_image=None,
                process_fn=None, ocr_fn=None, ui_language="en",
-               close_on_focus_loss=True) -> int:
+               close_on_focus_loss=True, quota_fn=None) -> int:
     """Display the popup.
 
     Exactly one of `result` (already-processed) or `ocr_image` (recognise text
@@ -127,57 +108,37 @@ def show_popup(languages, *, result=None, ocr_image=None,
     `ui_language` ("en"/"ja") selects the interface language.
     `close_on_focus_loss` dismisses the window when it stops being the active
     window (HUD-style); set False to keep it open until Escape/closed.
+    `quota_fn() -> deepl_usage dict | None` feeds the small DeepL quota node
+    (shown only when it returns an ok result).
     """
     t = _make_tr(ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
-    app = Adw.Application(application_id="com.meeksi39.zenbuji")
+    # NON_UNIQUE so a popup and the dictionary window (same app-id, kept for the
+    # Blur My Shell whitelist) can run as independent processes side by side.
+    app = Adw.Application(application_id="com.meeksi39.zenbuji",
+                          flags=Gio.ApplicationFlags.NON_UNIQUE)
 
     def on_activate(application):
-        provider = Gtk.CssProvider()
-        provider.load_from_data(CSS)
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_USER,
-        )
-
-        win = Gtk.ApplicationWindow(application=application)
-        win.set_title("zenbuji 全部字")
-        win.set_default_size(460, -1)
-        win.set_decorated(False)   # headerless floating overlay
-        win.set_resizable(False)
-        win.add_css_class("zenbuji-window")  # transparent surface (see CSS)
-
-        # The frosted glass card is the only visible surface; padding lives in CSS.
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        box.add_css_class("zenbuji-card")
-
-        # Tint follows the system light/dark scheme, live.
-        style_mgr = Adw.StyleManager.get_default()
-
-        def apply_scheme(*_a):
-            box.remove_css_class("dark")
-            box.remove_css_class("light")
-            box.add_css_class("dark" if style_mgr.get_dark() else "light")
-
-        apply_scheme()
-        style_mgr.connect("notify::dark", apply_scheme)
-
-        # WindowHandle lets the headerless card be dragged; child widgets (entry,
-        # buttons) keep working normally.
-        handle = Gtk.WindowHandle()
-        handle.set_child(box)
-        win.set_child(handle)
+        win, box = make_glass_window(
+            application, title="zenbuji 全部字", default_size=(460, -1),
+            resizable=False, draggable=True,
+            close_on_focus_loss=close_on_focus_loss)
 
         # --- Editable input row ------------------------------------------- //
         input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         entry = Gtk.Entry(hexpand=True, placeholder_text=t("placeholder"))
         entry.add_css_class("zenbuji-original")
+        dict_btn = Gtk.Button(icon_name="accessories-dictionary-symbolic")
+        dict_btn.add_css_class("flat")
+        dict_btn.set_valign(Gtk.Align.CENTER)
+        dict_btn.set_tooltip_text(t("dictionary"))
+        dict_btn.connect("clicked", lambda _b: _spawn_dictionary())
         lookup_btn = Gtk.Button(label=t("look_up"))
         lookup_btn.add_css_class("suggested-action")
         lookup_btn.add_css_class("zenbuji-lookup")
         lookup_btn.set_valign(Gtk.Align.CENTER)
         input_row.append(entry)
+        input_row.append(dict_btn)
         input_row.append(lookup_btn)
         box.append(input_row)
 
@@ -200,6 +161,36 @@ def show_popup(languages, *, result=None, ocr_image=None,
         # --- Result area (rebuilt on each lookup) ------------------------- //
         result_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         box.append(result_box)
+
+        # --- DeepL quota node (filled async; hidden until/unless available) - //
+        quota_label = Gtk.Label(xalign=0, wrap=True)
+        quota_label.add_css_class("zenbuji-quota")
+        quota_label.set_visible(False)
+        box.append(quota_label)
+
+        def refresh_quota():
+            if quota_fn is None:
+                return
+
+            def work():
+                try:
+                    info = quota_fn()
+                except Exception:  # noqa: BLE001
+                    info = None
+                GLib.idle_add(show_quota, info)
+
+            threading.Thread(target=work, daemon=True).start()
+
+        def show_quota(info):
+            if info and info.get("ok"):
+                used, limit = info.get("used", 0), info.get("limit", 0)
+                left = max(0, limit - used)
+                quota_label.set_text(
+                    f"DeepL  {used:,} / {limit:,}  ({left:,} left)")
+                quota_label.set_visible(True)
+            else:
+                quota_label.set_visible(False)
+            return GLib.SOURCE_REMOVE
 
         def set_busy(message):
             status_label.set_text(message)
@@ -277,6 +268,7 @@ def show_popup(languages, *, result=None, ocr_image=None,
             else:
                 clear_busy()
                 render(res)
+                refresh_quota()  # a lookup may have consumed DeepL quota
             return GLib.SOURCE_REMOVE
 
         def run_ocr(image):
@@ -302,60 +294,10 @@ def show_popup(languages, *, result=None, ocr_image=None,
         entry.connect("activate", lambda _e: do_lookup(entry.get_text()))
         lookup_btn.connect("clicked", lambda _b: do_lookup(entry.get_text()))
 
-        # Close on Escape.
-        key = Gtk.EventControllerKey()
-
-        def on_key(_ctrl, keyval, _code, _state):
-            if keyval == Gdk.KEY_Escape:
-                win.close()
-                return True
-            return False
-
-        key.connect("key-pressed", on_key)
-        win.add_controller(key)
-
-        # Optionally dismiss when the window loses focus (overlay/HUD behaviour).
-        # Dragging the headerless window starts a compositor move that briefly
-        # deactivates it — so we must NOT treat a deactivation that happens while
-        # the pointer is pressed *inside* the window as a focus switch, or the
-        # window would close the instant you try to drag it.
-        if close_on_focus_loss:
-            focus_state = {"was_active": False, "interacting": False}
-
-            def clear_interacting():
-                focus_state["interacting"] = False
-                return GLib.SOURCE_REMOVE
-
-            def on_active_changed(*_a):
-                if win.is_active():
-                    focus_state["was_active"] = True
-                    focus_state["interacting"] = False  # regained focus
-                elif focus_state["was_active"] and not focus_state["interacting"]:
-                    win.close()
-
-            win.connect("notify::is-active", on_active_changed)
-
-            # Passive observer (returns False → never consumes events, so clicks,
-            # drags and text selection all keep working). CAPTURE phase so it sees
-            # the press before a child or the WindowHandle does.
-            watcher = Gtk.EventControllerLegacy()
-            watcher.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-
-            def on_event(controller, *_a):
-                event = controller.get_current_event()
-                if event is None:
-                    return False
-                et = event.get_event_type()
-                if et == Gdk.EventType.BUTTON_PRESS:
-                    focus_state["interacting"] = True
-                elif et == Gdk.EventType.BUTTON_RELEASE:
-                    GLib.timeout_add(150, clear_interacting)
-                return False
-
-            watcher.connect("event", on_event)
-            win.add_controller(watcher)
-
+        # Escape-to-close, drag and focus-loss dismissal are handled by
+        # make_glass_window().
         win.present()
+        refresh_quota()
 
         # Seed the window.
         if ocr_image is not None:
