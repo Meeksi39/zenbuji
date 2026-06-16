@@ -2,9 +2,9 @@
 
 Take Japanese text and get **furigana** (readings) plus **English and German**
 translations — from the command line, a global **hotkey** on whatever text you
-have selected, the GNOME **top-bar menu**, or the **Files context menu**. Built
-for immersive Japanese learners who want a reading + meaning for *anything* on
-screen, fast.
+have selected, a **screen-region OCR** grab for text you *can't* select, the
+GNOME **top-bar menu**, or the **Files context menu**. Built for immersive
+Japanese learners who want a reading + meaning for *anything* on screen, fast.
 
 ```text
 $ zenbuji 日本語を勉強しています
@@ -39,9 +39,10 @@ menu, so "omni-available" is delivered the way that actually works everywhere:
 | Surface | What it does |
 |---|---|
 | **Global hotkey** (`Super+J`) | Reads the current PRIMARY selection (`wl-paste -p`) and shows a popup. Select text in any app, press the key. |
-| **Top-bar menu** | Click the `振` icon, type or paste Japanese, get furigana + EN/DE inline, and re-open any **recent** lookup. |
+| **Screen OCR** (`Super+Shift+J`) | Draw a box around *any* on-screen Japanese — UI text, a game, a video frame — and OCR reads it. For text you can't select. |
+| **Top-bar menu** | Click the `振` icon, type or paste Japanese, get furigana + EN/DE inline, grab a screen region, and re-open any **recent** lookup. |
 | **Files context menu** | Right-click a text file ▸ *Scripts ▸ zenbuji*, or (with `nautilus-python`) a direct context-menu entry. |
-| **CLI** | `zenbuji <text>` / pipe stdin / `--selection`. |
+| **CLI** | `zenbuji <text>` / pipe stdin / `--selection` / `ocr`. |
 
 All language processing lives in the `zenbuji` Python CLI; the extension and
 Nautilus integration just call it and render the result.
@@ -53,6 +54,8 @@ Nautilus integration just call it and render the result.
 - `wl-clipboard` (`wl-paste`) for selection lookup
 - ~1.7 GB disk for the offline translation backend (CPU-only PyTorch + models).
   Skip it with `--light` and use DeepL instead.
+- Screen-region OCR uses [manga-ocr] (installed with the full backend) and the
+  XDG desktop Screenshot portal — no extra tools needed on Wayland.
 
 ## Install
 
@@ -98,6 +101,8 @@ zenbuji --selection               # process the current text selection
 echo "ありがとう" | zenbuji        # from stdin
 zenbuji --json 速い               # machine-readable output
 zenbuji popup 速い                # GTK popup window
+zenbuji ocr                       # capture a screen region and OCR it
+zenbuji ocr screenshot.png        # OCR an existing image file
 ```
 
 `zb` is a short alias for `zenbuji`. Example output:
@@ -122,6 +127,27 @@ Custom Shortcuts**, or with gsettings:
 P=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/zenbuji/
 gsettings set "$P" binding '<Super>F9'
 ```
+
+### Screen-region OCR
+
+Lots of Japanese on screen isn't selectable — text baked into a UI, a game, a
+video frame, an image. Press **`Super+Shift+J`** (or top-bar ▸ *Look up screen
+region*), **draw a box** around the text, and zenbuji reads it with OCR, then
+shows furigana + EN/DE in the usual popup. The recognized text sits in an
+**editable field** — OCR isn't perfect, so fix a stray character and press Enter
+to look it up again.
+
+```sh
+zenbuji ocr                  # capture a region interactively
+zenbuji ocr image.png        # or OCR a file you already have
+```
+
+OCR is provided by [manga-ocr] (a Japanese-tuned model) and runs **fully
+offline**. It needs the **full install** (not `--light`) and downloads a ~450MB
+model on first use. Each lookup loads the model fresh, so the first result takes
+a few seconds — the popup shows a spinner while it works. Region capture goes
+through the desktop Screenshot portal (GNOME's own screenshot UI), so it works
+on Wayland.
 
 ### Configuration
 
@@ -184,3 +210,4 @@ journalctl -f -o cat /usr/bin/gnome-shell
 [fugashi]: https://github.com/polm/fugashi
 [unidic-lite]: https://github.com/polm/unidic-lite
 [Argos Translate]: https://github.com/argosopentech/argos-translate
+[manga-ocr]: https://github.com/kha-white/manga-ocr

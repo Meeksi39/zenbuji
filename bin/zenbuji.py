@@ -44,6 +44,8 @@ DEFAULT_CONFIG = {
     "history": True,
     # Maximum number of recent lookups to keep.
     "history_size": 20,
+    # OCR engine used to read text from a captured screen region.
+    "ocr_backend": "mangaocr",
 }
 
 
@@ -194,6 +196,127 @@ def analyze(text: str) -> tuple[str, list[Token]]:
             Token(surface=surface, reading=reading, has_kanji=has_kanji(surface))
         )
     return "".join(reading_parts), tokens
+
+
+# --------------------------------------------------------------------------- #
+# OCR (read Japanese text from an image / screen region)
+# --------------------------------------------------------------------------- #
+_MOCR = None
+
+
+def _manga_ocr():
+    """Lazily construct the manga-ocr reader (downloads the model on first use)."""
+    global _MOCR
+    if _MOCR is None:
+        with _quiet_stderr():
+            from manga_ocr import MangaOcr
+
+            _MOCR = MangaOcr()
+    return _MOCR
+
+
+def ocr_image_to_text(path: str, cfg: dict) -> tuple[str, list[str]]:
+    """Recognise Japanese text in an image file. Returns (text, notes)."""
+    notes: list[str] = []
+    if not path or not os.path.exists(path):
+        return "", ["OCR: image not found."]
+    backend = cfg.get("ocr_backend", "mangaocr")
+    if backend != "mangaocr":
+        notes.append(f"Unknown ocr_backend '{backend}'; using manga-ocr.")
+    try:
+        with _quiet_stderr():
+            text = _manga_ocr()(path)
+    except ImportError:
+        return "", [
+            "OCR backend not installed — re-run install.sh without --light."
+        ]
+    except Exception as exc:  # noqa: BLE001
+        return "", [f"OCR failed: {exc}"]
+    return (text or "").strip(), notes
+
+
+def capture_region() -> str | None:
+    """Interactively select a screen region and return the captured PNG path.
+
+    Uses the XDG desktop Screenshot portal in interactive mode. Recent GNOME
+    versions forbid external callers from using org.gnome.Shell.Screenshot
+    directly ("ScreenshotArea is not allowed"), so the portal is the supported
+    Wayland path: GNOME shows its own screenshot UI (Area / Window / Screen)
+    and hands back a URI to the captured image. Returns a local path, or None
+    if the user cancelled or capture failed.
+    """
+    try:
+        import gi  # noqa: F401
+        from gi.repository import Gio, GLib
+    except Exception:  # noqa: BLE001  (PyGObject missing)
+        return None
+
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    except Exception:  # noqa: BLE001
+        return None
+
+    # The portal answers asynchronously via a Request object whose path follows
+    # a documented convention, so we can subscribe before calling and avoid a
+    # signal/reply race. Sender unique name: ":1.23" -> "1_23".
+    token = f"zenbuji_{os.getpid()}"
+    sender = bus.get_unique_name().lstrip(":").replace(".", "_")
+    request_path = f"/org/freedesktop/portal/desktop/request/{sender}/{token}"
+
+    captured: dict[str, str] = {}
+    loop = GLib.MainLoop()
+
+    def on_response(_conn, _sender, _path, _iface, _signal, params):
+        response, results = params.unpack()
+        if response == 0 and results.get("uri"):
+            captured["uri"] = results["uri"]
+        loop.quit()
+
+    sub_id = bus.signal_subscribe(
+        "org.freedesktop.portal.Desktop",
+        "org.freedesktop.portal.Request",
+        "Response",
+        request_path,
+        None,
+        Gio.DBusSignalFlags.NONE,
+        on_response,
+    )
+
+    options = {
+        "handle_token": GLib.Variant("s", token),
+        "interactive": GLib.Variant("b", True),
+    }
+    try:
+        bus.call_sync(
+            "org.freedesktop.portal.Desktop",
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Screenshot",
+            "Screenshot",
+            GLib.Variant("(sa{sv})", ("", options)),
+            GLib.VariantType("(o)"),
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+        )
+    except Exception:  # noqa: BLE001
+        bus.signal_unsubscribe(sub_id)
+        return None
+
+    # Don't hang forever if the portal never answers.
+    GLib.timeout_add_seconds(180, lambda: (loop.quit(), False)[1])
+    loop.run()
+    bus.signal_unsubscribe(sub_id)
+
+    uri = captured.get("uri")
+    if not uri:
+        return None  # cancelled or failed
+    try:
+        path, _ = GLib.filename_from_uri(uri)
+    except Exception:  # noqa: BLE001
+        from urllib.parse import unquote, urlparse
+
+        path = unquote(urlparse(uri).path)
+    return path if path and os.path.exists(path) else None
 
 
 # --------------------------------------------------------------------------- #
@@ -467,6 +590,7 @@ Usage:
   zenbuji tr <text>           Translation only
   zenbuji popup [text]        Show a GUI popup (reads selection if no text)
   zenbuji selection           Process the current text selection
+  zenbuji ocr [image]         OCR a screen region (or image file) and look it up
   zenbuji config              Show or set configuration
   zenbuji usage               Check the DeepL key and show remaining quota
   zenbuji models --install    Download offline Argos models (ja->en, en->de)
@@ -479,6 +603,8 @@ Options:
   --backend argos|deepl|auto
   --json              Emit machine-readable JSON
   --selection         Read the current text selection as input
+  --ocr               Capture a screen region and OCR it as input
+  --ocr-image PATH    OCR an existing image file as input
 """
 
 
@@ -580,7 +706,7 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models", "usage",
+        "config", "models", "usage", "ocr",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -621,8 +747,17 @@ def main(argv=None) -> int:
     p.add_argument("--backend", choices=["argos", "deepl", "auto"])
     p.add_argument("--json", action="store_true")
     p.add_argument("--selection", action="store_true")
+    p.add_argument("--ocr", action="store_true",
+                   help="capture a screen region and OCR it")
+    p.add_argument("--ocr-image", dest="ocr_image",
+                   help="OCR an existing image file")
     p.add_argument("words", nargs="*")
     opts = p.parse_args(rest)
+
+    # `zenbuji ocr <image>` — treat the positional as the image path.
+    if command == "ocr" and opts.words and not opts.ocr_image:
+        opts.ocr_image = opts.words[0]
+        opts.words = []
 
     if opts.backend:
         cfg["backend"] = opts.backend
@@ -632,18 +767,37 @@ def main(argv=None) -> int:
         else cfg.get("languages", ["en", "de"])
     )
 
-    use_selection = opts.selection or command == "selection"
-    text = resolve_input(opts.words, use_selection)
-    if not text.strip():
-        print("No input text (give text, use --selection, or pipe stdin).",
-              file=sys.stderr)
-        return 2
+    ocr_notes: list[str] = []
+    want_ocr = opts.ocr or opts.ocr_image or command == "ocr"
+    if want_ocr:
+        image_path = opts.ocr_image
+        if not image_path:
+            image_path = capture_region()
+            if not image_path:
+                return 0  # user cancelled the region selection
+        if command == "popup":
+            return launch_popup(None, languages, cfg, ocr_image=image_path)
+        text, ocr_notes = ocr_image_to_text(image_path, cfg)
+        if not text.strip():
+            for note in ocr_notes:
+                print(note, file=sys.stderr)
+            print("No text recognised in the image.", file=sys.stderr)
+            return 1
+    else:
+        use_selection = opts.selection or command == "selection"
+        text = resolve_input(opts.words, use_selection)
+        if not text.strip():
+            print("No input text (give text, use --selection, --ocr, or pipe stdin).",
+                  file=sys.stderr)
+            return 2
 
     if command == "popup":
         return launch_popup(text, languages, cfg)
 
     do_translate = command not in ("furigana",)
     result = process(text, languages, cfg, do_translate=do_translate)
+    if ocr_notes:
+        result.notes = [*ocr_notes, *result.notes]
 
     if command in ("tr", "translate"):
         # Translation only — drop the furigana fields from the output.
@@ -659,16 +813,31 @@ def main(argv=None) -> int:
     return 0
 
 
-def launch_popup(text: str, languages: list[str], cfg: dict) -> int:
-    """Render the result, then show it in the GTK popup."""
-    result = process(text, languages, cfg, do_translate=True)
+def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
+    """Show the GTK popup, editable and able to (re-)run lookups itself.
+
+    With `ocr_image`, the popup recognises the text asynchronously (showing a
+    spinner); otherwise it renders the result for `text` immediately.
+    """
     try:
         from zenbuji_popup import show_popup
     except ImportError:
         # Same-directory import when run from the repo/bin.
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from zenbuji_popup import show_popup
-    return show_popup(result, languages)
+
+    def process_fn(t):
+        return process(t, languages, cfg, do_translate=True)
+
+    def ocr_fn(img):
+        return ocr_image_to_text(img, cfg)
+
+    if ocr_image:
+        return show_popup(languages, ocr_image=ocr_image,
+                          process_fn=process_fn, ocr_fn=ocr_fn)
+    result = process_fn(text) if text else None
+    return show_popup(languages, result=result,
+                      process_fn=process_fn, ocr_fn=ocr_fn)
 
 
 if __name__ == "__main__":

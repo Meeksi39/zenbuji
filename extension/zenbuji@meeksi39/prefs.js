@@ -167,6 +167,14 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         advGroup.add(hintRow);
 
+        const ocrHintRow = new Adw.ActionRow({
+            title: _('Screen-region OCR'),
+            subtitle: _('Super+Shift+J (or the top-bar “Look up screen region”) ' +
+                'reads on-screen Japanese via OCR. Needs the full (non---light) ' +
+                'install for the OCR model.'),
+        });
+        advGroup.add(ocrHintRow);
+
         const cmdRow = new Adw.EntryRow({
             title: _('zenbuji command'),
             text: settings.get_string('zenbuji-command'),

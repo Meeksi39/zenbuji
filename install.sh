@@ -59,16 +59,18 @@ if [[ "$MODE" == uninstall ]]; then
     rm -rf "$EXT_DST"
     rm -f "$NAUTILUS_SCRIPTS/zenbuji (furigana + translation)"
     rm -f "$NAUTILUS_EXT_DIR/zenbuji-nautilus.py"
-    # Remove the custom keybinding from the list (leaves other customs intact).
+    # Remove our custom keybindings from the list (leaves other customs intact).
     MK=org.gnome.settings-daemon.plugins.media-keys
-    KBPATH=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/zenbuji/
     if command -v gsettings >/dev/null; then
-        cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
-        if [[ "$cur" == *"$KBPATH"* ]]; then
-            new="$(printf '%s' "$cur" | sed "s#, *'$KBPATH'##; s#'$KBPATH', *##; s#\['$KBPATH'\]#@as []#")"
-            gsettings set $MK custom-keybindings "$new"
-            echo "Removed the Super+J custom keybinding."
-        fi
+        for slug in zenbuji zenbuji-ocr; do
+            KBPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$slug/"
+            cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
+            if [[ "$cur" == *"$KBPATH"* ]]; then
+                new="$(printf '%s' "$cur" | sed "s#, *'$KBPATH'##; s#'$KBPATH', *##; s#\['$KBPATH'\]#@as []#")"
+                gsettings set $MK custom-keybindings "$new"
+                echo "Removed the $slug custom keybinding."
+            fi
+        done
     fi
     echo "Removed CLI, extension and Nautilus integration."
     echo "Kept: venv at $VENV (delete by hand to reclaim space),"
@@ -93,8 +95,11 @@ if [[ "$LIGHT" -eq 0 ]]; then
     echo "  installing offline translation backend (CPU torch — large)…"
     "$VENV/bin/pip" install -q torch --index-url https://download.pytorch.org/whl/cpu
     "$VENV/bin/pip" install -q argostranslate
+    echo "  installing OCR backend (manga-ocr — Japanese screen-region OCR)…"
+    "$VENV/bin/pip" install -q manga-ocr
 else
     echo "  --light: skipping offline backend (configure DeepL with: zenbuji config --deepl-key …)"
+    echo "  --light: skipping OCR backend (screen-region OCR will be unavailable)"
 fi
 
 # --- CLI launchers ------------------------------------------------------- #
@@ -133,35 +138,49 @@ else
     echo "   the Scripts entry above works without it)"
 fi
 
-# --- Global selection hotkey (GNOME custom keybinding) ------------------- #
-# Owned here rather than by the extension so it works immediately (no logout)
+# --- Global hotkeys (GNOME custom keybindings) --------------------------- #
+# Owned here rather than by the extension so they work immediately (no logout)
 # and without the extension enabled.
 MK=org.gnome.settings-daemon.plugins.media-keys
-KBPATH=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/zenbuji/
-if command -v gsettings >/dev/null; then
+
+# register_keybinding <slug> <name> <command> <default-binding>
+register_keybinding() {
+    local slug="$1" name="$2" cmd="$3" binding="$4"
+    local kbpath="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$slug/"
+    local cur new ck existing
     cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
-    if [[ "$cur" != *"custom-keybindings/zenbuji/"* ]]; then
+    if [[ "$cur" != *"custom-keybindings/$slug/"* ]]; then
         if [[ "$cur" == "@as []" || "$cur" == "[]" ]]; then
-            gsettings set $MK custom-keybindings "['$KBPATH']"
+            gsettings set $MK custom-keybindings "['$kbpath']"
         else
-            gsettings set $MK custom-keybindings "${cur%]}, '$KBPATH']"
+            gsettings set $MK custom-keybindings "${cur%]}, '$kbpath']"
         fi
     fi
-    CK="$MK.custom-keybinding:$KBPATH"
-    gsettings set "$CK" name 'zenbuji: look up selection'
-    gsettings set "$CK" command "$BIN_DIR/zenbuji popup --selection"
+    ck="$MK.custom-keybinding:$kbpath"
+    gsettings set "$ck" name "$name"
+    gsettings set "$ck" command "$cmd"
     # Don't clobber a binding the user may have customised.
-    existing="$(gsettings get "$CK" binding 2>/dev/null || echo "''")"
+    existing="$(gsettings get "$ck" binding 2>/dev/null || echo "''")"
     if [[ "$existing" == "''" || "$existing" == "@s ''" ]]; then
-        gsettings set "$CK" binding '<Super>j'
+        gsettings set "$ck" binding "$binding"
     fi
+}
+
+if command -v gsettings >/dev/null; then
+    register_keybinding zenbuji 'zenbuji: look up selection' \
+        "$BIN_DIR/zenbuji popup --selection" '<Super>j'
     echo "  bound Super+J → zenbuji popup --selection (GNOME custom shortcut)"
+    register_keybinding zenbuji-ocr 'zenbuji: look up screen region (OCR)' \
+        "$BIN_DIR/zenbuji popup --ocr" '<Super><Shift>j'
+    echo "  bound Super+Shift+J → zenbuji popup --ocr (GNOME custom shortcut)"
 fi
 
 # --- Offline models ------------------------------------------------------ #
 if [[ "$WITH_MODELS" -eq 1 && "$LIGHT" -eq 0 ]]; then
     echo "Downloading offline models (ja→en, en→de, …)…"
     "$VENV/bin/python" "$REPO_DIR/bin/zenbuji.py" models --install || true
+    echo "Warming the OCR model (manga-ocr, ~450MB on first download)…"
+    "$VENV/bin/python" -c "from manga_ocr import MangaOcr; MangaOcr()" || true
 fi
 
 cat <<EOF
@@ -175,4 +194,5 @@ Next steps:
   • Or use DeepL:          zenbuji config --backend deepl --deepl-key <KEY>
   • Try it:                zenbuji 日本語を勉強しています
   • Hotkey:                Super+J looks up the current selection
+  • Screen OCR:            Super+Shift+J reads on-screen text (draw a box)
 EOF

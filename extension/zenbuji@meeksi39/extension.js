@@ -88,6 +88,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
         selItem.connect('activate', () => this._extension.lookupSelection());
         this.menu.addMenuItem(selItem);
 
+        const ocrItem = new PopupMenu.PopupMenuItem(_('Look up screen region (OCR)'));
+        ocrItem.connect('activate', () => this._extension.lookupRegion());
+        this.menu.addMenuItem(ocrItem);
+
         const prefsItem = new PopupMenu.PopupMenuItem(_('Settings…'));
         prefsItem.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(prefsItem);
@@ -237,6 +241,10 @@ export default class ZenbujiExtension extends Extension {
         if (!text)
             return;
         this._spawnPopup(['popup', text]);
+    }
+
+    lookupRegion() {
+        this._spawnPopup(['popup', '--ocr']);
     }
 
     _spawnPopup(args) {
