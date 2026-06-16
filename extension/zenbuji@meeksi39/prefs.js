@@ -159,7 +159,12 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         trGroup.add(backendRow);
 
-        const keyRow = new Adw.PasswordEntryRow({title: _('DeepL API key')});
+        const keyRow = new Adw.PasswordEntryRow({
+            title: _('DeepL API key'),
+            // Without the apply button, the `apply` signal never fires (Enter
+            // only emits `entry-activated`), so the key would never save.
+            show_apply_button: true,
+        });
         keyRow.connect('apply', () => {
             this._setConfig(settings, ['--deepl-key', keyRow.get_text().trim()]);
         });
@@ -265,6 +270,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         const cmdRow = new Adw.EntryRow({
             title: _('zenbuji command'),
             text: settings.get_string('zenbuji-command'),
+            show_apply_button: true,
         });
         cmdRow.connect('apply', () => {
             settings.set_string('zenbuji-command', cmdRow.get_text().trim() || 'zenbuji');
