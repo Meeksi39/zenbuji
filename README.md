@@ -153,10 +153,10 @@ on Wayland.
 
 The easiest way is the **extension settings UI** (`gnome-extensions prefs
 zenbuji@meeksi39`, or *Extensions ▸ zenbuji ▸ Settings*): set the **DeepL API
-key**, pick the **backend** and **languages**, **verify** the key (shows your
-remaining DeepL quota), and toggle/clear the recent-lookup **history**. The UI
-reads and writes the same config file the CLI uses, so every surface stays in
-sync.
+key**, pick the **backend** and **languages**, choose the **interface
+language** (English or 日本語), **verify** the key (shows your remaining DeepL
+quota), and toggle/clear the recent-lookup **history**. The UI reads and writes
+the same config file the CLI uses, so every surface stays in sync.
 
 From the command line:
 
@@ -165,6 +165,7 @@ zenbuji config                          # show current config
 zenbuji config --backend argos          # offline (default)
 zenbuji config --backend deepl --deepl-key <KEY>
 zenbuji config --lang en,de             # which languages to show
+zenbuji config --ui-language ja         # interface language (en or ja)
 zenbuji config --history off            # stop recording recent lookups
 zenbuji config --clear-history          # forget recorded lookups
 zenbuji usage                           # check the DeepL key + remaining quota

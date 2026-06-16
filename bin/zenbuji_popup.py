@@ -21,7 +21,31 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-LANG_NAMES = {"en": "English", "de": "Deutsch", "ja": "日本語"}
+# Target-language section labels, shown in the interface language.
+LANG_NAMES_BY_UI = {
+    "en": {"en": "English", "de": "Deutsch", "ja": "日本語"},
+    "ja": {"en": "英語", "de": "ドイツ語", "ja": "日本語"},
+}
+
+# UI chrome strings, by interface language. Target-language section labels
+# (LANG_NAMES) are intentionally left in their own language.
+UI_STRINGS = {
+    "placeholder":   {"en": "Japanese text…",        "ja": "日本語のテキスト…"},
+    "look_up":       {"en": "Look up",               "ja": "調べる"},
+    "copy":          {"en": "Copy",                  "ja": "コピー"},
+    "looking_up":    {"en": "Looking up…",           "ja": "検索中…"},
+    "recognising":   {"en": "Recognising…",          "ja": "認識中…"},
+    "lookup_failed": {"en": "Lookup failed.",        "ja": "検索に失敗しました。"},
+    "no_text":       {"en": "No text recognised.",   "ja": "テキストを認識できませんでした。"},
+}
+
+
+def _make_tr(ui_language):
+    """Return a translator t(key) for the given interface language."""
+    def t(key):
+        entry = UI_STRINGS.get(key, {})
+        return entry.get(ui_language) or entry.get("en") or key
+    return t
 
 CSS = b"""
 .zenbuji-original { font-size: 20px; font-weight: 600; }
@@ -47,7 +71,7 @@ def _ruby_markup(tokens) -> str:
     return "".join(parts)
 
 
-def _copy_row(window, label_widget, text):
+def _copy_row(window, label_widget, text, copy_label="Copy"):
     """Wrap a label in a row with a flat copy-to-clipboard button."""
     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
     label_widget.set_hexpand(True)
@@ -55,20 +79,23 @@ def _copy_row(window, label_widget, text):
     btn = Gtk.Button(icon_name="edit-copy-symbolic")
     btn.add_css_class("flat")
     btn.set_valign(Gtk.Align.START)
-    btn.set_tooltip_text("Copy")
+    btn.set_tooltip_text(copy_label)
     btn.connect("clicked", lambda _b: window.get_clipboard().set(text))
     row.append(btn)
     return row
 
 
 def show_popup(languages, *, result=None, ocr_image=None,
-               process_fn=None, ocr_fn=None) -> int:
+               process_fn=None, ocr_fn=None, ui_language="en") -> int:
     """Display the popup.
 
     Exactly one of `result` (already-processed) or `ocr_image` (recognise text
     asynchronously) seeds the window. `process_fn(text) -> Result` runs a fresh
     lookup when the text is edited; `ocr_fn(path) -> (text, notes)` does OCR.
+    `ui_language` ("en"/"ja") selects the interface language.
     """
+    t = _make_tr(ui_language)
+    lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
     app = Gtk.Application(application_id="com.meeksi39.zenbuji")
 
     def on_activate(application):
@@ -94,9 +121,9 @@ def show_popup(languages, *, result=None, ocr_image=None,
 
         # --- Editable input row ------------------------------------------- //
         input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        entry = Gtk.Entry(hexpand=True, placeholder_text="Japanese text…")
+        entry = Gtk.Entry(hexpand=True, placeholder_text=t("placeholder"))
         entry.add_css_class("zenbuji-original")
-        lookup_btn = Gtk.Button(label="Look up")
+        lookup_btn = Gtk.Button(label=t("look_up"))
         input_row.append(entry)
         input_row.append(lookup_btn)
         box.append(input_row)
@@ -144,7 +171,7 @@ def show_popup(languages, *, result=None, ocr_image=None,
                 reading = Gtk.Label(label=res.reading, wrap=True, xalign=0,
                                     selectable=True)
                 reading.add_css_class("zenbuji-reading")
-                result_box.append(_copy_row(win, reading, res.reading))
+                result_box.append(_copy_row(win, reading, res.reading, t("copy")))
 
             if any(getattr(t, "has_kanji", False) for t in res.tokens):
                 ruby = Gtk.Label(wrap=True, xalign=0, selectable=True)
@@ -154,14 +181,14 @@ def show_popup(languages, *, result=None, ocr_image=None,
 
             for lang in languages:
                 val = res.translations.get(lang)
-                lbl = Gtk.Label(label=LANG_NAMES.get(lang, lang.upper()), xalign=0)
+                lbl = Gtk.Label(label=lang_names.get(lang, lang.upper()), xalign=0)
                 lbl.add_css_class("zenbuji-lang-label")
                 result_box.append(lbl)
                 tr = Gtk.Label(label=val if val else "—", wrap=True, xalign=0,
                                selectable=True)
                 tr.add_css_class("zenbuji-translation")
                 if val:
-                    result_box.append(_copy_row(win, tr, val))
+                    result_box.append(_copy_row(win, tr, val, t("copy")))
                 else:
                     result_box.append(tr)
 
@@ -175,7 +202,7 @@ def show_popup(languages, *, result=None, ocr_image=None,
             text = text.strip()
             if not text or process_fn is None:
                 return
-            set_busy("Looking up…")
+            set_busy(t("looking_up"))
 
             def work():
                 try:
@@ -189,14 +216,14 @@ def show_popup(languages, *, result=None, ocr_image=None,
 
         def finish(res, err):
             if res is None:
-                clear_busy(err or "Lookup failed.")
+                clear_busy(err or t("lookup_failed"))
             else:
                 clear_busy()
                 render(res)
             return GLib.SOURCE_REMOVE
 
         def run_ocr(image):
-            set_busy("Recognising…")
+            set_busy(t("recognising"))
 
             def work():
                 try:
@@ -212,7 +239,7 @@ def show_popup(languages, *, result=None, ocr_image=None,
             if text.strip():
                 do_lookup(text)
             else:
-                clear_busy(notes[0] if notes else "No text recognised.")
+                clear_busy(notes[0] if notes else t("no_text"))
             return GLib.SOURCE_REMOVE
 
         entry.connect("activate", lambda _e: do_lookup(entry.get_text()))

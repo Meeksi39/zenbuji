@@ -16,9 +16,28 @@ import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const LANG_NAMES = {en: 'English', de: 'Deutsch', ja: '日本語'};
+// Target-language section labels, shown in the interface language.
+const LANG_NAMES_BY_UI = {
+    en: {en: 'English', de: 'Deutsch', ja: '日本語'},
+    ja: {en: '英語', de: 'ドイツ語', ja: '日本語'},
+};
+
+// Interface strings, by language. The UI language is a zenbuji config setting
+// (config.json), so translation is config-driven rather than locale-driven:
+// `_` is rebound when the extension enables. Japanese maps English msgid->ja;
+// missing keys (and English) fall through to the msgid.
+const UI_JA = {
+    'Type or paste Japanese…': '日本語を入力または貼り付け…',
+    'Recent': '履歴',
+    'No recent lookups': '履歴はありません',
+    'Look up current selection': '選択テキストを調べる',
+    'Look up screen region (OCR)': '画面領域を調べる（OCR）',
+    'Settings…': '設定…',
+    'Looking up…': '検索中…',
+};
+let _ = s => s;
 
 function runJson(argv, callback) {
     try {
@@ -165,9 +184,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
             this._addInfo(data.reading, 'font-size: 15px; opacity: 0.8;');
 
         const langs = this._extension.getLanguages();
+        const names = LANG_NAMES_BY_UI[this._extension.uiLang()] || LANG_NAMES_BY_UI.en;
         for (const lang of langs) {
             const val = data.translations ? data.translations[lang] : null;
-            this._addInfo(`${LANG_NAMES[lang] || lang}:`,
+            this._addInfo(`${names[lang] || lang}:`,
                 'font-weight: 700; font-size: 11px; opacity: 0.6;');
             this._addInfo(val || '—', 'font-size: 14px; padding-bottom: 4px;');
         }
@@ -179,6 +199,8 @@ class ZenbujiIndicator extends PanelMenu.Button {
 export default class ZenbujiExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
+        const lang = this.uiLang();
+        _ = (s) => (lang === 'ja' && UI_JA[s]) ? UI_JA[s] : s;
         this._indicator = new ZenbujiIndicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
         // The global selection hotkey (Super+J) is a GNOME custom keybinding set
@@ -231,6 +253,10 @@ export default class ZenbujiExtension extends Extension {
     getLanguages() {
         const langs = this._readConfig().languages;
         return Array.isArray(langs) && langs.length ? langs : ['en', 'de'];
+    }
+
+    uiLang() {
+        return this._readConfig().ui_language === 'ja' ? 'ja' : 'en';
     }
 
     lookupSelection() {

@@ -46,6 +46,9 @@ DEFAULT_CONFIG = {
     "history_size": 20,
     # OCR engine used to read text from a captured screen region.
     "ocr_backend": "mangaocr",
+    # Interface language for the popup, top-bar menu, and settings window
+    # ("en" or "ja"). Independent of the translation target languages above.
+    "ui_language": "en",
 }
 
 
@@ -218,20 +221,19 @@ def _manga_ocr():
 def ocr_image_to_text(path: str, cfg: dict) -> tuple[str, list[str]]:
     """Recognise Japanese text in an image file. Returns (text, notes)."""
     notes: list[str] = []
+    lang = cfg.get("ui_language", "en")
     if not path or not os.path.exists(path):
-        return "", ["OCR: image not found."]
+        return "", [_note("ocr_not_found", lang)]
     backend = cfg.get("ocr_backend", "mangaocr")
     if backend != "mangaocr":
-        notes.append(f"Unknown ocr_backend '{backend}'; using manga-ocr.")
+        notes.append(_note("ocr_unknown_backend", lang, backend=backend))
     try:
         with _quiet_stderr():
             text = _manga_ocr()(path)
     except ImportError:
-        return "", [
-            "OCR backend not installed — re-run install.sh without --light."
-        ]
+        return "", [_note("ocr_not_installed", lang)]
     except Exception as exc:  # noqa: BLE001
-        return "", [f"OCR failed: {exc}"]
+        return "", [_note("ocr_failed", lang, error=exc)]
     return (text or "").strip(), notes
 
 
@@ -324,12 +326,81 @@ def capture_region() -> str | None:
 # --------------------------------------------------------------------------- #
 LANG_NAMES = {"en": "English", "de": "German", "ja": "Japanese"}
 
+# User-facing status notes (shown in the popup and CLI output), by UI language.
+# `{...}` placeholders are filled via _note(..., **kw).
+NOTES = {
+    "deepl_no_key": {
+        "en": "DeepL selected but no API key set; skipping translation.",
+        "ja": "DeepL が選択されていますが API キーが未設定です。翻訳をスキップします。",
+    },
+    "fell_back_argos": {
+        "en": "Fell back to offline Argos backend.",
+        "ja": "オフラインの Argos バックエンドに切り替えました。",
+    },
+    "fell_back_deepl": {
+        "en": "Fell back to DeepL backend.",
+        "ja": "DeepL バックエンドに切り替えました。",
+    },
+    "argos_not_installed": {
+        "en": "Argos Translate is not installed (run install.sh).",
+        "ja": "Argos Translate がインストールされていません（install.sh を実行してください）。",
+    },
+    "argos_no_ja": {
+        "en": "No Japanese language pack installed for Argos. "
+              "Run: zenbuji models --install",
+        "ja": "Argos の日本語パックがインストールされていません。"
+              "実行: zenbuji models --install",
+    },
+    "argos_no_model": {
+        "en": "Argos has no '{lang}' model installed. "
+              "Run: zenbuji models --install",
+        "ja": "Argos に '{lang}' モデルがインストールされていません。"
+              "実行: zenbuji models --install",
+    },
+    "argos_failed": {
+        "en": "Argos translation failed: {error}",
+        "ja": "Argos の翻訳に失敗しました: {error}",
+    },
+    "deepl_failed": {
+        "en": "DeepL request failed: {error}",
+        "ja": "DeepL リクエストに失敗しました: {error}",
+    },
+    "ocr_not_found": {
+        "en": "OCR: image not found.",
+        "ja": "OCR: 画像が見つかりません。",
+    },
+    "ocr_unknown_backend": {
+        "en": "Unknown ocr_backend '{backend}'; using manga-ocr.",
+        "ja": "不明な ocr_backend '{backend}'。manga-ocr を使用します。",
+    },
+    "ocr_not_installed": {
+        "en": "OCR backend not installed — re-run install.sh without --light.",
+        "ja": "OCR バックエンドがインストールされていません — "
+              "install.sh を --light なしで再実行してください。",
+    },
+    "ocr_failed": {
+        "en": "OCR failed: {error}",
+        "ja": "OCR に失敗しました: {error}",
+    },
+}
+
+
+def _note(key: str, lang: str = "en", **fmt) -> str:
+    """Return a localised status note; unknown keys/langs fall back to English."""
+    entry = NOTES.get(key, {})
+    template = entry.get(lang) or entry.get("en") or key
+    try:
+        return template.format(**fmt) if fmt else template
+    except (KeyError, IndexError):
+        return template
+
 
 class TranslationError(Exception):
     pass
 
 
-def translate_deepl(text: str, targets: list[str], api_key: str) -> dict:
+def translate_deepl(text: str, targets: list[str], api_key: str,
+                    lang: str = "en") -> dict:
     import urllib.parse
     import urllib.request
 
@@ -357,7 +428,8 @@ def translate_deepl(text: str, targets: list[str], api_key: str) -> dict:
                 payload = json.loads(resp.read().decode("utf-8"))
             out[lang] = payload["translations"][0]["text"]
         except Exception as exc:  # noqa: BLE001
-            raise TranslationError(f"DeepL request failed: {exc}") from exc
+            raise TranslationError(
+                _note("deepl_failed", lang, error=exc)) from exc
     return out
 
 
@@ -432,33 +504,29 @@ def _argos_get(code: str):
     return None
 
 
-def translate_argos(text: str, targets: list[str]) -> dict:
+def translate_argos(text: str, targets: list[str], lang: str = "en") -> dict:
     try:
         import argostranslate.translate  # noqa: F401
     except ImportError as exc:
         raise TranslationError(
-            "Argos Translate is not installed (run install.sh)."
+            _note("argos_not_installed", lang)
         ) from exc
 
     src = _argos_get("ja")
     if src is None:
-        raise TranslationError(
-            "No Japanese language pack installed for Argos. "
-            "Run: zenbuji models --install"
-        )
+        raise TranslationError(_note("argos_no_ja", lang))
     out = {}
-    for lang in targets:
-        dst = _argos_get(lang)
+    for target in targets:
+        dst = _argos_get(target)
         if dst is None:
             raise TranslationError(
-                f"Argos has no '{lang}' model installed. "
-                "Run: zenbuji models --install"
-            )
+                _note("argos_no_model", lang, lang=target))
         try:
             with _quiet_stderr():
-                out[lang] = src.get_translation(dst).translate(text)
+                out[target] = src.get_translation(dst).translate(text)
         except Exception as exc:  # noqa: BLE001
-            raise TranslationError(f"Argos translation failed: {exc}") from exc
+            raise TranslationError(
+                _note("argos_failed", lang, error=exc)) from exc
     return out
 
 
@@ -466,6 +534,7 @@ def translate(text: str, targets: list[str], cfg: dict) -> tuple[dict, list[str]
     """Translate text into each target language. Returns (translations, notes)."""
     backend = cfg.get("backend", "auto")
     key = cfg.get("deepl_api_key", "")
+    lang = cfg.get("ui_language", "en")
     notes: list[str] = []
 
     if backend == "auto":
@@ -473,31 +542,31 @@ def translate(text: str, targets: list[str], cfg: dict) -> tuple[dict, list[str]
 
     if backend == "deepl":
         if not key:
-            notes.append("DeepL selected but no API key set; skipping translation.")
+            notes.append(_note("deepl_no_key", lang))
             return {}, notes
         try:
-            return translate_deepl(text, targets, key), notes
+            return translate_deepl(text, targets, key, lang), notes
         except TranslationError as exc:
             notes.append(str(exc))
             # Fall back to offline if available.
             try:
-                return translate_argos(text, targets), [
+                return translate_argos(text, targets, lang), [
                     *notes,
-                    "Fell back to offline Argos backend.",
+                    _note("fell_back_argos", lang),
                 ]
             except TranslationError:
                 return {}, notes
 
     # argos
     try:
-        return translate_argos(text, targets), notes
+        return translate_argos(text, targets, lang), notes
     except TranslationError as exc:
         notes.append(str(exc))
         if key:
             try:
-                return translate_deepl(text, targets, key), [
+                return translate_deepl(text, targets, key, lang), [
                     *notes,
-                    "Fell back to DeepL backend.",
+                    _note("fell_back_deepl", lang),
                 ]
             except TranslationError as exc2:
                 notes.append(str(exc2))
@@ -658,6 +727,9 @@ def cmd_config(args, cfg) -> int:
     if args.history:
         cfg["history"] = args.history == "on"
         changed = True
+    if args.ui_language:
+        cfg["ui_language"] = args.ui_language
+        changed = True
     if changed:
         save_config(cfg)
     if args.clear_history:
@@ -725,6 +797,7 @@ def main(argv=None) -> int:
         p.add_argument("--lang")
         p.add_argument("--deepl-key", dest="deepl_key")
         p.add_argument("--history", choices=["on", "off"])
+        p.add_argument("--ui-language", dest="ui_language", choices=["en", "ja"])
         p.add_argument("--clear-history", action="store_true")
         p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
@@ -832,12 +905,15 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
     def ocr_fn(img):
         return ocr_image_to_text(img, cfg)
 
+    ui_language = cfg.get("ui_language", "en")
     if ocr_image:
         return show_popup(languages, ocr_image=ocr_image,
-                          process_fn=process_fn, ocr_fn=ocr_fn)
+                          process_fn=process_fn, ocr_fn=ocr_fn,
+                          ui_language=ui_language)
     result = process_fn(text) if text else None
     return show_popup(languages, result=result,
-                      process_fn=process_fn, ocr_fn=ocr_fn)
+                      process_fn=process_fn, ocr_fn=ocr_fn,
+                      ui_language=ui_language)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,75 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 
-import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const BACKENDS = ['auto', 'argos', 'deepl'];
 const BACKEND_LABELS = ['Auto (DeepL if key set)', 'Offline (Argos)', 'DeepL'];
+
+// Config-driven UI translation (mirrors extension.js): the interface language
+// is a zenbuji config setting, not the system locale, so `_` is rebound from
+// config before the window is built. Japanese maps the English msgid -> ja;
+// missing keys (and English) fall through to the msgid unchanged.
+const UI_JA = {
+    'Auto (DeepL if key set)': '自動（キーがあれば DeepL）',
+    'Offline (Argos)': 'オフライン（Argos）',
+    'DeepL': 'DeepL',
+    'Translation': '翻訳',
+    'Stored in the zenbuji config, shared with the CLI, popup, and file-manager surfaces.':
+        'zenbuji の設定に保存され、CLI・ポップアップ・ファイルマネージャーと共有されます。',
+    'Backend': 'バックエンド',
+    'DeepL API key': 'DeepL API キー',
+    'Verify DeepL key': 'DeepL キーを確認',
+    'Checks the key above and shows remaining quota.': '上記のキーを確認し、残りの利用量を表示します。',
+    'Verify': '確認',
+    'Checking…': '確認中…',
+    'characters used': '文字使用',
+    'check failed': '確認に失敗しました',
+    'English': '英語',
+    'German': 'ドイツ語',
+    'Languages': '翻訳言語',
+    'Which translations to show, in order.': '表示する翻訳とその順序。',
+    'History': '履歴',
+    'Keep recent lookups': '最近の検索を保存',
+    'Show them in the top-bar “Recent” menu.': 'トップバーの「履歴」メニューに表示します。',
+    'Clear history': '履歴を消去',
+    'Clear': '消去',
+    'Cleared.': '消去しました。',
+    'Advanced': '詳細設定',
+    'Selection hotkey': '選択ホットキー',
+    'Super+J is a GNOME custom shortcut (Settings ▸ Keyboard). Re-bind it there or with dconf.':
+        'Super+J は GNOME のカスタムショートカットです（設定 ▸ キーボード）。そこか dconf で変更できます。',
+    'Screen-region OCR': '画面領域 OCR',
+    'Super+Shift+J (or the top-bar “Look up screen region”) reads on-screen Japanese via OCR. Needs the full (non---light) install for the OCR model.':
+        'Super+Shift+J（またはトップバーの「画面領域を調べる」）で画面上の日本語を OCR で読み取ります。OCR モデルにはフル（--light でない）インストールが必要です。',
+    'zenbuji command': 'zenbuji コマンド',
+    'Could not read zenbuji config — check the command in Advanced.':
+        'zenbuji の設定を読み込めませんでした — 詳細設定のコマンドを確認してください。',
+    'Interface': 'インターフェース',
+    'Interface language': '表示言語',
+    'Language of the popup, menu, and this settings window.': 'ポップアップ・メニュー・この設定画面の言語。',
+    'Reopen settings to see this window in the new language.':
+        '新しい言語でこの画面を表示するには設定を開き直してください。',
+};
+let _ = s => s;
+
+/* Read the UI language from the shared zenbuji config file, synchronously, so
+ * the window can be built in the right language before the CLI is queried. */
+function readUiLang() {
+    try {
+        const path = GLib.build_filenamev(
+            [GLib.get_user_config_dir(), 'zenbuji', 'config.json']);
+        const [ok, bytes] = GLib.file_get_contents(path);
+        if (!ok)
+            return 'en';
+        const cfg = JSON.parse(new TextDecoder().decode(bytes)) || {};
+        return cfg.ui_language === 'ja' ? 'ja' : 'en';
+    } catch (_e) {
+        return 'en';
+    }
+}
 
 export default class ZenbujiPrefs extends ExtensionPreferences {
     /* Resolve the CLI command from the same gsetting the extension uses. */
@@ -48,10 +112,33 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
 
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
+        const uiLang = readUiLang();
+        _ = (s) => (uiLang === 'ja' && UI_JA[s]) ? UI_JA[s] : s;
         let loading = true;  // suppress write-backs while we apply fetched values
 
         const page = new Adw.PreferencesPage();
         window.add(page);
+
+        // --- Interface ---------------------------------------------------- //
+        const UI_LANGS = ['en', 'ja'];
+        const ifaceGroup = new Adw.PreferencesGroup({title: _('Interface')});
+        page.add(ifaceGroup);
+
+        const uiLangRow = new Adw.ComboRow({
+            title: _('Interface language'),
+            subtitle: _('Language of the popup, menu, and this settings window.'),
+            // Language names shown in their own script, not translated.
+            model: Gtk.StringList.new(['English', '日本語']),
+            selected: UI_LANGS.indexOf(uiLang) >= 0 ? UI_LANGS.indexOf(uiLang) : 0,
+        });
+        uiLangRow.connect('notify::selected', () => {
+            if (loading)
+                return;
+            this._setConfig(settings, ['--ui-language', UI_LANGS[uiLangRow.selected]]);
+            uiLangRow.set_subtitle(
+                _('Reopen settings to see this window in the new language.'));
+        });
+        ifaceGroup.add(uiLangRow);
 
         // --- Translation -------------------------------------------------- //
         const trGroup = new Adw.PreferencesGroup({
