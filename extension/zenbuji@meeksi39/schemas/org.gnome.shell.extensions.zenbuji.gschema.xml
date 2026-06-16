@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.zenbuji"
+          path="/org/gnome/shell/extensions/zenbuji/">
+    <key name="lookup-selection" type="as">
+      <default><![CDATA[['<Super>j']]]></default>
+      <summary>Look up the current text selection</summary>
+      <description>Keybinding that runs zenbuji on the current PRIMARY selection and shows the popup.</description>
+    </key>
+    <key name="zenbuji-command" type="s">
+      <default>'zenbuji'</default>
+      <summary>Path to the zenbuji CLI</summary>
+      <description>Command used to invoke the zenbuji CLI (resolved on PATH by default).</description>
+    </key>
+  </schema>
+</schemalist>

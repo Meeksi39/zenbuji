@@ -1,0 +1,9 @@
+{
+  "uuid": "zenbuji@meeksi39",
+  "name": "zenbuji",
+  "description": "Furigana + English/German translation for Japanese text. Type or paste text in the top-bar menu, or press a hotkey to look up the current selection.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/Meeksi39/zenbuji",
+  "settings-schema": "org.gnome.shell.extensions.zenbuji",
+  "gettext-domain": "zenbuji"
+}

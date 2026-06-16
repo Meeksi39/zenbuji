@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Compiled GSettings schema (generated at install time)
+extension/**/gschemas.compiled
+
+# Compiled translations (generated from po/*.po at install time)
+*.mo
+
+# venv / models / user config live outside the repo, but ignore them if a
+# user ever creates them here by mistake.
+venv/
+.venv/
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
