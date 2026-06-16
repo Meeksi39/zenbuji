@@ -60,6 +60,14 @@ const UI_JA = {
     'Close when it loses focus': 'フォーカスを失ったら閉じる',
     'Dismiss the popup automatically when you click elsewhere.':
         '他の場所をクリックすると自動的に閉じます。',
+    'Learning': '学習',
+    'Show translation as a hint': '翻訳をヒントとして表示',
+    'Show the meaning during practice (test only the reading).':
+        '練習中に意味を表示します（読みのみ出題）。',
+    'Open once a day on login': 'ログイン時に1日1回開く',
+    'Automatically start a practice round after you log in.':
+        'ログイン後に練習を自動的に開始します。',
+    'Practice (SRS)': '練習（SRS）',
     'Shortcuts': 'ショートカット',
     'Click a shortcut to change it. These are GNOME custom keybindings.':
         'ショートカットをクリックして変更します（GNOME のカスタムキーバインド）。',
@@ -378,6 +386,34 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         popupGroup.add(closeRow);
 
+        // --- Learning ----------------------------------------------------- //
+        const learnGroup = new Adw.PreferencesGroup({title: _('Learning')});
+        page.add(learnGroup);
+
+        const learnHintRow = new Adw.SwitchRow({
+            title: _('Show translation as a hint'),
+            subtitle: _('Show the meaning during practice (test only the reading).'),
+        });
+        learnHintRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--learn-show-translation', learnHintRow.get_active() ? 'on' : 'off']);
+        });
+        learnGroup.add(learnHintRow);
+
+        const learnLoginRow = new Adw.SwitchRow({
+            title: _('Open once a day on login'),
+            subtitle: _('Automatically start a practice round after you log in.'),
+        });
+        learnLoginRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--learn-on-login', learnLoginRow.get_active() ? 'on' : 'off']);
+        });
+        learnGroup.add(learnLoginRow);
+
         // --- Shortcuts ---------------------------------------------------- //
         const scGroup = new Adw.PreferencesGroup({
             title: _('Shortcuts'),
@@ -387,6 +423,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         scGroup.add(this._makeShortcutRow(_('Look up selection'), '', 'zenbuji'));
         scGroup.add(this._makeShortcutRow(_('Look up screen region (OCR)'),
             _('Needs the full (non---light) install for the OCR model.'), 'zenbuji-ocr'));
+        scGroup.add(this._makeShortcutRow(_('Practice (SRS)'), '', 'zenbuji-learn'));
 
         // --- Advanced ----------------------------------------------------- //
         const advGroup = new Adw.PreferencesGroup({title: _('Advanced')});
@@ -414,6 +451,8 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 histRow.set_active(cfg.history !== false);
                 closeRow.set_active(cfg.popup_close_on_focus_loss !== false);
                 dictRow.set_active(cfg.dictionary !== false);
+                learnHintRow.set_active(cfg.learn_show_translation !== false);
+                learnLoginRow.set_active(cfg.learn_on_login === true);
             } else if (err) {
                 trGroup.set_description(
                     _('Could not read zenbuji config — check the command in Advanced.'));

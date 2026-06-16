@@ -59,10 +59,11 @@ if [[ "$MODE" == uninstall ]]; then
     rm -rf "$EXT_DST"
     rm -f "$NAUTILUS_SCRIPTS/zenbuji (furigana + translation)"
     rm -f "$NAUTILUS_EXT_DIR/zenbuji-nautilus.py"
+    rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/zenbuji-learn.desktop"
     # Remove our custom keybindings from the list (leaves other customs intact).
     MK=org.gnome.settings-daemon.plugins.media-keys
     if command -v gsettings >/dev/null; then
-        for slug in zenbuji zenbuji-ocr; do
+        for slug in zenbuji zenbuji-ocr zenbuji-learn; do
             KBPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$slug/"
             cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
             if [[ "$cur" == *"$KBPATH"* ]]; then
@@ -191,6 +192,9 @@ if command -v gsettings >/dev/null; then
     register_keybinding zenbuji-ocr 'zenbuji: look up screen region (OCR)' \
         "$BIN_DIR/zenbuji popup --ocr" '<Super><Shift>j'
     echo "  bound Super+Shift+J → zenbuji popup --ocr (GNOME custom shortcut)"
+    register_keybinding zenbuji-learn 'zenbuji: practice (SRS)' \
+        "$BIN_DIR/zenbuji learn" '<Super><Shift>l'
+    echo "  bound Super+Shift+L → zenbuji learn (GNOME custom shortcut)"
 fi
 
 # --- Blur My Shell integration (frosted-glass popup) --------------------- #

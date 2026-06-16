@@ -14,13 +14,15 @@ offline backend (Argos Translate) by default and an optional online backend
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 CONFIG_DIR = Path(
@@ -34,6 +36,13 @@ DATA_DIR = Path(
 HISTORY_PATH = DATA_DIR / "history.json"
 # Local dictionary of cached DeepL translations (see the Dictionary section).
 DICT_PATH = DATA_DIR / "dictionary.json"
+# Spaced-repetition learning state, keyed by text (see the SRS section).
+SRS_PATH = DATA_DIR / "srs.json"
+# Date-stamp so the "open on login" autostart fires at most once per day.
+LAST_LEARN_PATH = DATA_DIR / "last_learn.txt"
+AUTOSTART_PATH = Path(
+    os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+) / "autostart" / "zenbuji-learn.desktop"
 
 DEFAULT_CONFIG = {
     # "argos" (offline), "deepl" (online), or "auto" (deepl if a key is set,
@@ -58,6 +67,11 @@ DEFAULT_CONFIG = {
     # Cache DeepL translations locally and reuse them (builds a personal
     # dictionary, saves quota). Only affects the DeepL backend.
     "dictionary": True,
+    # Learning quiz: show the translation as a hint (test reading only) vs hide
+    # it (test reading + translation); open once a day on login; cards per round.
+    "learn_show_translation": True,
+    "learn_on_login": False,
+    "learn_count": 10,
 }
 
 
@@ -213,6 +227,162 @@ def dict_record(text: str, reading: str, deepl_translations: dict) -> dict:
     data[text] = entry
     save_dict(data)
     return entry
+
+
+# --------------------------------------------------------------------------- #
+# Spaced repetition (SRS) — a learning schedule layered over the dictionary
+# --------------------------------------------------------------------------- #
+SRS_DEFAULT_EASE = 2.5
+
+
+def load_srs() -> dict:
+    try:
+        if SRS_PATH.exists():
+            data = json.loads(SRS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def save_srs(data: dict) -> None:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        SRS_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def srs_get(text: str) -> dict | None:
+    return load_srs().get(text.strip())
+
+
+def _new_srs() -> dict:
+    return {"ease": SRS_DEFAULT_EASE, "interval": 0, "reps": 0, "lapses": 0,
+            "due": None, "last_reviewed": None, "correct": 0, "wrong": 0}
+
+
+def srs_status(state: dict | None) -> str:
+    """Coarse learning stage for display: new / learning / young / mature."""
+    if not state or not state.get("last_reviewed"):
+        return "new"
+    interval = state.get("interval", 0)
+    if interval < 7:
+        return "learning"
+    if interval < 21:
+        return "young"
+    return "mature"
+
+
+def srs_review(text: str, correct: bool) -> dict:
+    """Apply one SM-2-lite review and persist. Returns the updated state."""
+    text = text.strip()
+    data = load_srs()
+    s = data.get(text) or _new_srs()
+    ease = float(s.get("ease", SRS_DEFAULT_EASE))
+    interval = float(s.get("interval", 0))
+    reps = int(s.get("reps", 0))
+    if correct:
+        reps += 1
+        if reps == 1:
+            interval = 1
+        elif reps == 2:
+            interval = 6
+        else:
+            interval = round(interval * ease)
+        s["correct"] = int(s.get("correct", 0)) + 1
+    else:
+        reps = 0
+        interval = 0  # due again right away
+        ease = max(1.3, ease - 0.2)
+        s["lapses"] = int(s.get("lapses", 0)) + 1
+        s["wrong"] = int(s.get("wrong", 0)) + 1
+    now = datetime.now()
+    s["ease"] = round(ease, 2)
+    s["interval"] = interval
+    s["reps"] = reps
+    s["last_reviewed"] = now.isoformat(timespec="seconds")
+    s["due"] = (now + timedelta(days=interval)).isoformat(timespec="seconds")
+    data[text] = s
+    save_srs(data)
+    return s
+
+
+def srs_select(limit: int = 10) -> list:
+    """Pick cards to review from the dictionary, most-due first.
+
+    Never-reviewed entries sort first (treated as maximally due), then by due
+    date ascending. Only entries with a reading and at least one translation
+    qualify.
+    """
+    d = load_dict()
+    srs = load_srs()
+    candidates = []
+    for text, e in d.items():
+        if not e.get("reading"):
+            continue
+        if not any((e.get("translations") or {}).values()):
+            continue
+        st = srs.get(text)
+        due = (st or {}).get("due") or ""  # "" (never reviewed) sorts first
+        candidates.append((due, text, e, st))
+    candidates.sort(key=lambda c: c[0])
+    cards = []
+    for _due, text, e, st in candidates[:limit]:
+        cards.append({
+            "text": text,
+            "reading": e.get("reading", ""),
+            "translations": e.get("translations", {}),
+            "status": srs_status(st),
+        })
+    return cards
+
+
+# --- Answer grading ------------------------------------------------------- #
+_PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]{}。、！？・…]+")
+
+
+def _norm_reading(s: str) -> str:
+    s = kata_to_hira((s or "").strip())
+    for ch in (" ", "　", "・"):
+        s = s.replace(ch, "")
+    return s
+
+
+def _norm_text(s: str) -> str:
+    s = (s or "").strip().casefold()
+    s = _PUNCT_RE.sub("", s)
+    s = re.sub(r"[\s　]+", " ", s)
+    return s.strip()
+
+
+def grade_answer(card: dict, reading_in: str, translation_in: str,
+                 *, test_translation: bool = True) -> dict:
+    """Grade a quiz answer. Reading is exact (kana-normalised); translation is
+    fuzzy (exact or SequenceMatcher ratio >= 0.8 against EN or DE)."""
+    reading_ok = _norm_reading(reading_in) == _norm_reading(card.get("reading", ""))
+    translations = card.get("translations", {})
+    translation_ok = None
+    if test_translation:
+        ans = _norm_text(translation_in)
+        translation_ok = False
+        if ans:
+            for val in translations.values():
+                t = _norm_text(val)
+                if t and (ans == t
+                          or difflib.SequenceMatcher(None, ans, t).ratio() >= 0.8):
+                    translation_ok = True
+                    break
+    return {
+        "reading_ok": reading_ok,
+        "translation_ok": translation_ok,
+        "correct_reading": card.get("reading", ""),
+        "correct_translations": translations,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -802,6 +972,7 @@ Usage:
   zenbuji selection           Process the current text selection
   zenbuji ocr [image]         OCR a screen region (or image file) and look it up
   zenbuji dict                Open the local dictionary (cached DeepL lookups)
+  zenbuji learn               Practice cached words (spaced repetition quiz)
   zenbuji config              Show or set configuration
   zenbuji usage               Check the DeepL key and show remaining quota
   zenbuji models --install    Download offline Argos models (ja->en, en->de)
@@ -855,6 +1026,36 @@ def cmd_models(args, cfg) -> int:
     return 0
 
 
+def _learn_command(extra: str) -> str:
+    """Resolve a command line that re-runs zenbuji (prefer the installed
+    launcher, fall back to the venv python + this script)."""
+    launcher = shutil.which("zenbuji") or str(
+        Path.home() / ".local" / "bin" / "zenbuji")
+    if os.path.exists(launcher):
+        return f"{launcher} {extra}"
+    return f"{sys.executable} {Path(__file__).resolve()} {extra}"
+
+
+def _write_learn_autostart(enable: bool) -> None:
+    """Create/remove the autostart entry that opens the learning window on login."""
+    try:
+        if enable:
+            AUTOSTART_PATH.parent.mkdir(parents=True, exist_ok=True)
+            AUTOSTART_PATH.write_text(
+                "[Desktop Entry]\n"
+                "Type=Application\n"
+                "Name=zenbuji learn\n"
+                f"Exec={_learn_command('learn --on-login')}\n"
+                "X-GNOME-Autostart-enabled=true\n"
+                "NoDisplay=true\n",
+                encoding="utf-8",
+            )
+        else:
+            AUTOSTART_PATH.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def cmd_config(args, cfg) -> int:
     changed = False
     if args.backend:
@@ -878,6 +1079,13 @@ def cmd_config(args, cfg) -> int:
     if args.dictionary:
         cfg["dictionary"] = args.dictionary == "on"
         changed = True
+    if args.learn_show:
+        cfg["learn_show_translation"] = args.learn_show == "on"
+        changed = True
+    if args.learn_on_login:
+        cfg["learn_on_login"] = args.learn_on_login == "on"
+        changed = True
+        _write_learn_autostart(args.learn_on_login == "on")
     if changed:
         save_config(cfg)
     if args.clear_history:
@@ -926,7 +1134,7 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models", "usage", "ocr", "dict",
+        "config", "models", "usage", "ocr", "dict", "learn",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -949,6 +1157,10 @@ def main(argv=None) -> int:
         p.add_argument("--popup-close-on-focus-loss", dest="popup_close",
                        choices=["on", "off"])
         p.add_argument("--dictionary", choices=["on", "off"])
+        p.add_argument("--learn-show-translation", dest="learn_show",
+                       choices=["on", "off"])
+        p.add_argument("--learn-on-login", dest="learn_on_login",
+                       choices=["on", "off"])
         p.add_argument("--clear-history", action="store_true")
         p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
@@ -980,6 +1192,26 @@ def main(argv=None) -> int:
             print(json.dumps(load_dict(), ensure_ascii=False))
             return 0
         return launch_dictionary(cfg)
+
+    if command == "learn":
+        p = argparse.ArgumentParser(prog="zenbuji learn")
+        p.add_argument("--on-login", dest="on_login", action="store_true",
+                       help="open at most once per day (for the autostart entry)")
+        a = p.parse_args(rest)
+        if a.on_login:
+            today = datetime.now().date().isoformat()
+            try:
+                seen = LAST_LEARN_PATH.read_text(encoding="utf-8").strip()
+            except OSError:
+                seen = ""
+            if seen == today:
+                return 0  # already practised today
+            try:
+                DATA_DIR.mkdir(parents=True, exist_ok=True)
+                LAST_LEARN_PATH.write_text(today, encoding="utf-8")
+            except OSError:
+                pass
+        return launch_learning(cfg)
 
     # Shared options for the text commands.
     p = argparse.ArgumentParser(prog=f"zenbuji {command}", add_help=False)
@@ -1123,6 +1355,37 @@ def launch_dictionary(cfg: dict) -> int:
         refresh_fn=refresh_fn,
         quota_fn=lambda: (deepl_usage(cfg.get("deepl_api_key", ""))
                           if cfg.get("deepl_api_key") else None),
+    )
+
+
+def launch_learning(cfg: dict) -> int:
+    """Show the SRS learning/quiz window over the cached dictionary."""
+    try:
+        from zenbuji_learn import show_learning
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from zenbuji_learn import show_learning
+
+    show_tr = bool(cfg.get("learn_show_translation", True))
+    count = int(cfg.get("learn_count", 10) or 10)
+    cards = srs_select(count)
+
+    def grade_fn(card, reading_in, translation_in):
+        return grade_answer(card, reading_in, translation_in,
+                            test_translation=not show_tr)
+
+    def review_fn(text, correct):
+        st = srs_review(text, correct)
+        return {"status": srs_status(st), "interval": st.get("interval", 0),
+                "due": st.get("due")}
+
+    return show_learning(
+        cards=cards,
+        show_translation=show_tr,
+        languages=cfg.get("languages", ["en", "de"]),
+        ui_language=cfg.get("ui_language", "en"),
+        grade_fn=grade_fn,
+        review_fn=review_fn,
     )
 
 

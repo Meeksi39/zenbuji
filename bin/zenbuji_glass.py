@@ -31,16 +31,23 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     padding: 18px 18px 16px 18px;
     background-image: linear-gradient(to bottom,
         alpha(#ffffff, 0.06), alpha(#ffffff, 0.0));
+    /* Crisp glass rim for edge contrast on any background. An *outer* drop
+       shadow can't be used: Blur My Shell would blur the transparent margin it
+       needs into a halo. Instead a dark 1px border defines the edge against
+       bright backgrounds and an inset light hairline defines it against dark
+       ones -- both render inside the window, so nothing is clipped/blurred. */
+    box-shadow: inset 0 0 0 1px alpha(#ffffff, 0.10),
+                inset 0 1px 0 0 alpha(#ffffff, 0.22);
 }
 .zenbuji-card.dark {
-    background-color: rgba(34, 34, 38, 0.55);
+    background-color: rgba(34, 34, 38, 0.58);
     color: #f2f2f7;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(0, 0, 0, 0.55);
 }
 .zenbuji-card.light {
-    background-color: rgba(250, 250, 252, 0.66);
+    background-color: rgba(250, 250, 252, 0.68);
     color: #1c1c1e;
-    border: 1px solid rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(0, 0, 0, 0.22);
 }
 
 .zenbuji-lookup { border-radius: 10px; font-weight: 600; }
@@ -65,6 +72,25 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-dict-list { background: transparent; }
 .zenbuji-dict-list > row { background: transparent; border-radius: 8px; }
 .zenbuji-dict-scroll { background: transparent; }
+
+/* --- learning / quiz window --- */
+.zenbuji-kanji { font-size: 54px; font-weight: 700; }
+/* Verdicts sit on a solid colour chip so they stay legible over any blurred
+   background (plain coloured text had poor contrast). */
+.zenbuji-correct {
+    color: #ffffff; font-weight: 700;
+    background-color: #21915c; border-radius: 9px; padding: 3px 10px;
+}
+.zenbuji-wrong {
+    color: #ffffff; font-weight: 700;
+    background-color: #c0182a; border-radius: 9px; padding: 3px 10px;
+}
+.zenbuji-hint { font-size: 14px; opacity: 0.75; }
+.zenbuji-score { font-size: 12px; opacity: 0.6; }
+.zenbuji-celebrate {
+    font-size: 88px; font-weight: 800; color: #2ec27e;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+}
 """
 
 _CSS_INSTALLED = False

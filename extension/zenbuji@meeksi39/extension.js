@@ -35,6 +35,7 @@ const UI_JA = {
     'Look up current selection': '選択テキストを調べる',
     'Look up screen region (OCR)': '画面領域を調べる（OCR）',
     'Dictionary': '辞書',
+    'Practice (SRS)': '練習（SRS）',
     'Settings…': '設定…',
     'Looking up…': '検索中…',
 };
@@ -115,6 +116,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
         const dictItem = new PopupMenu.PopupMenuItem(_('Dictionary'));
         dictItem.connect('activate', () => this._extension.openDictionary());
         this.menu.addMenuItem(dictItem);
+
+        const learnItem = new PopupMenu.PopupMenuItem(_('Practice (SRS)'));
+        learnItem.connect('activate', () => this._extension.openLearning());
+        this.menu.addMenuItem(learnItem);
 
         const prefsItem = new PopupMenu.PopupMenuItem(_('Settings…'));
         prefsItem.connect('activate', () => this._extension.openPreferences());
@@ -280,6 +285,10 @@ export default class ZenbujiExtension extends Extension {
 
     openDictionary() {
         this._spawnPopup(['dict']);
+    }
+
+    openLearning() {
+        this._spawnPopup(['learn']);
     }
 
     _spawnPopup(args) {

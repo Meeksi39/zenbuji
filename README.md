@@ -105,6 +105,7 @@ zenbuji ocr                       # capture a screen region and OCR it
 zenbuji ocr screenshot.png        # OCR an existing image file
 zenbuji dict                      # open the local dictionary window
 zenbuji dict --json               # dump the cached dictionary as JSON
+zenbuji learn                     # spaced-repetition practice over the cache
 ```
 
 `zb` is a short alias for `zenbuji`. Example output:
@@ -172,6 +173,8 @@ zenbuji config --lang en,de             # which languages to show
 zenbuji config --ui-language ja         # interface language (en or ja)
 zenbuji config --popup-close-on-focus-loss off   # keep popup open until Escape
 zenbuji config --dictionary off         # stop caching DeepL translations
+zenbuji config --learn-show-translation off   # quiz reading AND translation
+zenbuji config --learn-on-login on      # open a practice round once a day on login
 zenbuji config --history off            # stop recording recent lookups
 zenbuji config --clear-history          # forget recorded lookups
 zenbuji usage                           # check the DeepL key + remaining quota
@@ -222,6 +225,29 @@ its reading, translations, lookup count and timestamps, and lets you **search**,
 an entry back in the lookup popup. The popup also shows your remaining DeepL quota
 as a small node when a key is set. Turn caching off with `zenbuji config
 --dictionary off` (or the *Build a local dictionary* switch in settings).
+
+### Learning (spaced repetition)
+
+Turn the cached words into active recall. **Practice** (`zenbuji learn`, the
+**Super+Shift+L** hotkey, or the top-bar menu) opens a glass quiz: a word is shown
+as **large kanji** with no furigana, you type the **reading** (and the
+**translation** unless it's shown as a hint), and the correct answer is revealed
+and graded — the reading exactly, the translation fuzzily (EN or DE) with a
+self-grade override (✓/✗) for when the wording differs. A correct answer plays a
+little ✓ flourish.
+
+Results drive a spaced-repetition schedule (SM-2-style) stored in
+`~/.local/share/zenbuji/srs.json`: correct answers push the next review further
+out (New → Learning → Young → Mature), wrong answers bring it back. Each round
+picks the most-due/new words (10 by default), shows a progress bar, and ends with a
+summary of every word's new status.
+
+Settings (or `zenbuji config`):
+
+- `--learn-show-translation on|off` — show the meaning as a hint (test only the
+  reading) vs. hide it (test reading **and** translation),
+- `--learn-on-login on|off` — open a round automatically, at most once a day, on
+  login (an autostart entry; off by default).
 
 ### Offline models
 
