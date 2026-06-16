@@ -12,8 +12,6 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
-import Meta from 'gi://Meta';
-import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -152,18 +150,12 @@ export default class ZenbujiExtension extends Extension {
         this._settings = this.getSettings();
         this._indicator = new ZenbujiIndicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
-
-        Main.wm.addKeybinding(
-            'lookup-selection',
-            this._settings,
-            Meta.KeyBindingFlags.NONE,
-            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-            () => this.lookupSelection()
-        );
+        // The global selection hotkey (Super+J) is a GNOME custom keybinding set
+        // up by install.sh — it works without the extension and avoids a
+        // double-binding conflict, so it is intentionally not registered here.
     }
 
     disable() {
-        Main.wm.removeKeybinding('lookup-selection');
         this._indicator?.destroy();
         this._indicator = null;
         this._settings = null;

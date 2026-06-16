@@ -113,11 +113,14 @@ German: Ich lerne Japanisch.
 
 ### Hotkey
 
-`Super+J` looks up the current selection. Re-bind it in the extension settings
-(`gnome-extensions prefs zenbuji@meeksi39`) or with dconf:
+`install.sh` registers **`Super+J`** as a GNOME *custom keyboard shortcut* that
+runs `zenbuji popup --selection`. It works immediately (no logout) and doesn't
+depend on the extension being enabled. Re-bind it under **Settings ▸ Keyboard ▸
+Custom Shortcuts**, or with gsettings:
 
 ```sh
-dconf write /org/gnome/shell/extensions/zenbuji/lookup-selection "['<Super>F9']"
+P=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/zenbuji/
+gsettings set "$P" binding '<Super>F9'
 ```
 
 ### Configuration

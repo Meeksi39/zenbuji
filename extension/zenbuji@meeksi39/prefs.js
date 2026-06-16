@@ -1,6 +1,4 @@
 import Adw from 'gi://Adw';
-import Gtk from 'gi://Gtk';
-import Gio from 'gi://Gio';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
@@ -16,16 +14,12 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         page.add(group);
 
-        // Keybinding (shown as editable text — '<Super>j' style).
-        const shortcutRow = new Adw.EntryRow({
-            title: _('Selection lookup shortcut'),
-            text: (settings.get_strv('lookup-selection')[0]) || '',
+        const hintRow = new Adw.ActionRow({
+            title: _('Selection hotkey'),
+            subtitle: _('Super+J is a GNOME custom shortcut (Settings ▸ Keyboard). ' +
+                'Re-bind it there or with dconf.'),
         });
-        shortcutRow.connect('apply', () => {
-            const val = shortcutRow.get_text().trim();
-            settings.set_strv('lookup-selection', val ? [val] : []);
-        });
-        group.add(shortcutRow);
+        group.add(hintRow);
 
         const cmdRow = new Adw.EntryRow({
             title: _('zenbuji command'),

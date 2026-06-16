@@ -59,6 +59,17 @@ if [[ "$MODE" == uninstall ]]; then
     rm -rf "$EXT_DST"
     rm -f "$NAUTILUS_SCRIPTS/zenbuji (furigana + translation)"
     rm -f "$NAUTILUS_EXT_DIR/zenbuji-nautilus.py"
+    # Remove the custom keybinding from the list (leaves other customs intact).
+    MK=org.gnome.settings-daemon.plugins.media-keys
+    KBPATH=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/zenbuji/
+    if command -v gsettings >/dev/null; then
+        cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
+        if [[ "$cur" == *"$KBPATH"* ]]; then
+            new="$(printf '%s' "$cur" | sed "s#, *'$KBPATH'##; s#'$KBPATH', *##; s#\['$KBPATH'\]#@as []#")"
+            gsettings set $MK custom-keybindings "$new"
+            echo "Removed the Super+J custom keybinding."
+        fi
+    fi
     echo "Removed CLI, extension and Nautilus integration."
     echo "Kept: venv at $VENV (delete by hand to reclaim space),"
     echo "      config at ~/.config/zenbuji."
@@ -120,6 +131,31 @@ if "$VENV/bin/python" -c "import gi; gi.require_version('Nautilus','4.0')" 2>/de
 else
     echo "  (nautilus-python not found — skipping the context-menu extension;"
     echo "   the Scripts entry above works without it)"
+fi
+
+# --- Global selection hotkey (GNOME custom keybinding) ------------------- #
+# Owned here rather than by the extension so it works immediately (no logout)
+# and without the extension enabled.
+MK=org.gnome.settings-daemon.plugins.media-keys
+KBPATH=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/zenbuji/
+if command -v gsettings >/dev/null; then
+    cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
+    if [[ "$cur" != *"custom-keybindings/zenbuji/"* ]]; then
+        if [[ "$cur" == "@as []" || "$cur" == "[]" ]]; then
+            gsettings set $MK custom-keybindings "['$KBPATH']"
+        else
+            gsettings set $MK custom-keybindings "${cur%]}, '$KBPATH']"
+        fi
+    fi
+    CK="$MK.custom-keybinding:$KBPATH"
+    gsettings set "$CK" name 'zenbuji: look up selection'
+    gsettings set "$CK" command "$BIN_DIR/zenbuji popup --selection"
+    # Don't clobber a binding the user may have customised.
+    existing="$(gsettings get "$CK" binding 2>/dev/null || echo "''")"
+    if [[ "$existing" == "''" || "$existing" == "@s ''" ]]; then
+        gsettings set "$CK" binding '<Super>j'
+    fi
+    echo "  bound Super+J → zenbuji popup --selection (GNOME custom shortcut)"
 fi
 
 # --- Offline models ------------------------------------------------------ #
