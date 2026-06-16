@@ -74,16 +74,6 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border: 1px solid rgba(255, 255, 255, 0.55);
 }
 
-.zenbuji-entry {
-    border-radius: 10px;
-    min-height: 34px;
-    padding: 2px 10px;
-    border: none;
-    box-shadow: none;
-    background-color: alpha(currentColor, 0.07);
-}
-.zenbuji-entry:focus-within { background-color: alpha(currentColor, 0.11); }
-
 .zenbuji-lookup { border-radius: 10px; font-weight: 600; }
 
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
@@ -127,13 +117,16 @@ def _copy_row(window, label_widget, text, copy_label="Copy"):
 
 
 def show_popup(languages, *, result=None, ocr_image=None,
-               process_fn=None, ocr_fn=None, ui_language="en") -> int:
+               process_fn=None, ocr_fn=None, ui_language="en",
+               close_on_focus_loss=True) -> int:
     """Display the popup.
 
     Exactly one of `result` (already-processed) or `ocr_image` (recognise text
     asynchronously) seeds the window. `process_fn(text) -> Result` runs a fresh
     lookup when the text is edited; `ocr_fn(path) -> (text, notes)` does OCR.
     `ui_language` ("en"/"ja") selects the interface language.
+    `close_on_focus_loss` dismisses the window when it stops being the active
+    window (HUD-style); set False to keep it open until Escape/closed.
     """
     t = _make_tr(ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
@@ -180,7 +173,6 @@ def show_popup(languages, *, result=None, ocr_image=None,
         input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         entry = Gtk.Entry(hexpand=True, placeholder_text=t("placeholder"))
         entry.add_css_class("zenbuji-original")
-        entry.add_css_class("zenbuji-entry")
         lookup_btn = Gtk.Button(label=t("look_up"))
         lookup_btn.add_css_class("suggested-action")
         lookup_btn.add_css_class("zenbuji-lookup")
@@ -322,17 +314,46 @@ def show_popup(languages, *, result=None, ocr_image=None,
         key.connect("key-pressed", on_key)
         win.add_controller(key)
 
-        # Dismiss when the window loses focus (overlay/HUD behaviour). Only after
-        # it has actually been focused once, so it doesn't self-close on startup.
-        focus_state = {"was_active": False}
+        # Optionally dismiss when the window loses focus (overlay/HUD behaviour).
+        # Dragging the headerless window starts a compositor move that briefly
+        # deactivates it — so we must NOT treat a deactivation that happens while
+        # the pointer is pressed *inside* the window as a focus switch, or the
+        # window would close the instant you try to drag it.
+        if close_on_focus_loss:
+            focus_state = {"was_active": False, "interacting": False}
 
-        def on_active_changed(*_a):
-            if win.is_active():
-                focus_state["was_active"] = True
-            elif focus_state["was_active"]:
-                win.close()
+            def clear_interacting():
+                focus_state["interacting"] = False
+                return GLib.SOURCE_REMOVE
 
-        win.connect("notify::is-active", on_active_changed)
+            def on_active_changed(*_a):
+                if win.is_active():
+                    focus_state["was_active"] = True
+                    focus_state["interacting"] = False  # regained focus
+                elif focus_state["was_active"] and not focus_state["interacting"]:
+                    win.close()
+
+            win.connect("notify::is-active", on_active_changed)
+
+            # Passive observer (returns False → never consumes events, so clicks,
+            # drags and text selection all keep working). CAPTURE phase so it sees
+            # the press before a child or the WindowHandle does.
+            watcher = Gtk.EventControllerLegacy()
+            watcher.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+
+            def on_event(controller, *_a):
+                event = controller.get_current_event()
+                if event is None:
+                    return False
+                et = event.get_event_type()
+                if et == Gdk.EventType.BUTTON_PRESS:
+                    focus_state["interacting"] = True
+                elif et == Gdk.EventType.BUTTON_RELEASE:
+                    GLib.timeout_add(150, clear_interacting)
+                return False
+
+            watcher.connect("event", on_event)
+            win.add_controller(watcher)
 
         win.present()
 

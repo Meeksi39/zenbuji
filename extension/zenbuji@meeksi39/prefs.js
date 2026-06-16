@@ -1,4 +1,5 @@
 import Adw from 'gi://Adw';
+import Gdk from 'gi://Gdk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
@@ -7,6 +8,11 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 const BACKENDS = ['auto', 'argos', 'deepl'];
 const BACKEND_LABELS = ['Auto (DeepL if key set)', 'Offline (Argos)', 'DeepL'];
+
+// The two global hotkeys live as GNOME custom keybindings (created by
+// install.sh); the prefs UI edits their accelerator in place.
+const KB_SCHEMA = 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding';
+const KB_BASE = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/';
 
 // Config-driven UI translation (mirrors extension.js): the interface language
 // is a zenbuji config setting, not the system locale, so `_` is rebound from
@@ -47,6 +53,22 @@ const UI_JA = {
     'zenbuji command': 'zenbuji コマンド',
     'Could not read zenbuji config — check the command in Advanced.':
         'zenbuji の設定を読み込めませんでした — 詳細設定のコマンドを確認してください。',
+    'Popup': 'ポップアップ',
+    'Close when it loses focus': 'フォーカスを失ったら閉じる',
+    'Dismiss the popup automatically when you click elsewhere.':
+        '他の場所をクリックすると自動的に閉じます。',
+    'Shortcuts': 'ショートカット',
+    'Click a shortcut to change it. These are GNOME custom keybindings.':
+        'ショートカットをクリックして変更します（GNOME のカスタムキーバインド）。',
+    'Look up selection': '選択テキストを調べる',
+    'Look up screen region (OCR)': '画面領域を調べる（OCR）',
+    'Needs the full (non---light) install for the OCR model.':
+        'OCR モデルにはフル（--light でない）インストールが必要です。',
+    'Disabled': '無効',
+    'Type the new shortcut…  (Esc cancel · Backspace clear)':
+        '新しいショートカットを入力…  (Esc で取消 · Backspace で消去)',
+    'Run install.sh to create this shortcut.':
+        'このショートカットを作成するには install.sh を実行してください。',
     'Interface': 'インターフェース',
     'Interface language': '表示言語',
     'Language of the popup, menu, and this settings window.': 'ポップアップ・メニュー・この設定画面の言語。',
@@ -108,6 +130,83 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
 
     _setConfig(settings, args) {
         this._runCli(settings, ['config', ...args], () => {});
+    }
+
+    /* A row whose suffix shows the current accelerator of a GNOME custom
+     * keybinding and lets the user re-capture it. `slug` is the keybinding's
+     * dconf folder name (created by install.sh). */
+    _makeShortcutRow(title, subtitle, slug) {
+        let kb = null;
+        try {
+            kb = Gio.Settings.new_with_path(KB_SCHEMA, KB_BASE + slug + '/');
+        } catch (_e) {
+            kb = null;
+        }
+        const row = new Adw.ActionRow({title, subtitle});
+        const label = new Gtk.ShortcutLabel({
+            valign: Gtk.Align.CENTER,
+            disabled_text: _('Disabled'),
+        });
+        const btn = new Gtk.Button({valign: Gtk.Align.CENTER, child: label});
+        btn.add_css_class('flat');
+        const refresh = () =>
+            label.set_accelerator(kb ? (kb.get_string('binding') || '') : '');
+        if (kb) {
+            refresh();
+            btn.connect('clicked',
+                () => this._captureShortcut(row, subtitle, btn, label, kb, refresh));
+        } else {
+            row.set_subtitle(_('Run install.sh to create this shortcut.'));
+            btn.set_sensitive(false);
+        }
+        row.add_suffix(btn);
+        row.set_activatable_widget(btn);
+        return row;
+    }
+
+    /* Grab the next key combo and write it to the keybinding. Esc cancels,
+     * Backspace clears (disables) the shortcut. */
+    _captureShortcut(row, baseSubtitle, btn, label, kb, refresh) {
+        const win = row.get_root();
+        if (!win)
+            return;
+        btn.set_sensitive(false);
+        label.set_accelerator('');
+        row.set_subtitle(_('Type the new shortcut…  (Esc cancel · Backspace clear)'));
+
+        const ctl = new Gtk.EventControllerKey();
+        ctl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE);
+        const finish = (accel) => {
+            win.remove_controller(ctl);
+            btn.set_sensitive(true);
+            row.set_subtitle(baseSubtitle || '');
+            if (accel !== null)
+                kb.set_string('binding', accel);
+            refresh();
+        };
+        const LONE_MODS = [
+            Gdk.KEY_Control_L, Gdk.KEY_Control_R, Gdk.KEY_Shift_L, Gdk.KEY_Shift_R,
+            Gdk.KEY_Alt_L, Gdk.KEY_Alt_R, Gdk.KEY_Super_L, Gdk.KEY_Super_R,
+            Gdk.KEY_Meta_L, Gdk.KEY_Meta_R, Gdk.KEY_ISO_Level3_Shift,
+        ];
+        ctl.connect('key-pressed', (_c, keyval, _code, state) => {
+            const mods = state & Gtk.accelerator_get_default_mod_mask();
+            if (keyval === Gdk.KEY_Escape && mods === 0) {
+                finish(null);          // cancel, keep current
+                return Gdk.EVENT_STOP;
+            }
+            if (keyval === Gdk.KEY_BackSpace && mods === 0) {
+                finish('');            // clear / disable
+                return Gdk.EVENT_STOP;
+            }
+            if (LONE_MODS.includes(keyval))
+                return Gdk.EVENT_STOP;  // wait for a non-modifier key
+            if (!Gtk.accelerator_valid(keyval, mods))
+                return Gdk.EVENT_STOP;
+            finish(Gtk.accelerator_name(keyval, mods));
+            return Gdk.EVENT_STOP;
+        });
+        win.add_controller(ctl);
     }
 
     fillPreferencesWindow(window) {
@@ -248,24 +347,35 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         clearRow.set_activatable_widget(clearBtn);
         histGroup.add(clearRow);
 
+        // --- Popup -------------------------------------------------------- //
+        const popupGroup = new Adw.PreferencesGroup({title: _('Popup')});
+        page.add(popupGroup);
+
+        const closeRow = new Adw.SwitchRow({
+            title: _('Close when it loses focus'),
+            subtitle: _('Dismiss the popup automatically when you click elsewhere.'),
+        });
+        closeRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--popup-close-on-focus-loss', closeRow.get_active() ? 'on' : 'off']);
+        });
+        popupGroup.add(closeRow);
+
+        // --- Shortcuts ---------------------------------------------------- //
+        const scGroup = new Adw.PreferencesGroup({
+            title: _('Shortcuts'),
+            description: _('Click a shortcut to change it. These are GNOME custom keybindings.'),
+        });
+        page.add(scGroup);
+        scGroup.add(this._makeShortcutRow(_('Look up selection'), '', 'zenbuji'));
+        scGroup.add(this._makeShortcutRow(_('Look up screen region (OCR)'),
+            _('Needs the full (non---light) install for the OCR model.'), 'zenbuji-ocr'));
+
         // --- Advanced ----------------------------------------------------- //
         const advGroup = new Adw.PreferencesGroup({title: _('Advanced')});
         page.add(advGroup);
-
-        const hintRow = new Adw.ActionRow({
-            title: _('Selection hotkey'),
-            subtitle: _('Super+J is a GNOME custom shortcut (Settings ▸ Keyboard). ' +
-                'Re-bind it there or with dconf.'),
-        });
-        advGroup.add(hintRow);
-
-        const ocrHintRow = new Adw.ActionRow({
-            title: _('Screen-region OCR'),
-            subtitle: _('Super+Shift+J (or the top-bar “Look up screen region”) ' +
-                'reads on-screen Japanese via OCR. Needs the full (non---light) ' +
-                'install for the OCR model.'),
-        });
-        advGroup.add(ocrHintRow);
 
         const cmdRow = new Adw.EntryRow({
             title: _('zenbuji command'),
@@ -287,6 +397,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 enRow.set_active(langs.includes('en'));
                 deRow.set_active(langs.includes('de'));
                 histRow.set_active(cfg.history !== false);
+                closeRow.set_active(cfg.popup_close_on_focus_loss !== false);
             } else if (err) {
                 trGroup.set_description(
                     _('Could not read zenbuji config — check the command in Advanced.'));

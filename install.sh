@@ -228,6 +228,10 @@ PY
         echo "  tip: Blur My Shell ▸ Applications ▸ 'static blur' is on — turn it off for"
         echo "       live blur of the windows behind the popup (vs. the wallpaper image)"
     fi
+    if [[ "$(GSETTINGS_SCHEMA_DIR="$BMS_DIR/schemas" gsettings get org.gnome.shell.extensions.blur-my-shell hacks-level 2>/dev/null)" == "0" ]]; then
+        echo "  tip: set Blur My Shell 'hacks level' to 1 or higher to avoid a blur"
+        echo "       artifact when the popup window is dragged/moved"
+    fi
 else
     echo "  (Blur My Shell not found — the popup will be translucent without blur;"
     echo "   install blur-my-shell from extensions.gnome.org for frosted glass)"

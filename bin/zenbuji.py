@@ -49,6 +49,9 @@ DEFAULT_CONFIG = {
     # Interface language for the popup, top-bar menu, and settings window
     # ("en" or "ja"). Independent of the translation target languages above.
     "ui_language": "en",
+    # Dismiss the popup when it loses focus (HUD-style). Turn off to keep it
+    # open until Escape/closed.
+    "popup_close_on_focus_loss": True,
 }
 
 
@@ -730,6 +733,9 @@ def cmd_config(args, cfg) -> int:
     if args.ui_language:
         cfg["ui_language"] = args.ui_language
         changed = True
+    if args.popup_close:
+        cfg["popup_close_on_focus_loss"] = args.popup_close == "on"
+        changed = True
     if changed:
         save_config(cfg)
     if args.clear_history:
@@ -798,6 +804,8 @@ def main(argv=None) -> int:
         p.add_argument("--deepl-key", dest="deepl_key")
         p.add_argument("--history", choices=["on", "off"])
         p.add_argument("--ui-language", dest="ui_language", choices=["en", "ja"])
+        p.add_argument("--popup-close-on-focus-loss", dest="popup_close",
+                       choices=["on", "off"])
         p.add_argument("--clear-history", action="store_true")
         p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
@@ -906,14 +914,17 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
         return ocr_image_to_text(img, cfg)
 
     ui_language = cfg.get("ui_language", "en")
+    close_on_focus_loss = bool(cfg.get("popup_close_on_focus_loss", True))
     if ocr_image:
         return show_popup(languages, ocr_image=ocr_image,
                           process_fn=process_fn, ocr_fn=ocr_fn,
-                          ui_language=ui_language)
+                          ui_language=ui_language,
+                          close_on_focus_loss=close_on_focus_loss)
     result = process_fn(text) if text else None
     return show_popup(languages, result=result,
                       process_fn=process_fn, ocr_fn=ocr_fn,
-                      ui_language=ui_language)
+                      ui_language=ui_language,
+                      close_on_focus_loss=close_on_focus_loss)
 
 
 if __name__ == "__main__":

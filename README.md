@@ -155,8 +155,10 @@ The easiest way is the **extension settings UI** (`gnome-extensions prefs
 zenbuji@meeksi39`, or *Extensions ▸ zenbuji ▸ Settings*): set the **DeepL API
 key**, pick the **backend** and **languages**, choose the **interface
 language** (English or 日本語), **verify** the key (shows your remaining DeepL
-quota), and toggle/clear the recent-lookup **history**. The UI reads and writes
-the same config file the CLI uses, so every surface stays in sync.
+quota), toggle/clear the recent-lookup **history**, flip the popup's
+**close-on-focus-loss** behaviour, and **rebind the hotkeys** (click a shortcut
+in *Shortcuts* and press the new combo). The UI reads and writes the same config
+file the CLI uses, so every surface stays in sync.
 
 From the command line:
 
@@ -166,6 +168,7 @@ zenbuji config --backend argos          # offline (default)
 zenbuji config --backend deepl --deepl-key <KEY>
 zenbuji config --lang en,de             # which languages to show
 zenbuji config --ui-language ja         # interface language (en or ja)
+zenbuji config --popup-close-on-focus-loss off   # keep popup open until Escape
 zenbuji config --history off            # stop recording recent lookups
 zenbuji config --clear-history          # forget recorded lookups
 zenbuji usage                           # check the DeepL key + remaining quota
@@ -181,17 +184,22 @@ The popup window has **copy buttons** next to the reading and each translation.
 ### Frosted-glass popup
 
 The popup is a headerless, translucent floating card that follows your system
-light/dark theme, can be dragged from any empty spot, and dismisses on **Escape**
-or when it loses focus. Its tint tracks the ~15px corner radius of GNOME's
+light/dark theme, can be **dragged** from any empty spot, and dismisses on
+**Escape** — and, optionally, when it loses focus (toggle *Close when it loses
+focus* in the settings). Its tint tracks the ~15px corner radius of GNOME's
 [Blur My Shell] "Applications" component.
 
 GNOME/Mutter has no way for an app to blur what's behind its own window, so the
 real blur is supplied by Blur My Shell. `install.sh` adds `com.meeksi39.zenbuji`
 to its **Applications ▸ whitelist** automatically (idempotent; removed on
-uninstall). For the effect you need Blur My Shell installed with **Applications
-blur enabled**; turn **static blur off** under that section so it blurs the live
-windows behind the popup rather than the wallpaper. Without Blur My Shell the
-popup degrades gracefully to a clean translucent panel.
+uninstall). For the best effect, in Blur My Shell:
+
+- **Applications blur**: enabled,
+- **static blur**: off — blurs the live windows behind the popup, not the
+  wallpaper,
+- **hacks level**: 1 or higher — avoids a blur artifact when the popup is moved.
+
+Without Blur My Shell the popup degrades gracefully to a clean translucent panel.
 
 [Blur My Shell]: https://extensions.gnome.org/extension/3193/blur-my-shell/
 
