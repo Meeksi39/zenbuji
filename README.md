@@ -321,6 +321,23 @@ journalctl -f -o cat /usr/bin/gnome-shell
 
 ---
 
+## Credits
+
+zenbuji stands on a whole pile of other people's hard work — go show them some love:
+
+- **[VOICEVOX]** — the local neural TTS engine, with **ずんだもん (Zundamon)** as the default voice. Per the VOICEVOX terms, synthesized speech is credited as **`VOICEVOX:ずんだもん`**; if you switch voices, credit that voice provider instead.
+- **[fugashi] + [unidic-lite]** — MeCab-powered morphological analysis, aka the reason the furigana is actually *correct* and not vibes-based.
+- **[Argos Translate]** — offline neural translation · **[DeepL]** — the optional online backend when you want it crisper.
+- **[manga-ocr]** — the Japanese-tuned OCR model that reads text right off your screen.
+- **[Blur My Shell]** — supplies the real frosted-glass blur behind the popup.
+- **GTK 4 / libadwaita / PyGObject / GNOME Shell** — the toolkit and platform it all rides on. Plus `jaconv`, `speech-dispatcher` / `espeak-ng` for fallback TTS, and `podman` for running VOICEVOX.
+
+And full honesty: **a good chunk of this was coded with AI** (Claude / Claude Code) riding
+shotgun. I drove and made the calls, it typed a lot of the boilerplate — the bugs are still
+mine to answer for though (´･ω･`)
+
+---
+
 [fugashi]: https://github.com/polm/fugashi
 [unidic-lite]: https://github.com/polm/unidic-lite
 [Argos Translate]: https://github.com/argosopentech/argos-translate
