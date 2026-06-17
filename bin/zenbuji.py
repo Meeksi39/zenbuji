@@ -1411,7 +1411,7 @@ def cmd_add(args, cfg) -> int:
             if not jp:
                 continue
             en = r.translations.get("en") if speak_tr else None
-            chunks.append(f"{jp}、英語で{en}" if en else jp)
+            chunks.append(f"{jp}、英語で、{en}" if en else jp)
         spoken = "、".join(chunks)
         speak(spoken, cfg, block=True)  # wait, or this process exits mid-audio
 
