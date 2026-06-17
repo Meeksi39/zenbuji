@@ -63,7 +63,7 @@ if [[ "$MODE" == uninstall ]]; then
     # Remove our custom keybindings from the list (leaves other customs intact).
     MK=org.gnome.settings-daemon.plugins.media-keys
     if command -v gsettings >/dev/null; then
-        for slug in zenbuji zenbuji-ocr zenbuji-learn; do
+        for slug in zenbuji zenbuji-ocr zenbuji-ocr-add zenbuji-learn; do
             KBPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$slug/"
             cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
             if [[ "$cur" == *"$KBPATH"* ]]; then
@@ -162,11 +162,34 @@ fi
 # and without the extension enabled.
 MK=org.gnome.settings-daemon.plugins.media-keys
 
-# register_keybinding <slug> <name> <command> <default-binding>
+# Warn if <slug>'s key is also bound to another custom shortcut — a duplicate
+# binding silently fires neither, and is the usual reason a "registered"
+# shortcut does nothing. Only the media-keys custom list is scanned (where our
+# own shortcuts live); clashes with built-in WM shortcuts are out of scope.
+kb_warn_conflict() {
+    local slug="$1" mine="$2" op ob oname
+    [[ -z "$mine" || "$mine" == "''" || "$mine" == "@s ''" ]] && return
+    while read -r op; do
+        [[ -z "$op" || "$op" == *"/$slug/" ]] && continue
+        ob="$(gsettings get "$MK.custom-keybinding:$op" binding 2>/dev/null)"
+        if [[ "$ob" == "$mine" ]]; then
+            oname="$(gsettings get "$MK.custom-keybinding:$op" name 2>/dev/null)"
+            echo "  ! $mine also bound to $oname — one of them won't fire; rebind one"
+        fi
+    done < <(gsettings get $MK custom-keybindings 2>/dev/null \
+        | grep -oE "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/[^/]+/")
+}
+
+# register_keybinding <slug> <name> <command> <default-binding> <human-desc>
+# Idempotent and self-healing: re-adds the slug to the active list if missing
+# and always rewrites name+command, so entries left blank/unlisted by an older
+# install or a manual edit in GNOME Settings get repaired on reinstall. The
+# binding is only set when none exists, preserving a key the user customised.
+# Reports the *effective* binding (not the default) and warns on conflicts.
 register_keybinding() {
-    local slug="$1" name="$2" cmd="$3" binding="$4"
+    local slug="$1" name="$2" cmd="$3" binding="$4" desc="$5"
     local kbpath="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$slug/"
-    local cur new ck existing
+    local cur ck existing eff
     cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
     if [[ "$cur" != *"custom-keybindings/$slug/"* ]]; then
         if [[ "$cur" == "@as []" || "$cur" == "[]" ]]; then
@@ -183,18 +206,20 @@ register_keybinding() {
     if [[ "$existing" == "''" || "$existing" == "@s ''" ]]; then
         gsettings set "$ck" binding "$binding"
     fi
+    eff="$(gsettings get "$ck" binding 2>/dev/null)"
+    echo "  bound ${eff//\'/} → $desc"
+    kb_warn_conflict "$slug" "$eff"
 }
 
 if command -v gsettings >/dev/null; then
     register_keybinding zenbuji 'zenbuji: look up selection' \
-        "$BIN_DIR/zenbuji popup --selection" '<Super>j'
-    echo "  bound Super+J → zenbuji popup --selection (GNOME custom shortcut)"
+        "$BIN_DIR/zenbuji popup --selection" '<Super>j' 'zenbuji popup --selection'
     register_keybinding zenbuji-ocr 'zenbuji: look up screen region (OCR)' \
-        "$BIN_DIR/zenbuji popup --ocr" '<Super><Shift>j'
-    echo "  bound Super+Shift+J → zenbuji popup --ocr (GNOME custom shortcut)"
+        "$BIN_DIR/zenbuji popup --ocr" '<Super><Shift>j' 'zenbuji popup --ocr'
+    register_keybinding zenbuji-ocr-add 'zenbuji: OCR a region into the dictionary (silent + speak)' \
+        "$BIN_DIR/zenbuji add --ocr --speak" '<Super><Shift>k' 'zenbuji add --ocr --speak (silent, reads aloud)'
     register_keybinding zenbuji-learn 'zenbuji: practice (SRS)' \
-        "$BIN_DIR/zenbuji learn" '<Super><Shift>l'
-    echo "  bound Super+Shift+L → zenbuji learn (GNOME custom shortcut)"
+        "$BIN_DIR/zenbuji learn" '<Super><Shift>l' 'zenbuji learn'
 fi
 
 # --- Blur My Shell integration (frosted-glass popup) --------------------- #
@@ -261,4 +286,6 @@ Next steps:
   • Try it:                zenbuji 日本語を勉強しています
   • Hotkey:                Super+J looks up the current selection
   • Screen OCR:            Super+Shift+J reads on-screen text (draw a box)
+  • OCR → dictionary:      Super+Shift+K OCRs a region silently into the
+                           dictionary and reads the word aloud (no popup)
 EOF
