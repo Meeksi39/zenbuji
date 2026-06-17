@@ -90,23 +90,35 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border: 1px solid alpha(currentColor, 0.14);
 }
 .zenbuji-secondary:hover { background-color: alpha(currentColor, 0.16); }
-/* Flat icon buttons tinted with the accent (or red for destructive). */
-.zenbuji-icon { color: @accent_color; }
+/* Explicit pressed state: a faint translucent fill keeps the text (currentColor
+   / danger red) readable, instead of the theme's default solid active fill. */
+.zenbuji-secondary:active,
+.zenbuji-secondary:checked { background-color: alpha(currentColor, 0.24); }
+/* Flat icon buttons: neutral by default so dense rows stay calm, accent on
+   hover. Destructive stays red so delete reads clearly. */
+.zenbuji-icon { color: alpha(currentColor, 0.45); }
+.zenbuji-icon:hover { color: @accent_color; }
 .zenbuji-icon-danger { color: #e01b24; }
 
-/* Friendlier text inputs in every glass window (popup / dict / quiz). */
+/* Inviting text inputs in every glass window (popup / dict / quiz): a bright,
+   near-white field with dark text reads clearly as "type here" over the glass,
+   in both light and dark mode. */
 .zenbuji-card entry, .zenbuji-card entry.search {
     border-radius: 11px;
-    padding: 7px 12px;
-    min-height: 22px;
-    background-color: alpha(currentColor, 0.06);
-    border: 1px solid alpha(currentColor, 0.10);
+    padding: 8px 13px;
+    min-height: 24px;
     background-image: none;
-    box-shadow: none;
+    background-color: rgba(255, 255, 255, 0.95);
+    color: #1c1c1e;
+    border: 1px solid alpha(#000000, 0.12);
+    box-shadow: inset 0 1px 2px alpha(#000000, 0.05);
 }
+.zenbuji-card entry text { color: #1c1c1e; caret-color: #1c1c1e; }
+.zenbuji-card entry text > placeholder { color: alpha(#1c1c1e, 0.45); }
+.zenbuji-card entry image { color: alpha(#1c1c1e, 0.5); }
 .zenbuji-card entry:focus-within {
     border-color: @accent_color;
-    background-color: alpha(currentColor, 0.09);
+    box-shadow: 0 0 0 2px alpha(@accent_color, 0.30);
 }
 
 /* --- shared text styles (popup + dictionary) --- */
