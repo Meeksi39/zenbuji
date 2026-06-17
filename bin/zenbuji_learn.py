@@ -23,7 +23,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
     from zenbuji_glass import make_glass_window
@@ -620,6 +620,28 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             row.append(stats)
             row.append(again)
             phase.append(row)
+
+            # Every summary button closes the window, and the summary is built
+            # right where the just-confirmed "Got it" button stood. Without a
+            # guard, the same keypress/click that confirmed the last card (a held
+            # Enter that auto-repeats, or an impatient double-click) carries
+            # straight into one of these and dismisses the window. So: drop the
+            # stale default/focus (a stray Enter then does nothing) and briefly
+            # disable the buttons against an in-flight click.
+            try:
+                win.set_default_widget(None)
+                win.set_focus(None)
+            except Exception:  # noqa: BLE001
+                pass
+            for b in (close, stats, again):
+                b.set_sensitive(False)
+
+            def _arm_buttons():
+                for b in (close, stats, again):
+                    b.set_sensitive(True)
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(350, _arm_buttons)
 
         show_question()
         win.present()
