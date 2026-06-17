@@ -53,9 +53,12 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
 
 /* --- buttons: Apple-style glass --- */
+/* Soft, padded pills so the controls feel friendly across every window. */
 /* Primary action: filled with the system accent. */
 .zenbuji-action {
-    border-radius: 10px;
+    border-radius: 13px;
+    padding: 10px 22px;
+    min-height: 20px;
     font-weight: 600;
     border: none;
     background-image: none;
@@ -66,7 +69,9 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-action:active { background-color: shade(@accent_bg_color, 0.94); }
 /* Secondary: translucent glass. */
 .zenbuji-secondary {
-    border-radius: 10px;
+    border-radius: 13px;
+    padding: 10px 22px;
+    min-height: 20px;
     font-weight: 500;
     background-image: none;
     background-color: alpha(currentColor, 0.10);
@@ -76,6 +81,21 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 /* Flat icon buttons tinted with the accent (or red for destructive). */
 .zenbuji-icon { color: @accent_color; }
 .zenbuji-icon-danger { color: #e01b24; }
+
+/* Friendlier text inputs in every glass window (popup / dict / quiz). */
+.zenbuji-card entry, .zenbuji-card entry.search {
+    border-radius: 11px;
+    padding: 7px 12px;
+    min-height: 22px;
+    background-color: alpha(currentColor, 0.06);
+    border: 1px solid alpha(currentColor, 0.10);
+    background-image: none;
+    box-shadow: none;
+}
+.zenbuji-card entry:focus-within {
+    border-color: @accent_color;
+    background-color: alpha(currentColor, 0.09);
+}
 
 /* --- shared text styles (popup + dictionary) --- */
 .zenbuji-original { font-size: 20px; font-weight: 600; }
@@ -135,7 +155,14 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-level-mature   { background-color: #21915c; }
 
 /* --- statistics window --- */
-.zenbuji-stat-num { font-size: 27px; font-weight: 700; }
+/* Soft inset panel grouping the hero stats. */
+.zenbuji-panel {
+    background-color: alpha(currentColor, 0.05);
+    border-radius: 16px;
+    padding: 16px 12px;
+    border: 1px solid alpha(currentColor, 0.06);
+}
+.zenbuji-stat-num { font-size: 29px; font-weight: 700; }
 .zenbuji-stat-num-accent { color: @accent_color; }
 .zenbuji-stat-label {
     font-size: 10px; font-weight: 600; opacity: 0.55; letter-spacing: 0.04em;

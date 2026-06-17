@@ -107,7 +107,7 @@ def show_statistics(*, ui_language="en", languages=("en", "de"), stats_fn) -> in
 
     def on_activate(application):
         win, card = make_glass_window(
-            application, title="zenbuji 統計", default_size=(460, -1),
+            application, title="zenbuji 統計", default_size=(480, -1),
             resizable=False, draggable=True, close_on_focus_loss=False)
 
         title = Gtk.Label(label=t("title"), xalign=0)
@@ -177,7 +177,7 @@ def show_statistics(*, ui_language="en", languages=("en", "de"), stats_fn) -> in
 # --- building blocks --------------------------------------------------------- #
 def _section_header(text, count=None):
     box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-    box.set_margin_top(10)
+    box.set_margin_top(18)
     cap = Gtk.Label(label=text.upper(), xalign=0)
     cap.add_css_class("zenbuji-lang-label")
     cap.set_hexpand(True)
@@ -190,7 +190,7 @@ def _section_header(text, count=None):
 
 
 def _stat(value, caption, accent=False):
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
     box.set_hexpand(True)
     num = Gtk.Label(label=value, xalign=0.5)
     num.add_css_class("zenbuji-stat-num")
@@ -207,8 +207,8 @@ def _stat(value, caption, accent=False):
 def _vrule():
     sep = Gtk.Box()
     sep.add_css_class("zenbuji-vrule")
-    sep.set_margin_top(4)
-    sep.set_margin_bottom(4)
+    sep.set_margin_top(2)
+    sep.set_margin_bottom(2)
     return sep
 
 
@@ -216,7 +216,8 @@ def _hero_row(stats, t):
     acc = stats.get("accuracy")
     acc_str = f"{round(acc * 100)}%" if acc is not None else "—"
     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-    row.set_margin_top(6)
+    row.add_css_class("zenbuji-panel")
+    row.set_margin_top(8)
     row.append(_stat(str(stats.get("due_today", 0)), t("due_today"), accent=True))
     row.append(_vrule())
     row.append(_stat(str(stats.get("streak", 0)), t("streak")))
@@ -274,28 +275,29 @@ def _legend(stats, status_names):
 def _activity_chart(recent):
     peak = max((d["reviews"] for d in recent), default=0) or 1
     da = Gtk.DrawingArea()
-    da.set_content_height(46)
+    da.set_content_height(52)
     da.set_hexpand(True)
-    da.set_margin_top(4)
+    da.set_margin_top(8)
 
     def draw(area, cr, width, height, *_a):
         n = len(recent)
         if n == 0:
             return
-        gap = 3.0
-        barw = max(1.0, (width - gap * (n - 1)) / n)
+        slot = width / n
+        # Thin, fully-rounded vertical pills centered in each day's slot.
+        pillw = max(5.0, min(10.0, slot * 0.45))
         accent = accent_rgba(Adw.StyleManager.get_default().get_dark())
         fg = area.get_color()
-        usable = height - 2
         for i, d in enumerate(recent):
-            x = i * (barw + gap)
+            x = i * slot + (slot - pillw) / 2
             if d["reviews"] > 0:
-                bh = max(3.0, usable * d["reviews"] / peak)
+                bh = max(pillw, height * d["reviews"] / peak)
                 cr.set_source_rgba(accent.red, accent.green, accent.blue, 0.92)
-                _rounded_rect(cr, x, height - bh, barw, bh, min(barw / 2, 3))
+                _rounded_rect(cr, x, height - bh, pillw, bh, pillw / 2)
             else:
-                cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.12)
-                _rounded_rect(cr, x, height - 3, barw, 3, min(barw / 2, 1.5))
+                # Empty day: a faint baseline dot.
+                cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.13)
+                _rounded_rect(cr, x, height - pillw, pillw, pillw, pillw / 2)
             cr.fill()
 
     da.set_draw_func(draw)
