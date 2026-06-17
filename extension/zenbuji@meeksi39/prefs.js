@@ -92,6 +92,9 @@ const UI_JA = {
     'Speak a sample with the current engine and voice.':
         '現在のエンジンと話者でサンプルを読み上げます。',
     'Test': 'テスト',
+    'Speaking speed': '読み上げ速度',
+    '1.0 is normal; lower is slower, higher is faster.':
+        '1.0 が標準。小さいほど遅く、大きいほど速くなります。',
     'Text-to-speech command': '音声合成コマンド',
     'Used only when the engine is "Custom command". Use {text} as the placeholder.':
         'エンジンが「カスタムコマンド」のときのみ使用。{text} をプレースホルダーに使用します。',
@@ -539,6 +542,22 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         testRow.activatable_widget = testBtn;
         speechGroup.add(testRow);
 
+        const speedRow = new Adw.SpinRow({
+            title: _('Speaking speed'),
+            subtitle: _('1.0 is normal; lower is slower, higher is faster.'),
+            digits: 2,
+            adjustment: new Gtk.Adjustment({
+                lower: 0.5, upper: 2.0, step_increment: 0.1, page_increment: 0.25,
+            }),
+        });
+        speedRow.get_adjustment().connect('value-changed', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--tts-speed', String(speedRow.get_value().toFixed(2))]);
+        });
+        speechGroup.add(speedRow);
+
         const ttsCmdRow = new Adw.EntryRow({
             title: _('Text-to-speech command'),
             show_apply_button: true,
@@ -623,6 +642,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 ttsRow.set_active(cfg.tts === true);
                 ttsLookupRow.set_active(cfg.tts_on_lookup === true);
                 ttsAddTrRow.set_active(cfg.tts_add_translation === true);
+                speedRow.set_value(cfg.tts_speed || 1.0);
                 ttsCmdRow.set_text(cfg.tts_command || '');
                 const engIdx = TTS_ENGINES.indexOf(cfg.tts_engine || 'auto');
                 engineRow.selected = engIdx >= 0 ? engIdx : 0;

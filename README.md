@@ -268,6 +268,7 @@ zenbuji config --learn-show-translation off   # quiz reading AND translation
 zenbuji config --learn-on-login on      # open a practice round once a day on login
 zenbuji config --tts-engine voicevox    # auto | voicevox | system | command | off
 zenbuji config --voicevox-speaker 3     # voice id (see: zenbuji voices)
+zenbuji config --tts-speed 0.9          # speaking rate, 1.0 = normal (0.5–2.0)
 zenbuji config --tts on                 # read words aloud after an OCR/silent add
 zenbuji config --tts-on-lookup on       # auto-read the reading after a popup lookup
 zenbuji config --tts-add-translation on # OCR add also speaks the English meaning (英語で…)

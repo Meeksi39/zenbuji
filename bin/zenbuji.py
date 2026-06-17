@@ -94,6 +94,9 @@ DEFAULT_CONFIG = {
     # install.sh --voicevox). host:port of its HTTP API, and the speaker id.
     "voicevox_host": "127.0.0.1:50021",
     "voicevox_speaker": 3,  # ずんだもん (Zundamon), normal style
+    # Speaking rate, 1.0 = normal. Drives VOICEVOX speedScale (0.5–2.0) and the
+    # system voice's rate; applies to every spoken phrase.
+    "tts_speed": 1.0,
     # Custom TTS command template ({text} placeholder); when set it overrides
     # tts_engine. Left here mostly for power users / other engines.
     "tts_command": "",
@@ -967,18 +970,24 @@ VOICEVOX_DEFAULT_SPEAKER = 3  # ずんだもん (Zundamon), normal style
 _AUDIO_PLAYERS = ("pw-play", "paplay", "aplay", "ffplay")
 
 
-def voicevox_synthesize(text: str, host: str, speaker: int) -> bytes:
+def voicevox_synthesize(text: str, host: str, speaker: int,
+                        speed: float = 1.0) -> bytes:
     """Return WAV audio for `text` from a local VOICEVOX engine.
 
     Two-step HTTP API: POST /audio_query builds the synthesis parameters, POST
-    /synthesis renders them to a WAV. Raises (URLError/timeout) if the engine
-    isn't reachable — callers treat that as "no VOICEVOX".
+    /synthesis renders them to a WAV. `speed` overrides the query's speedScale
+    (1.0 = normal; VOICEVOX accepts ~0.5–2.0). Raises (URLError/timeout) if the
+    engine isn't reachable — callers treat that as "no VOICEVOX".
     """
     base = f"http://{host}"
-    query = urllib.parse.urlencode({"text": text, "speaker": speaker})
-    req = urllib.request.Request(f"{base}/audio_query?{query}", method="POST")
+    params = urllib.parse.urlencode({"text": text, "speaker": speaker})
+    req = urllib.request.Request(f"{base}/audio_query?{params}", method="POST")
     with urllib.request.urlopen(req, timeout=5) as resp:
         audio_query = resp.read()
+    if speed and speed != 1.0:
+        data = json.loads(audio_query)
+        data["speedScale"] = speed
+        audio_query = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(
         f"{base}/synthesis?speaker={speaker}", data=audio_query,
         headers={"Content-Type": "application/json"}, method="POST")
@@ -1032,6 +1041,8 @@ def speak(text: str, cfg: dict, block: bool = False) -> None:
     if engine == "off":
         return
 
+    speed = float(cfg.get("tts_speed", 1.0) or 1.0)
+
     def run():
         try:
             command = cfg.get("tts_command")
@@ -1049,7 +1060,8 @@ def speak(text: str, cfg: dict, block: bool = False) -> None:
                 try:
                     wav = voicevox_synthesize(
                         text, cfg.get("voicevox_host", VOICEVOX_DEFAULT_HOST),
-                        cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER))
+                        cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER),
+                        speed)
                     _play_wav(wav)
                     return
                 except Exception:  # engine unreachable / synthesis failed
@@ -1058,12 +1070,16 @@ def speak(text: str, cfg: dict, block: bool = False) -> None:
                     # "auto" falls through to the system voice below.
 
             if shutil.which("spd-say"):
-                subprocess.run(["spd-say", "-w", "-l", "ja", "--", text],
-                               stdin=subprocess.DEVNULL,
+                # spd-say rate is -100..100 (0 = normal); map the speed factor.
+                rate = max(-100, min(100, round((speed - 1.0) * 100)))
+                subprocess.run(["spd-say", "-w", "-r", str(rate), "-l", "ja",
+                                "--", text], stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif shutil.which("espeak-ng"):
-                subprocess.run(["espeak-ng", "-v", "ja", "--", text],
-                               stdin=subprocess.DEVNULL,
+                # espeak-ng default is ~175 wpm; scale it by the speed factor.
+                wpm = max(80, min(450, round(175 * speed)))
+                subprocess.run(["espeak-ng", "-s", str(wpm), "-v", "ja",
+                                "--", text], stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:  # noqa: BLE001 — audio must never break a lookup
             pass
@@ -1249,6 +1265,9 @@ def cmd_config(args, cfg) -> int:
         changed = True
     if args.voicevox_speaker is not None:
         cfg["voicevox_speaker"] = int(args.voicevox_speaker)
+        changed = True
+    if args.tts_speed is not None:
+        cfg["tts_speed"] = max(0.5, min(2.0, float(args.tts_speed)))
         changed = True
     if args.voicevox_host:
         cfg["voicevox_host"] = args.voicevox_host
@@ -1510,6 +1529,8 @@ def main(argv=None) -> int:
                        help="text-to-speech engine (default auto)")
         p.add_argument("--voicevox-speaker", dest="voicevox_speaker", type=int,
                        help="VOICEVOX speaker/style id (list them: zenbuji voices)")
+        p.add_argument("--tts-speed", dest="tts_speed", type=float,
+                       help="speaking rate, 1.0 = normal (clamped to 0.5–2.0)")
         p.add_argument("--voicevox-host", dest="voicevox_host",
                        help="VOICEVOX engine host:port (default 127.0.0.1:50021)")
         p.add_argument("--tts-command", dest="tts_command",
