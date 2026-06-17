@@ -1653,6 +1653,9 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
     def ocr_fn(img):
         return ocr_image_to_text(img, cfg)
 
+    def speak_fn(t):
+        speak(t, cfg)
+
     ui_language = cfg.get("ui_language", "en")
     close_on_focus_loss = bool(cfg.get("popup_close_on_focus_loss", True))
     char_limit = int(cfg.get("translation_char_limit", 200) or 200)
@@ -1676,13 +1679,15 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
                           process_fn=process_fn, ocr_fn=ocr_fn,
                           ui_language=ui_language,
                           close_on_focus_loss=close_on_focus_loss,
-                          quota_fn=quota_fn, char_limit=char_limit)
+                          quota_fn=quota_fn, char_limit=char_limit,
+                          speak_fn=speak_fn)
     result = process_fn(text) if text else None
     return show_popup(languages, result=result,
                       process_fn=process_fn, ocr_fn=ocr_fn,
                       ui_language=ui_language,
                       close_on_focus_loss=close_on_focus_loss,
-                      quota_fn=quota_fn, char_limit=char_limit)
+                      quota_fn=quota_fn, char_limit=char_limit,
+                      speak_fn=speak_fn)
 
 
 def launch_dictionary(cfg: dict) -> int:
@@ -1713,6 +1718,7 @@ def launch_dictionary(cfg: dict) -> int:
         refresh_fn=refresh_fn,
         quota_fn=lambda: (deepl_usage(cfg.get("deepl_api_key", ""))
                           if cfg.get("deepl_api_key") else None),
+        speak_fn=lambda t: speak(t, cfg),
     )
 
 
@@ -1744,6 +1750,7 @@ def launch_learning(cfg: dict) -> int:
         ui_language=cfg.get("ui_language", "en"),
         grade_fn=grade_fn,
         review_fn=review_fn,
+        speak_fn=lambda t: speak(t, cfg),
     )
 
 

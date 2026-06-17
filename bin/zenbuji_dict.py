@@ -42,6 +42,7 @@ DICT_STRINGS = {
     "delete":     {"en": "Delete",       "ja": "削除"},
     "refresh":    {"en": "Re-translate (DeepL)", "ja": "再翻訳（DeepL）"},
     "look_up":    {"en": "Look up",      "ja": "調べる"},
+    "read_aloud": {"en": "Read aloud",   "ja": "読み上げる"},
     "first":      {"en": "first",        "ja": "初回"},
     "last":       {"en": "last",         "ja": "最終"},
 }
@@ -79,7 +80,7 @@ def _spawn_popup(text: str):
 
 def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     load_fn, delete_fn, clear_fn, stats_fn,
-                    refresh_fn=None, quota_fn=None) -> int:
+                    refresh_fn=None, quota_fn=None, speak_fn=None) -> int:
     """Show the dictionary window. The *_fn callables provide the data layer."""
     t = _make_tr(ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
@@ -170,6 +171,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             count.set_valign(Gtk.Align.CENTER)
             top.append(count)
             for icon, key, cb in (
+                ("audio-volume-high-symbolic", "read_aloud",
+                 lambda _b, r=(entry.get("reading") or text): speak_fn(r)),
                 ("accessories-dictionary-symbolic", "look_up",
                  lambda _b, x=text: _spawn_popup(x)),
                 ("view-refresh-symbolic", "refresh",
@@ -178,6 +181,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                  lambda _b, x=text: do_delete(x)),
             ):
                 if key == "refresh" and refresh_fn is None:
+                    continue
+                if key == "read_aloud" and speak_fn is None:
                     continue
                 b = Gtk.Button(icon_name=icon)
                 b.add_css_class("flat")

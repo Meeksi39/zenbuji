@@ -43,6 +43,7 @@ LEARN_STRINGS = {
     "got_it":       {"en": "✓ Got it",        "ja": "✓ 正解"},
     "missed":       {"en": "✗ Missed",        "ja": "✗ 不正解"},
     "reading_lbl":  {"en": "Reading",         "ja": "読み"},
+    "read_aloud":   {"en": "Read aloud",      "ja": "読み上げる"},
     "you":          {"en": "You typed",       "ja": "あなたの入力"},
     "blank":        {"en": "(blank)",         "ja": "（空欄）"},
     "score":        {"en": "Score",           "ja": "スコア"},
@@ -88,7 +89,7 @@ def _play_correct_sound():
 
 
 def show_learning(*, cards, show_translation=True, languages=("en", "de"),
-                  ui_language="en", grade_fn, review_fn) -> int:
+                  ui_language="en", grade_fn, review_fn, speak_fn=None) -> int:
     def t(key):
         e = LEARN_STRINGS.get(key, {})
         return e.get(ui_language) or e.get("en") or key
@@ -224,8 +225,25 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 row.add_css_class("zenbuji-meta")
                 return row
 
-            phase.append(verdict_row(t("reading_lbl"), res["reading_ok"],
-                                     res["correct_reading"]))
+            correct_reading = res["correct_reading"]
+            if speak_fn is not None and correct_reading:
+                reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                                      spacing=6)
+                vr = verdict_row(t("reading_lbl"), res["reading_ok"],
+                                 correct_reading)
+                vr.set_hexpand(True)
+                reading_row.append(vr)
+                speak_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
+                speak_btn.add_css_class("flat")
+                speak_btn.set_valign(Gtk.Align.CENTER)
+                speak_btn.set_tooltip_text(t("read_aloud"))
+                speak_btn.connect("clicked",
+                                  lambda _b, r=correct_reading: speak_fn(r))
+                reading_row.append(speak_btn)
+                phase.append(reading_row)
+            else:
+                phase.append(verdict_row(t("reading_lbl"), res["reading_ok"],
+                                         correct_reading))
             phase.append(you_row(reading_in))
             for lang in languages:
                 val = res["correct_translations"].get(lang)

@@ -44,6 +44,7 @@ UI_STRINGS = {
     "placeholder":   {"en": "Japanese text…",        "ja": "日本語のテキスト…"},
     "look_up":       {"en": "Look up",               "ja": "調べる"},
     "copy":          {"en": "Copy",                  "ja": "コピー"},
+    "read_aloud":    {"en": "Read aloud",            "ja": "読み上げる"},
     "looking_up":    {"en": "Looking up…",           "ja": "検索中…"},
     "recognising":   {"en": "Recognising…",          "ja": "認識中…"},
     "lookup_failed": {"en": "Lookup failed.",        "ja": "検索に失敗しました。"},
@@ -85,11 +86,24 @@ def _ruby_markup(tokens, accent=None) -> str:
     return "".join(parts)
 
 
-def _copy_row(window, label_widget, text, copy_label="Copy"):
-    """Wrap a label in a row with a flat copy-to-clipboard button."""
+def _copy_row(window, label_widget, text, copy_label="Copy",
+              speak_fn=None, speak_text=None, read_label="Read aloud"):
+    """Wrap a label in a row with a flat copy-to-clipboard button.
+
+    When `speak_fn` and `speak_text` are given, a 🔊 read-aloud button is added
+    before the copy button (used for the reading row).
+    """
     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
     label_widget.set_hexpand(True)
     row.append(label_widget)
+    if speak_fn is not None and speak_text:
+        speak_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
+        speak_btn.add_css_class("flat")
+        speak_btn.add_css_class("zenbuji-icon")
+        speak_btn.set_valign(Gtk.Align.START)
+        speak_btn.set_tooltip_text(read_label)
+        speak_btn.connect("clicked", lambda _b: speak_fn(speak_text))
+        row.append(speak_btn)
     btn = Gtk.Button(icon_name="edit-copy-symbolic")
     btn.add_css_class("flat")
     btn.add_css_class("zenbuji-icon")
@@ -102,7 +116,8 @@ def _copy_row(window, label_widget, text, copy_label="Copy"):
 
 def show_popup(languages, *, result=None, ocr_image=None,
                process_fn=None, ocr_fn=None, ui_language="en",
-               close_on_focus_loss=True, quota_fn=None, char_limit=200) -> int:
+               close_on_focus_loss=True, quota_fn=None, char_limit=200,
+               speak_fn=None) -> int:
     """Display the popup.
 
     Exactly one of `result` (already-processed) or `ocr_image` (recognise text
@@ -236,7 +251,10 @@ def show_popup(languages, *, result=None, ocr_image=None,
                 reading = Gtk.Label(label=res.reading, wrap=True, xalign=0,
                                     selectable=True)
                 reading.add_css_class("zenbuji-reading")
-                result_box.append(_copy_row(win, reading, res.reading, t("copy")))
+                result_box.append(_copy_row(
+                    win, reading, res.reading, t("copy"),
+                    speak_fn=speak_fn, speak_text=res.reading,
+                    read_label=t("read_aloud")))
 
             if any(getattr(t, "has_kanji", False) for t in res.tokens):
                 ruby = Gtk.Label(wrap=True, xalign=0, selectable=True)
