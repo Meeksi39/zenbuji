@@ -464,20 +464,21 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             col = _answer_col()
             phase.append(col)
 
-            # Reading field + the arrow submit button share one row (search-bar
-            # style): the field grows, the action is a compact accent tile.
+            # Reading field + arrow tile fused into one search-style pill: the
+            # field grows, the tile matches its height (valign FILL, no gap).
             reading_entry = Gtk.Entry(placeholder_text=t("reading"), hexpand=True)
             reading_entry.add_css_class("zenbuji-quiz-input")
+            reading_entry.add_css_class("zenbuji-combo")
             reading_entry.set_alignment(0.5)
             on_field_focus(reading_entry, to_kana)
 
             check_btn = Gtk.Button(icon_name="go-next-symbolic")
             check_btn.add_css_class("zenbuji-action")
             check_btn.add_css_class("zenbuji-quiz-go")
-            check_btn.set_valign(Gtk.Align.CENTER)
+            check_btn.set_valign(Gtk.Align.FILL)
             check_btn.set_tooltip_text(t("check"))
 
-            input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
             input_row.append(reading_entry)
             input_row.append(check_btn)
             col.append(input_row)

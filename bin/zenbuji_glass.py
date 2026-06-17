@@ -56,34 +56,34 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 /* Soft, padded pills so the controls feel friendly across every window. */
 /* Primary action: filled with the system accent. */
 .zenbuji-action {
-    border-radius: 13px;
-    padding: 10px 22px;
-    min-height: 20px;
+    border-radius: 12px;
+    padding: 7px 16px;
+    min-height: 18px;
     font-weight: 700;
     border: none;
     color: @accent_fg_color;
-    /* A vivid gradient + soft accent glow so the primary action pops instead of
-       reading flat/dull next to the accent focus ring and furigana. */
+    /* A vivid gradient + a real drop shadow (plus a faint accent glow) so the
+       primary action has depth and pops without being oversized. */
     background-color: @accent_bg_color;
     background-image: linear-gradient(to bottom,
         shade(@accent_bg_color, 1.16), @accent_bg_color);
-    box-shadow: 0 2px 7px alpha(@accent_bg_color, 0.45);
+    box-shadow: 0 3px 8px alpha(#000000, 0.28), 0 1px 2px alpha(@accent_bg_color, 0.5);
 }
 .zenbuji-action:hover {
     background-image: linear-gradient(to bottom,
         shade(@accent_bg_color, 1.24), shade(@accent_bg_color, 1.07));
-    box-shadow: 0 3px 10px alpha(@accent_bg_color, 0.55);
+    box-shadow: 0 5px 12px alpha(#000000, 0.34), 0 1px 2px alpha(@accent_bg_color, 0.5);
 }
 .zenbuji-action:active {
     background-image: none;
     background-color: shade(@accent_bg_color, 0.94);
-    box-shadow: none;
+    box-shadow: 0 1px 2px alpha(#000000, 0.22);
 }
 /* Secondary: translucent glass. */
 .zenbuji-secondary {
-    border-radius: 13px;
-    padding: 10px 22px;
-    min-height: 20px;
+    border-radius: 12px;
+    padding: 7px 16px;
+    min-height: 18px;
     font-weight: 500;
     background-image: none;
     background-color: alpha(currentColor, 0.10);
@@ -137,6 +137,16 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border-color: @accent_color;
     box-shadow: 0 0 0 3px alpha(@accent_color, 0.30), 0 1px 3px alpha(#000000, 0.10);
 }
+/* When the field is fused with the arrow tile into one pill: square the seam
+   side and drop the focus ring so the two read as a single control. */
+.zenbuji-card entry.zenbuji-quiz-input.zenbuji-combo {
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+    border-right-width: 0;
+}
+.zenbuji-card entry.zenbuji-quiz-input.zenbuji-combo:focus-within {
+    box-shadow: 0 1px 3px alpha(#000000, 0.10);
+    border-color: @accent_color;
+}
 
 /* --- shared text styles (popup + dictionary) --- */
 .zenbuji-original { font-size: 20px; font-weight: 600; }
@@ -177,9 +187,12 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-verdict-no { background-color: #c0182a; }
 /* The revealed correct reading - the learning payload, large and in accent. */
 .zenbuji-reveal-reading { font-size: 27px; font-weight: 700; color: @accent_color; }
-/* Inline submit button: a square accent tile (arrow icon) beside the input. */
+/* Inline submit tile fused to the right of the field: squared seam side,
+   no fixed height so it matches the field it's linked to. */
 .zenbuji-quiz-go {
-    padding: 0; min-width: 50px; min-height: 50px; border-radius: 14px;
+    padding: 0; min-width: 52px;
+    border-top-left-radius: 0; border-bottom-left-radius: 0;
+    border-top-right-radius: 14px; border-bottom-right-radius: 14px;
 }
 /* Verdicts sit on a solid colour chip so they stay legible over any blurred
    background (plain coloured text had poor contrast). */
