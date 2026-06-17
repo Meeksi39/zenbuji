@@ -2,7 +2,7 @@
 
 # zenbuji 〜 全部字
 
-### Read *any* Japanese on your screen — furigana + English & German — in one keypress ✨
+### Read *any* Japanese on your screen — furigana + English & German — in one keypress
 
 Highlight some text, mash `Super+J`, and *boom* — readings and meaning pop up right over
 whatever you're doing. No alt-tabbing into a dictionary app, no breaking immersion in the
@@ -35,15 +35,15 @@ German: Ich lerne Japanisch.
 
 ## Why you'll love it
 
-- 🟣 **One keypress, anywhere.** A global GNOME shortcut grabs your selection and floats a popup over whatever app you're in. No context-switching, no killing the vibe.
-- 🔤 **Furigana that's actually *right*.** Readings come from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and sneaky irregular readings come out correct — not a character-by-character guess that falls apart on 今日.
-- 🌍 **English *and* German, side by side.** Offline-first with [Argos Translate]; drop in a free [DeepL] key when you want the sharper translations.
-- 👁️ **OCR for text you can't select.** Subs burned into a video, a game UI, a screenshot, manga raws — draw a box and zenbuji reads it anyway.
-- 📖 **Builds your own little dictionary.** Every DeepL lookup gets cached into a searchable word list, so you stop burning quota and start watching your vocab pile up.
-- 🎴 **Turns lookups into reps.** A built-in spaced-repetition quiz drills the words you've already met. Immersion → SRS → flex, no extra Anki deck required.
-- 🔊 **Hear every word.** A read-aloud button on every reading, with proper [VOICEVOX] support so it's natural neural Japanese instead of robot voice (falls back to the system voice if you skip it).
-- 🪟 **Genuinely pretty.** A frosted-glass popup that picks up your accent color and light/dark theme. Cute *and* functional ‹3
-- 🔒 **Yours, offline, private.** Everything's local — DeepL is the only optional network call. Runs happily on immutable distros (Bazzite / Silverblue) with zero `rpm-ostree` layering.
+- **One keypress, anywhere.** A global GNOME shortcut grabs your selection and floats a popup over whatever app you're in. No context-switching, no killing the vibe.
+- **Furigana that's actually *right*.** Readings come from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and sneaky irregular readings come out correct — not a character-by-character guess that falls apart on 今日.
+- **English *and* German, side by side.** Offline-first with [Argos Translate]; drop in a free [DeepL] key when you want the sharper translations.
+- **OCR for text you can't select.** Subs burned into a video, a game UI, a screenshot, manga raws — draw a box and zenbuji reads it anyway.
+- **Builds your own little dictionary.** Every DeepL lookup gets cached into a searchable word list, so you stop burning quota and start watching your vocab pile up.
+- **Turns lookups into reps.** A built-in spaced-repetition quiz drills the words you've already met. Immersion → SRS → flex, no extra Anki deck required.
+- **Hear every word.** A read-aloud button on every reading, with proper [VOICEVOX] support so it's natural neural Japanese instead of robot voice (falls back to the system voice if you skip it).
+- **Genuinely pretty.** A frosted-glass popup that picks up your accent color and light/dark theme. Cute *and* functional ‹3
+- **Yours, offline, private.** Everything's local — DeepL is the only optional network call. Runs happily on immutable distros (Bazzite / Silverblue) with zero `rpm-ostree` layering.
 
 ---
 
@@ -53,11 +53,11 @@ zenbuji meets you wherever the text is:
 
 | Surface | How | What you get |
 |---|---|---|
-| ⌨️ **Global hotkey** | Select text, press `Super+J` | Popup with furigana + EN/DE over the current app |
-| 👁️ **Screen OCR** | `Super+Shift+J`, draw a box | Reads text you can't select, then looks it up |
-| 🔼 **Top-bar menu** | Click `振`, type or paste | Inline result, recent history, quick access to everything |
-| 📁 **Files menu** | Right-click a text file ▸ *Scripts ▸ zenbuji* | Looks up a whole file |
-| 💻 **CLI** | `zenbuji <text>` / pipe / `--selection` | Scriptable output (incl. `--json`) |
+| **Global hotkey** | Select text, press `Super+J` | Popup with furigana + EN/DE over the current app |
+| **Screen OCR** | `Super+Shift+J`, draw a box | Reads text you can't select, then looks it up |
+| **Top-bar menu** | Click `振`, type or paste | Inline result, recent history, quick access to everything |
+| **Files menu** | Right-click a text file ▸ *Scripts ▸ zenbuji* | Looks up a whole file |
+| **CLI** | `zenbuji <text>` / pipe / `--selection` | Scriptable output (incl. `--json`) |
 
 Under the hood all the language stuff lives in one `zenbuji` Python CLI — every surface just
 calls it and renders the result, so they never drift out of sync. (One brain, many faces.)
@@ -101,7 +101,7 @@ no layering, no reboots, no tears.
 
 ## Features
 
-### 👁️ Screen-region OCR
+### Screen-region OCR
 
 So much Japanese on screen just *isn't* selectable — text baked into a UI, a game, a video
 frame, an image. Press **`Super+Shift+J`** (or top-bar ▸ *Look up screen region*), **draw a
@@ -123,7 +123,7 @@ zenbuji ocr                  # capture a region interactively
 zenbuji ocr image.png        # or OCR a file you already have
 ```
 
-### 📖 Personal dictionary
+### Personal dictionary
 
 With the **DeepL** backend active, every translation gets cached to
 `~/.local/share/zenbuji/dictionary.json`. Repeat lookups come straight from the cache —
@@ -131,15 +131,15 @@ faster, and it protects your free-tier quota — all while quietly building a pe
 list. Each entry tracks how many times you've looked it up and the first/last time you saw
 it, so you can literally watch yourself level up.
 
-Browse it in the **Dictionary window** (the 📖 icon in the popup, the top-bar menu, or
-`zenbuji dict`): search, delete an entry, clear all, re-translate, or pop a word back open
+Browse it in the **Dictionary window** (the dictionary button in the popup, the top-bar menu,
+or `zenbuji dict`): search, delete an entry, clear all, re-translate, or pop a word back open
 in the lookup popup. It also shows your remaining DeepL quota when a key is set.
 
 <div align="center">
 <img src="docs/dictionary.png" alt="zenbuji dictionary window" width="360">
 </div>
 
-### 🎴 Practice (spaced repetition)
+### Practice (spaced repetition)
 
 Take the words you've already met and turn them into actual recall. **Practice**
 (`zenbuji learn`, the **`Super+Shift+L`** hotkey, or the top-bar menu) shows a word as
@@ -164,9 +164,9 @@ ends with a little summary.
 - `--learn-show-translation on|off` — show the meaning as a hint (test only the reading) vs. hide it (test reading **and** translation)
 - `--learn-on-login on|off` — auto-open a round once a day on login (off by default — opt in if you want the daily nudge)
 
-### 🔊 Hear it spoken
+### Hear it spoken
 
-Every reading gets a **🔊 read-aloud button** — in the popup, next to each dictionary entry,
+Every reading gets a **read-aloud button** — in the popup, next to each dictionary entry,
 and on the quiz answer screen — so you actually *hear* the pronunciation instead of just
 squinting at kana.
 
@@ -195,7 +195,7 @@ Press **`Super+Shift+S`** to read the current selection aloud with no popup at a
 **Read aloud after a lookup** (Settings ▸ Speech, or `zenbuji config --tts-on-lookup on`) and
 `Super+J` will speak the reading automatically every single time — perfect for shadowing.
 
-### 🪟 Frosted-glass popup
+### Frosted-glass popup
 
 The popup is a headerless, translucent floating card that follows your light/dark theme and
 **system accent color**, can be **dragged** from any empty spot, and dismisses on **Escape**
@@ -304,7 +304,7 @@ Okay so — I'm learning Japanese, and I got *so* tired of pausing every five se
 some text into a separate dictionary app just to read one kanji. I wanted readings + meaning
 for *anything* on screen, instantly, without ever breaking immersion — subtitles, a web page,
 a chat message, a visual novel, whatever. So I built the thing I wished existed: furigana and
-an EN/DE gloss one keypress away, anywhere in the OS. 勉強, but make it painless ♡
+an EN/DE gloss one keypress away, anywhere in the OS. 勉強, but make it painless ‹3
 
 > Built for my own Bazzite (Fedora Silverblue) / GNOME Wayland setup first. Free to use and
 > remix for your own rig — **just credit me** (Meeksi39) and we're good (｀・ω・´)ゞ
