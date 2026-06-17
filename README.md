@@ -9,7 +9,7 @@ whatever you're doing. No alt-tabbing into a dictionary app, no breaking immersi
 middle of an episode. Works in your browser, your editor, a chat window — and even on text
 you *can't* select, because screen OCR has your back. (｡•̀ᴗ-)✧
 
-<img src="docs/overview.png" alt="zenbuji in action — lookup popup, dictionary, practice quiz, settings, and top-bar menu" width="900">
+<img src="docs/overview.png" alt="zenbuji in action — lookup popup, dictionary, practice quiz, statistics, and top-bar menu" width="900">
 
 <sub>Furigana from real word-level analysis (not lazy kana-by-kana guessing) · translation is offline-first · everything runs on your own machine.</sub>
 
