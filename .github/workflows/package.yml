@@ -1,0 +1,44 @@
+name: Package extension
+
+# When a release is published (manually, or by promoting the Release Drafter
+# draft), build the GNOME-extension zip and attach it to that release.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    env:
+      EXT: extension/zenbuji@meeksi39
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-bin jq zip
+
+      - name: Stamp version-name into metadata
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VER" '. + {"version-name": $v}' "$EXT/metadata.json" > "$EXT/metadata.tmp"
+          mv "$EXT/metadata.tmp" "$EXT/metadata.json"
+          echo "Packaging version $VER"
+          cat "$EXT/metadata.json"
+
+      - name: Compile GSettings schema
+        run: glib-compile-schemas "$EXT/schemas"
+
+      - name: Build shell-extension zip
+        run: |
+          # metadata.json must sit at the zip root (the layout
+          # `gnome-extensions install` expects), so zip the dir *contents*.
+          ( cd "$EXT" && zip -r "$GITHUB_WORKSPACE/zenbuji@meeksi39.shell-extension.zip" . )
+          unzip -l "zenbuji@meeksi39.shell-extension.zip"
+
+      - name: Attach zip to the release
+        run: gh release upload "$GITHUB_REF_NAME" zenbuji@meeksi39.shell-extension.zip --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,24 @@
+name: Release Drafter
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Needed by the autolabeler to label PRs from forks/branches.
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  update_release_draft:
+    permissions:
+      contents: write       # create/update the draft GitHub release
+      pull-requests: write  # apply autolabels to PRs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
