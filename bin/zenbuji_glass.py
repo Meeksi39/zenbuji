@@ -100,25 +100,42 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-icon:hover { color: @accent_color; }
 .zenbuji-icon-danger { color: #e01b24; }
 
-/* Inviting text inputs in every glass window (popup / dict / quiz): a bright,
-   near-white field with dark text reads clearly as "type here" over the glass,
-   in both light and dark mode. */
+/* Default text inputs (popup / dict search): subtle translucent fields that sit
+   quietly on the glass. */
 .zenbuji-card entry, .zenbuji-card entry.search {
     border-radius: 11px;
-    padding: 8px 13px;
-    min-height: 24px;
+    padding: 7px 12px;
+    min-height: 22px;
     background-image: none;
-    background-color: rgba(255, 255, 255, 0.95);
-    color: #1c1c1e;
-    border: 1px solid alpha(#000000, 0.12);
-    box-shadow: inset 0 1px 2px alpha(#000000, 0.05);
+    background-color: alpha(currentColor, 0.06);
+    border: 1px solid alpha(currentColor, 0.12);
+    box-shadow: none;
 }
-.zenbuji-card entry text { color: #1c1c1e; caret-color: #1c1c1e; }
-.zenbuji-card entry text > placeholder { color: alpha(#1c1c1e, 0.45); }
-.zenbuji-card entry image { color: alpha(#1c1c1e, 0.5); }
 .zenbuji-card entry:focus-within {
     border-color: @accent_color;
-    box-shadow: 0 0 0 2px alpha(@accent_color, 0.30);
+    background-color: alpha(currentColor, 0.09);
+}
+
+/* The quiz answer field is the one "type here" hero: a larger, near-white card
+   with dark text and a bold accent focus ring, so it pops against the glass. */
+.zenbuji-card entry.zenbuji-quiz-input {
+    font-size: 19px;
+    padding: 13px 18px;
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.97);
+    color: #1c1c1e;
+    border: 1px solid alpha(#000000, 0.10);
+    box-shadow: 0 1px 3px alpha(#000000, 0.10);
+}
+.zenbuji-card entry.zenbuji-quiz-input text {
+    color: #1c1c1e; caret-color: #1c1c1e;
+}
+.zenbuji-card entry.zenbuji-quiz-input text > placeholder {
+    color: alpha(#1c1c1e, 0.40);
+}
+.zenbuji-card entry.zenbuji-quiz-input:focus-within {
+    border-color: @accent_color;
+    box-shadow: 0 0 0 3px alpha(@accent_color, 0.30), 0 1px 3px alpha(#000000, 0.10);
 }
 
 /* --- shared text styles (popup + dictionary) --- */
@@ -144,6 +161,22 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 
 /* --- learning / quiz window --- */
 .zenbuji-kanji { font-size: 54px; font-weight: 700; }
+/* Slim, rounded, accent progress bar instead of the default hairline. */
+.zenbuji-quiz-progress, .zenbuji-quiz-progress trough, .zenbuji-quiz-progress progress {
+    min-height: 6px;
+    border-radius: 3px;
+}
+.zenbuji-quiz-progress trough { background-color: alpha(currentColor, 0.12); border: none; }
+.zenbuji-quiz-progress progress { background-color: @accent_color; }
+/* Result verdict chip: a single bold status pill (colour carries right/wrong). */
+.zenbuji-verdict {
+    font-size: 14px; font-weight: 700; color: #ffffff;
+    padding: 5px 16px; border-radius: 11px;
+}
+.zenbuji-verdict-ok { background-color: #21915c; }
+.zenbuji-verdict-no { background-color: #c0182a; }
+/* The revealed correct reading - the learning payload, large and in accent. */
+.zenbuji-reveal-reading { font-size: 27px; font-weight: 700; color: @accent_color; }
 /* Verdicts sit on a solid colour chip so they stay legible over any blurred
    background (plain coloured text had poor contrast). */
 .zenbuji-correct {

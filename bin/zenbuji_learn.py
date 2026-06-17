@@ -43,6 +43,8 @@ LEARN_STRINGS = {
     "check":        {"en": "Check",           "ja": "確認"},
     "got_it":       {"en": "✓ Got it",        "ja": "✓ 正解"},
     "missed":       {"en": "✗ Missed",        "ja": "✗ 不正解"},
+    "verdict_ok":   {"en": "Correct",         "ja": "正解"},
+    "verdict_no":   {"en": "Not quite",       "ja": "惜しい"},
     "reading_lbl":  {"en": "Reading",         "ja": "読み"},
     "read_aloud":   {"en": "Read aloud",      "ja": "読み上げる"},
     "you":          {"en": "You typed",       "ja": "あなたの入力"},
@@ -176,6 +178,15 @@ def _spawn_stats():
         subprocess.Popen([sys.executable, cli, "stats"], start_new_session=True)
     except OSError:
         pass
+
+
+def _answer_col(width=300, spacing=12):
+    """A centered, fixed-width column so the answer input/buttons sit in a tidy
+    measure instead of stretching the full card width."""
+    col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=spacing)
+    col.set_halign(Gtk.Align.CENTER)
+    col.set_size_request(width, -1)
+    return col
 
 
 _SOUND_CTX = None
@@ -322,6 +333,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         win.connect("close-request", lambda *_a: (restore_ime(), False)[1])
 
         progress = Gtk.ProgressBar()
+        progress.add_css_class("zenbuji-quiz-progress")
         card_box.append(progress)
 
         status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -447,17 +459,24 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 ctl.connect("enter", lambda *_a: switch())
                 entry.add_controller(ctl)
 
+            col = _answer_col()
+            phase.append(col)
+
             reading_entry = Gtk.Entry(placeholder_text=t("reading"))
+            reading_entry.add_css_class("zenbuji-quiz-input")
+            reading_entry.set_alignment(0.5)
             on_field_focus(reading_entry, to_kana)
-            phase.append(reading_entry)
+            col.append(reading_entry)
             trans_entry = None
             if not show_translation:
                 trans_entry = Gtk.Entry(placeholder_text=t("translation"))
+                trans_entry.add_css_class("zenbuji-quiz-input")
+                trans_entry.set_alignment(0.5)
                 on_field_focus(trans_entry, to_latin)
-                phase.append(trans_entry)
+                col.append(trans_entry)
             check_btn = Gtk.Button(label=t("check"))
             check_btn.add_css_class("zenbuji-action")
-            phase.append(check_btn)
+            col.append(check_btn)
 
             def submit(*_a):
                 show_reveal(cur, reading_entry.get_text(),
@@ -476,61 +495,73 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             reading_ok = bool(res["reading_ok"])
             clear_phase()
 
-            def verdict_row(label_text, ok, answer):
-                row = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
-                row.set_max_width_chars(40)
-                mark = "✓" if ok else "✗"
-                row.set_text(f"{mark}  {label_text}: {answer}")
-                row.add_css_class("zenbuji-correct" if ok else "zenbuji-wrong")
-                return row
+            col = _answer_col(width=320, spacing=10)
+            phase.append(col)
 
             def you_row(answer):
-                row = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
+                row = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
+                                halign=Gtk.Align.CENTER)
                 row.set_max_width_chars(40)
                 row.set_text(f"{t('you')}: {answer.strip() or t('blank')}")
                 row.add_css_class("zenbuji-meta")
                 return row
 
+            # 1. Verdict chip — colour carries right/wrong.
+            verdict = Gtk.Label(label=f"{'✓' if reading_ok else '✗'}  "
+                                      f"{t('verdict_ok') if reading_ok else t('verdict_no')}")
+            verdict.add_css_class("zenbuji-verdict")
+            verdict.add_css_class("zenbuji-verdict-ok" if reading_ok
+                                  else "zenbuji-verdict-no")
+            verdict.set_halign(Gtk.Align.CENTER)
+            col.append(verdict)
+
+            # 2. The correct reading, large and in accent, with the speak button.
             correct_reading = res["correct_reading"]
-            if speak_fn is not None and correct_reading:
+            if correct_reading:
                 reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
-                                      spacing=6)
-                vr = verdict_row(t("reading_lbl"), res["reading_ok"],
-                                 correct_reading)
-                vr.set_hexpand(True)
-                reading_row.append(vr)
-                speak_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
-                speak_btn.add_css_class("flat")
-                speak_btn.set_valign(Gtk.Align.CENTER)
-                speak_btn.set_tooltip_text(t("read_aloud"))
-                speak_btn.connect("clicked",
-                                  lambda _b, r=correct_reading: speak_fn(r))
-                reading_row.append(speak_btn)
-                phase.append(reading_row)
-            else:
-                phase.append(verdict_row(t("reading_lbl"), res["reading_ok"],
-                                         correct_reading))
-            # Read the correct reading aloud automatically (right or wrong) when
-            # TTS auto-read is enabled.
-            if auto_speak and speak_fn is not None and correct_reading:
-                speak_fn(correct_reading)
-            phase.append(you_row(reading_in))
+                                      spacing=6, halign=Gtk.Align.CENTER)
+                rl = Gtk.Label(label=correct_reading, wrap=True,
+                               justify=Gtk.Justification.CENTER)
+                rl.add_css_class("zenbuji-reveal-reading")
+                rl.set_max_width_chars(20)
+                reading_row.append(rl)
+                if speak_fn is not None:
+                    speak_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
+                    speak_btn.add_css_class("flat")
+                    speak_btn.add_css_class("zenbuji-icon")
+                    speak_btn.set_valign(Gtk.Align.CENTER)
+                    speak_btn.set_tooltip_text(t("read_aloud"))
+                    speak_btn.connect("clicked",
+                                      lambda _b, r=correct_reading: speak_fn(r))
+                    reading_row.append(speak_btn)
+                col.append(reading_row)
+                # Read the correct reading aloud automatically (right or wrong)
+                # when TTS auto-read is enabled.
+                if auto_speak and speak_fn is not None:
+                    speak_fn(correct_reading)
+
+            # 3. What the learner typed — only when the reading was wrong.
+            if not reading_ok:
+                col.append(you_row(reading_in))
+
+            # 4. Translations, centered.
             for lang in languages:
                 val = res["correct_translations"].get(lang)
                 if not val:
                     continue
-                lbl = Gtk.Label(xalign=0, wrap=True)
+                lbl = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
+                                halign=Gtk.Align.CENTER)
                 lbl.set_max_width_chars(40)
-                lbl.set_text(f"{lang_names.get(lang, lang.upper())}: {val}")
+                lbl.set_text(f"{lang_names.get(lang, lang.upper())}:  {val}")
                 lbl.add_css_class("zenbuji-translation")
-                phase.append(lbl)
-            # When the translation was tested, show what the user typed too.
+                col.append(lbl)
             if res["translation_ok"] is not None:
-                phase.append(you_row(translation_in))
+                col.append(you_row(translation_in))
 
+            # 5. Self-grade buttons, centered.
             btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                            homogeneous=True)
-            btns.set_margin_top(6)
+            btns.set_margin_top(8)
             got = Gtk.Button(label=t("got_it"))
             missed = Gtk.Button(label=t("missed"))
             # Whichever matches the reading result is the primary/default button.
@@ -540,7 +571,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             missed.connect("clicked", lambda _b: finalize(cur, False))
             btns.append(missed)
             btns.append(got)
-            phase.append(btns)
+            col.append(btns)
             default_btn = got if reading_ok else missed
             default_btn.grab_focus()
             try:
