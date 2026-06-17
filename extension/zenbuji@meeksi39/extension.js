@@ -38,6 +38,8 @@ const UI_JA = {
     'Add screen region to dictionary (OCR)': '画面領域を辞書に追加（OCR）',
     'Dictionary': '辞書',
     'Practice (SRS)': '練習（SRS）',
+    'Start VOICEVOX': 'VOICEVOX を起動',
+    'Starting VOICEVOX…': 'VOICEVOX を起動中…',
     'Settings…': '設定…',
     'Looking up…': '検索中…',
 };
@@ -126,6 +128,12 @@ class ZenbujiIndicator extends PanelMenu.Button {
         const learnItem = new PopupMenu.PopupMenuItem(_('Practice (SRS)'));
         learnItem.connect('activate', () => this._extension.openLearning());
         this.menu.addMenuItem(learnItem);
+
+        if (this._extension.voicevoxAvailable()) {
+            const vvItem = new PopupMenu.PopupMenuItem(_('Start VOICEVOX'));
+            vvItem.connect('activate', () => this._extension.startVoicevox(true));
+            this.menu.addMenuItem(vvItem);
+        }
 
         const prefsItem = new PopupMenu.PopupMenuItem(_('Settings…'));
         prefsItem.connect('activate', () => this._extension.openPreferences());
@@ -219,6 +227,9 @@ export default class ZenbujiExtension extends Extension {
         _ = (s) => (lang === 'ja' && UI_JA[s]) ? UI_JA[s] : s;
         this._indicator = new ZenbujiIndicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
+        // If VOICEVOX is the chosen TTS engine, make sure its local service is
+        // running so the first read-aloud doesn't fall back to the system voice.
+        this._maybeStartVoicevox();
         // The global selection hotkey (Super+J) is a GNOME custom keybinding set
         // up by install.sh — it works without the extension and avoids a
         // double-binding conflict, so it is intentionally not registered here.
@@ -413,5 +424,45 @@ export default class ZenbujiExtension extends Extension {
         } catch (e) {
             Main.notify('zenbuji', `${e}`);
         }
+    }
+
+    // The Quadlet unit ./install.sh --voicevox writes; its presence means the
+    // user has set the VOICEVOX engine up as a systemd --user service.
+    _voicevoxUnitPath() {
+        return GLib.build_filenamev(
+            [GLib.get_user_config_dir(), 'containers', 'systemd', 'voicevox.container']);
+    }
+
+    voicevoxAvailable() {
+        try {
+            return GLib.file_test(this._voicevoxUnitPath(), GLib.FileTest.EXISTS);
+        } catch (_e) {
+            return false;
+        }
+    }
+
+    // Start the VOICEVOX service (no-op if already running). With notify=true,
+    // confirm to the user — used by the menu item; the auto-start on enable is
+    // silent.
+    startVoicevox(notify = false) {
+        try {
+            const proc = new Gio.Subprocess({
+                argv: ['systemctl', '--user', 'start', 'voicevox.service'],
+                flags: Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_PIPE,
+            });
+            proc.init(null);
+            if (notify)
+                Main.notify('zenbuji', _('Starting VOICEVOX…'));
+        } catch (e) {
+            Main.notify('zenbuji', `${e}`);
+        }
+    }
+
+    _maybeStartVoicevox() {
+        try {
+            const engine = this._readConfig().tts_engine || 'auto';
+            if ((engine === 'voicevox' || engine === 'auto') && this.voicevoxAvailable())
+                this.startVoicevox(false);
+        } catch (_e) { /* best effort — never block enable() */ }
     }
 }

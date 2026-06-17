@@ -1145,6 +1145,7 @@ Usage:
   zenbuji learn               Practice cached words (spaced repetition quiz)
   zenbuji speak [text]        Read text aloud (reads the selection if no text)
   zenbuji voices              List local VOICEVOX speakers (--json for machines)
+  zenbuji voicevox [start|stop|restart|status]   Control the VOICEVOX engine
   zenbuji config              Show or set configuration
   zenbuji usage               Check the DeepL key and show remaining quota
   zenbuji models --install    Download offline Argos models (ja->en, en->de)
@@ -1458,6 +1459,33 @@ def cmd_voices(args, cfg) -> int:
     return 0
 
 
+def cmd_voicevox(args, cfg) -> int:
+    """Control the local VOICEVOX engine's systemd --user service.
+
+    `zenbuji voicevox [start|stop|restart|status]` (default start). start is a
+    no-op if it's already running, so it's safe to call anytime.
+    """
+    if not shutil.which("systemctl"):
+        print("systemctl not found (not a systemd user session?).", file=sys.stderr)
+        return 1
+    action = args.action or "start"
+    svc = "voicevox.service"
+    if action == "status":
+        r = subprocess.run(["systemctl", "--user", "is-active", svc],
+                           capture_output=True, text=True)
+        state = (r.stdout or "").strip() or "unknown"
+        print(state)
+        return 0 if state == "active" else 1
+    r = subprocess.run(["systemctl", "--user", action, svc],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"could not {action} {svc}: {(r.stderr or '').strip()}", file=sys.stderr)
+        print("Is it set up? Run: ./install.sh --voicevox", file=sys.stderr)
+        return 1
+    print(f"voicevox: {action} ok")
+    return 0
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = load_config()
@@ -1477,7 +1505,7 @@ def main(argv=None) -> int:
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
         "config", "models", "usage", "ocr", "dict", "learn", "add",
-        "speak", "voices",
+        "speak", "voices", "voicevox",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -1576,6 +1604,13 @@ def main(argv=None) -> int:
         p = argparse.ArgumentParser(prog="zenbuji voices")
         p.add_argument("--json", action="store_true")
         return cmd_voices(p.parse_args(rest), cfg)
+
+    if command == "voicevox":
+        p = argparse.ArgumentParser(prog="zenbuji voicevox")
+        p.add_argument("action", nargs="?",
+                       choices=["start", "stop", "restart", "status"],
+                       default="start")
+        return cmd_voicevox(p.parse_args(rest), cfg)
 
     if command == "usage":
         p = argparse.ArgumentParser(prog="zenbuji usage")

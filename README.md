@@ -164,7 +164,8 @@ ends with a little summary.
 When the answer's revealed, the **Got it / Missed** default follows your *reading* — match it
 and "Got it" is pre-selected, miss it and "Missed" is. The correct reading is read aloud too
 (right or wrong) if you've got auto-read on. And every round opens with a random casual
-greeting from ずんだもん — cute, silly, or a little bit cursed — which you can switch off.
+greeting from ずんだもん — cute, silly, or a little bit cursed — and waves you off with a
+matching goodbye at the end. Switch it off if it's not your thing.
 
 - `--learn-show-translation on|off` — show the meaning as a hint (test only the reading) vs. hide it (test reading **and** translation)
 - `--learn-on-login on|off` — auto-open a round once a day on login (off by default — opt in if you want the daily nudge)
@@ -188,6 +189,10 @@ Then pick a voice in **Settings ▸ Speech** (default: my beloved ずんだも�
 `spd-say`/`espeak-ng`. Engine and voice are configurable:
 `zenbuji config --tts-engine voicevox --voicevox-speaker 3`, list voices with
 `zenbuji voices`, or wire up any command you like with `--tts-command '… {text}'`.
+
+The extension makes sure the engine is running when you log in, and there's a **Start
+VOICEVOX** item in the top-bar menu (plus `zenbuji voicevox start`) for when you need to kick
+it manually.
 
 <div align="center">
 
@@ -230,6 +235,7 @@ zenbuji dict                      # open the local dictionary window
 zenbuji learn                     # spaced-repetition practice over the cache
 zenbuji speak こんにちは            # read text aloud (VOICEVOX / system voice)
 zenbuji voices                    # list available VOICEVOX speakers
+zenbuji voicevox start            # start the local VOICEVOX engine (stop/restart/status too)
 ```
 
 `zb` is a short alias for `zenbuji` (for when typing eight whole characters is too much).

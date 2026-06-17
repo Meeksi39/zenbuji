@@ -109,6 +109,45 @@ GREETINGS = [
     "しずかに…単語が聞いてるよ。",
 ]
 
+# Casual Japanese goodbyes shown (and spoken, if TTS auto-read is on) on the
+# summary screen when a round wraps up. Same cute / funny / creepy spread, same
+# learn_greeting toggle.
+FAREWELLS = [
+    # — cute —
+    "またね！おつかれさま！",
+    "きょうもよくがんばったね！",
+    "バイバイ！また会おうね！",
+    "おつかれ！ゆっくり休んでね。",
+    "また あした、まってるよ。",
+    "すごいすごい！えらかったよ！",
+    "きょうの勉強、かんぺき！おやすみ〜。",
+    "また来てね、たのしみにしてる！",
+    "よくできました！はなまるあげる！",
+    "きみの努力、ちゃんと見てたよ。えらい！",
+    "じゃあね、また単語であおうね！",
+    "ナイスファイト！また今度！",
+    "きょうのきみ、かっこよかったよ！",
+    "ばいばーい！わすれないでね〜。",
+    # — funny —
+    "もう終わり？はやいね…さぼっちゃダメだよ！",
+    "つぎはもっとできるはず！…たぶんね！",
+    "帰る前に、もう一問どう？…うそうそ、またね！",
+    "単語たちが「また会おうね」って手をふってるよ。",
+    "脳みそ、つかれた？アイスでも食べて！",
+    "きょうのノルマ、クリア！えらいぞ！",
+    "ふっかつの呪文：「また勉強する」。となえてね！",
+    "やったね！レベルアップの音が聞こえる…気がする！",
+    # — playfully creepy —
+    "また来てね…ぜったいだよ？まってるからね。",
+    "きみが帰っても、単語はずっと見てるよ。",
+    "行かないで…なんてね。またあした、ね？",
+    "きみの夢の中で、また勉強しようね。",
+    "さよならは言わないよ。だって、また来るでしょ？",
+    "この単語帳、きみのこと覚えてるからね。ふふ。",
+    "今夜、思い出してくれる？…単語のこと、だよ？",
+    "また会えるよね…ぜったい、ぜったいに。",
+]
+
 
 def _spawn_learn():
     cli = str(Path(__file__).resolve().parent / "zenbuji.py")
@@ -373,6 +412,13 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             score_lbl.set_text(f"{t('score')} {state['score']} / {total}")
             kanji.set_text(t("done"))
             hint.set_visible(False)
+            # A random casual goodbye to send you off (spoken too, if enabled).
+            if greeting and FAREWELLS:
+                bye = random.choice(FAREWELLS)
+                greet_lbl.set_text(bye)
+                greet_lbl.set_visible(True)
+                if auto_speak and speak_fn is not None:
+                    speak_fn(bye)
             clear_phase()
 
             # Grows with content up to a cap, then scrolls — keeps height dynamic.
