@@ -5,6 +5,8 @@
 #                           create the venv and install offline backend
 #   ./install.sh --light    skip the heavy offline backend (DeepL only)
 #   ./install.sh --models   also download the offline translation models
+#   ./install.sh --voicevox set up the local VOICEVOX neural TTS engine
+#                           (natural Japanese voices; ~1.5GB podman image)
 #   ./install.sh --uninstall remove everything except your config
 #
 # On Bazzite/Silverblue the system Python is immutable, so dependencies live in
@@ -24,12 +26,14 @@ NAUTILUS_EXT_DIR="$HOME/.local/share/nautilus-python/extensions"
 
 LIGHT=0
 WITH_MODELS=0
+WITH_VOICEVOX=0
 MODE=install
 
 for arg in "$@"; do
     case "$arg" in
         --light) LIGHT=1 ;;
         --models) WITH_MODELS=1 ;;
+        --voicevox) WITH_VOICEVOX=1 ;;
         --uninstall) MODE=uninstall ;;
         -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
@@ -60,6 +64,15 @@ if [[ "$MODE" == uninstall ]]; then
     rm -f "$NAUTILUS_SCRIPTS/zenbuji (furigana + translation)"
     rm -f "$NAUTILUS_EXT_DIR/zenbuji-nautilus.py"
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/zenbuji-learn.desktop"
+    # Tear down the VOICEVOX engine service/unit if we set it up (keeps the
+    # pulled image — `podman rmi voicevox/voicevox_engine` reclaims that space).
+    VV_UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd/voicevox.container"
+    if [[ -f "$VV_UNIT" ]]; then
+        systemctl --user stop voicevox.service 2>/dev/null || true
+        rm -f "$VV_UNIT"
+        systemctl --user daemon-reload 2>/dev/null || true
+        echo "Removed the VOICEVOX engine service (kept the podman image)."
+    fi
     # Remove our custom keybindings from the list (leaves other customs intact).
     MK=org.gnome.settings-daemon.plugins.media-keys
     if command -v gsettings >/dev/null; then
@@ -274,6 +287,50 @@ if [[ "$WITH_MODELS" -eq 1 && "$LIGHT" -eq 0 ]]; then
     "$VENV/bin/python" -c "from manga_ocr import MangaOcr; MangaOcr()" || true
 fi
 
+# --- VOICEVOX neural TTS engine (opt-in: --voicevox) --------------------- #
+# Runs the official VOICEVOX engine as a rootless podman container managed by a
+# systemd --user Quadlet unit — no changes to the immutable base, no reboot.
+# zenbuji then synthesizes against it over its local HTTP API (127.0.0.1:50021).
+if [[ "$WITH_VOICEVOX" -eq 1 ]]; then
+    echo "Setting up the VOICEVOX TTS engine…"
+    if ! command -v podman >/dev/null; then
+        echo "  ! podman not found — install it (or run VOICEVOX yourself), then" >&2
+        echo "    re-run: ./install.sh --voicevox" >&2
+    else
+        VV_IMAGE="docker.io/voicevox/voicevox_engine:cpu-latest"
+        VV_UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd"
+        echo "  pulling $VV_IMAGE (~1.5GB, first time only)…"
+        podman pull "$VV_IMAGE" || echo "  ! pull failed; the service will retry on start" >&2
+        mkdir -p "$VV_UNIT_DIR"
+        cat > "$VV_UNIT_DIR/voicevox.container" <<UNIT
+# Local VOICEVOX TTS engine for zenbuji (managed by systemd --user).
+[Unit]
+Description=VOICEVOX TTS engine (local HTTP, used by zenbuji)
+After=network-online.target
+
+[Container]
+Image=$VV_IMAGE
+PublishPort=127.0.0.1:50021:50021
+AutoUpdate=registry
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
+UNIT
+        systemctl --user daemon-reload 2>/dev/null || true
+        systemctl --user start voicevox.service 2>/dev/null \
+            && echo "  started voicevox.service (auto-starts on login)" \
+            || echo "  ! could not start voicevox.service — check: systemctl --user status voicevox" >&2
+        # Point zenbuji at the built-in VOICEVOX engine.
+        "$BIN_DIR/zenbuji" config --tts-engine voicevox --tts on >/dev/null 2>&1 || true
+        echo "  zenbuji TTS set to VOICEVOX (default voice: Zundamon)"
+        echo "  tip: logged-out playback needs lingering — run: loginctl enable-linger \$USER"
+    fi
+fi
+
 cat <<EOF
 
 Done.
@@ -289,3 +346,15 @@ Next steps:
   • OCR → dictionary:      Super+Shift+K OCRs a region silently into the
                            dictionary and reads the word aloud (no popup)
 EOF
+
+if [[ "$WITH_VOICEVOX" -eq 1 ]]; then
+    cat <<EOF
+  • Natural voice (TTS):   VOICEVOX is set up — pick a voice in Settings ▸ Speech
+                           or test it with: zenbuji speak こんにちは
+EOF
+else
+    cat <<EOF
+  • Natural voice (TTS):   for natural Japanese instead of the robotic system
+                           voice, set up VOICEVOX:  ./install.sh --voicevox
+EOF
+fi

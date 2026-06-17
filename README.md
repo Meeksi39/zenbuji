@@ -44,6 +44,7 @@ German: Ich lerne Japanisch.
 - 👁️ **OCR for unselectable text.** Subtitles, a game, a UI label, an image — draw a box and zenbuji reads it.
 - 📖 **Builds your personal dictionary.** Every DeepL lookup is cached into a searchable word list, so you stop re-spending quota and start seeing your progress.
 - 🎴 **Turns words into practice.** A built-in spaced-repetition quiz drills the words you've already looked up.
+- 🔊 **Hear every word.** A read-aloud button on every reading, with first-class [VOICEVOX] support for natural Japanese neural voices (falls back to the system voice).
 - 🪟 **Polished, native feel.** A frosted-glass popup that follows your accent color and light/dark theme.
 - 🔒 **Yours, offline, private.** All processing is local (DeepL is the only optional network call). Runs on immutable distros (Bazzite / Silverblue) with no `rpm-ostree` layering.
 
@@ -169,6 +170,23 @@ back. Each round picks the most-due/new words (10 by default) and ends with a su
 - `--learn-show-translation on|off` — show the meaning as a hint (test only the reading) vs. hide it (test reading **and** translation)
 - `--learn-on-login on|off` — open a round automatically, at most once a day, on login (off by default)
 
+### 🔊 Hear it spoken
+
+Every reading has a **🔊 read-aloud button** — in the popup, beside each dictionary
+entry, and on the quiz answer screen — so you hear the pronunciation, not just see it.
+
+For natural Japanese (rather than the robotic system voice), zenbuji has first-class
+support for **[VOICEVOX]**, a free local neural TTS engine. Set it up in one step:
+
+```sh
+./install.sh --voicevox   # pulls the engine (rootless podman), runs it as a user service
+```
+
+Then pick a voice in **Settings ▸ Speech** (default: ずんだもん / Zundamon — 100+ voices
+available) and hit **Test**. Without VOICEVOX, zenbuji falls back to `spd-say`/`espeak-ng`.
+Engine and voice are configurable: `zenbuji config --tts-engine voicevox --voicevox-speaker 3`,
+list voices with `zenbuji voices`, or wire any command with `--tts-command '… {text}'`.
+
 ### 🪟 Frosted-glass popup
 
 The popup is a headerless, translucent floating card that follows your system light/dark
@@ -197,6 +215,8 @@ zenbuji popup 速い                # GTK popup window
 zenbuji ocr                       # capture a screen region and OCR it
 zenbuji dict                      # open the local dictionary window
 zenbuji learn                     # spaced-repetition practice over the cache
+zenbuji speak こんにちは            # read text aloud (VOICEVOX / system voice)
+zenbuji voices                    # list available VOICEVOX speakers
 ```
 
 `zb` is a short alias for `zenbuji`.
@@ -242,6 +262,9 @@ zenbuji config --dictionary off         # stop caching DeepL translations
 zenbuji config --translation-char-limit 200   # max characters per lookup
 zenbuji config --learn-show-translation off   # quiz reading AND translation
 zenbuji config --learn-on-login on      # open a practice round once a day on login
+zenbuji config --tts-engine voicevox    # auto | voicevox | system | command | off
+zenbuji config --voicevox-speaker 3     # voice id (see: zenbuji voices)
+zenbuji config --tts on                 # read words aloud after an OCR/silent add
 zenbuji config --history off            # stop recording recent lookups
 zenbuji config --clear-history          # forget recorded lookups
 zenbuji usage                           # check the DeepL key + remaining quota
@@ -293,3 +316,4 @@ journalctl -f -o cat /usr/bin/gnome-shell
 [manga-ocr]: https://github.com/kha-white/manga-ocr
 [DeepL]: https://www.deepl.com/pro-api
 [Blur My Shell]: https://extensions.gnome.org/extension/3193/blur-my-shell/
+[VOICEVOX]: https://voicevox.hiroshiba.jp/
