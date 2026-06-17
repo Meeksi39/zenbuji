@@ -9,6 +9,11 @@ whatever you're doing. No alt-tabbing into a dictionary app, no breaking immersi
 middle of an episode. Works in your browser, your editor, a chat window — and even on text
 you *can't* select, because screen OCR has your back. (｡•̀ᴗ-)✧
 
+Built around one idea: **learning should get _out of your way_.** zenbuji is the
+lowest-resistance path from "…huh?" to "ohhh!" — so you keep *reading the thing you love*
+instead of stopping to study it. Immersion stays unbroken, and the reps quietly happen on
+the side. ♪(´▽｀)
+
 <img src="docs/overview.png" alt="zenbuji in action — lookup popup, dictionary, practice quiz, statistics, and top-bar menu" width="900">
 
 <sub>Furigana from real word-level analysis (not lazy kana-by-kana guessing) · translation is offline-first · everything runs on your own machine.</sub>
