@@ -8,6 +8,9 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 const BACKENDS = ['auto', 'argos', 'deepl'];
 const BACKEND_LABELS = ['Auto (DeepL if key set)', 'Offline (Argos)', 'DeepL'];
+const TTS_ENGINES = ['auto', 'voicevox', 'system', 'command', 'off'];
+const TTS_ENGINE_LABELS = ['Auto (VOICEVOX if running)', 'VOICEVOX',
+    'System (spd-say / espeak)', 'Custom command', 'Off'];
 
 // The two global hotkeys live as GNOME custom keybindings (created by
 // install.sh); the prefs UI edits their accelerator in place.
@@ -64,11 +67,27 @@ const UI_JA = {
         'DeepL だけでなく Argos（オフライン）翻訳も辞書にキャッシュします。キーなしで練習用の単語帳を作れます。',
     'Speech': '音声',
     'Read words aloud': '単語を読み上げる',
-    'Speak the reading after an OCR or silent add (the Super+Shift+K shortcut).':
-        'OCR またはサイレント追加（Super+Shift+K）の後に読みを読み上げます。',
+    'Speak the reading after an OCR/silent add, and via the 🔊 buttons.':
+        'OCR・サイレント追加の後、および 🔊 ボタンで読みを読み上げます。',
+    'Voice engine': '音声エンジン',
+    'VOICEVOX gives natural Japanese; auto falls back to the system voice.':
+        'VOICEVOX は自然な日本語音声です。auto は利用できない場合システム音声に切り替えます。',
+    'Auto (VOICEVOX if running)': '自動（VOICEVOX が動作中なら使用）',
+    'VOICEVOX': 'VOICEVOX',
+    'System (spd-say / espeak)': 'システム（spd-say / espeak）',
+    'Custom command': 'カスタムコマンド',
+    'Off': 'オフ',
+    'Voice': '音声（話者）',
+    'Default (Zundamon)': '既定（ずんだもん）',
+    'Start the VOICEVOX engine: ./install.sh --voicevox':
+        'VOICEVOX エンジンを起動してください: ./install.sh --voicevox',
+    'Test voice': '音声をテスト',
+    'Speak a sample with the current engine and voice.':
+        '現在のエンジンと話者でサンプルを読み上げます。',
+    'Test': 'テスト',
     'Text-to-speech command': '音声合成コマンド',
-    'Leave empty to auto-detect (spd-say, then espeak-ng). Use {text} as the placeholder.':
-        '空欄で自動検出（spd-say、次に espeak-ng）。{text} をプレースホルダーに使用します。',
+    'Used only when the engine is "Custom command". Use {text} as the placeholder.':
+        'エンジンが「カスタムコマンド」のときのみ使用。{text} をプレースホルダーに使用します。',
     'Add screen region to dictionary (OCR)': '画面領域を辞書に追加（OCR）',
     'Popup': 'ポップアップ',
     'Close when it loses focus': 'フォーカスを失ったら閉じる',
@@ -434,8 +453,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
 
         const ttsRow = new Adw.SwitchRow({
             title: _('Read words aloud'),
-            subtitle: _('Speak the reading after an OCR or silent add ' +
-                '(the Super+Shift+K shortcut).'),
+            subtitle: _('Speak the reading after an OCR/silent add, and via the 🔊 buttons.'),
         });
         ttsRow.connect('notify::active', () => {
             if (loading)
@@ -444,12 +462,58 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         speechGroup.add(ttsRow);
 
+        const engineRow = new Adw.ComboRow({
+            title: _('Voice engine'),
+            subtitle: _('VOICEVOX gives natural Japanese; auto falls back to the system voice.'),
+            model: Gtk.StringList.new(TTS_ENGINE_LABELS.map(s => _(s))),
+        });
+        speechGroup.add(engineRow);
+
+        // VOICEVOX speaker picker — populated from `zenbuji voices --json` once
+        // the config has loaded (so we can preselect the saved speaker).
+        let voiceIds = [];
+        let voiceLoading = false;
+        const voiceRow = new Adw.ComboRow({
+            title: _('Voice'),
+            model: Gtk.StringList.new([_('Default (Zundamon)')]),
+        });
+        voiceRow.connect('notify::selected', () => {
+            if (loading || voiceLoading)
+                return;
+            const id = voiceIds[voiceRow.selected];
+            if (id !== undefined)
+                this._setConfig(settings, ['--voicevox-speaker', String(id)]);
+        });
+        speechGroup.add(voiceRow);
+
+        const usesVoicevox = e => e === 'auto' || e === 'voicevox';
+        engineRow.connect('notify::selected', () => {
+            if (loading)
+                return;
+            const engine = TTS_ENGINES[engineRow.selected];
+            this._setConfig(settings, ['--tts-engine', engine]);
+            voiceRow.set_sensitive(usesVoicevox(engine));
+            ttsCmdRow.set_sensitive(engine === 'command');
+        });
+
+        const testRow = new Adw.ActionRow({
+            title: _('Test voice'),
+            subtitle: _('Speak a sample with the current engine and voice.'),
+        });
+        const testBtn = new Gtk.Button({label: _('Test'), valign: Gtk.Align.CENTER});
+        testBtn.connect('clicked', () => {
+            this._runCli(settings, ['speak', 'こんにちは、日本語'], () => {});
+        });
+        testRow.add_suffix(testBtn);
+        testRow.activatable_widget = testBtn;
+        speechGroup.add(testRow);
+
         const ttsCmdRow = new Adw.EntryRow({
             title: _('Text-to-speech command'),
             show_apply_button: true,
         });
         ttsCmdRow.set_tooltip_text(
-            _('Leave empty to auto-detect (spd-say, then espeak-ng). Use {text} as the placeholder.'));
+            _('Used only when the engine is "Custom command". Use {text} as the placeholder.'));
         ttsCmdRow.connect('apply', () => {
             this._setConfig(settings, ['--tts-command', ttsCmdRow.get_text().trim()]);
         });
@@ -525,6 +589,31 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 cacheOfflineRow.set_active(cfg.cache_offline === true);
                 ttsRow.set_active(cfg.tts === true);
                 ttsCmdRow.set_text(cfg.tts_command || '');
+                const engIdx = TTS_ENGINES.indexOf(cfg.tts_engine || 'auto');
+                engineRow.selected = engIdx >= 0 ? engIdx : 0;
+                const engine = TTS_ENGINES[engineRow.selected];
+                ttsCmdRow.set_sensitive(engine === 'command');
+                voiceRow.set_sensitive(usesVoicevox(engine));
+                // Populate the voice list from the running VOICEVOX engine and
+                // preselect the saved speaker (defaults to 3 / Zundamon).
+                const wantSpeaker = cfg.voicevox_speaker !== undefined
+                    ? cfg.voicevox_speaker : 3;
+                this._runCli(settings, ['voices', '--json'], (voices) => {
+                    voiceLoading = true;
+                    if (voices && voices.length) {
+                        voiceIds = voices.map(v => v.id);
+                        const list = new Gtk.StringList();
+                        voices.forEach(v => list.append(`${v.name} — ${v.style}`));
+                        voiceRow.set_model(list);
+                        const idx = voiceIds.indexOf(wantSpeaker);
+                        voiceRow.selected = idx >= 0 ? idx : 0;
+                    } else {
+                        voiceRow.set_subtitle(
+                            _('Start the VOICEVOX engine: ./install.sh --voicevox'));
+                        voiceRow.set_sensitive(false);
+                    }
+                    voiceLoading = false;
+                });
                 charRow.set_value(cfg.translation_char_limit || 200);
                 learnHintRow.set_active(cfg.learn_show_translation !== false);
                 learnLoginRow.set_active(cfg.learn_on_login === true);
