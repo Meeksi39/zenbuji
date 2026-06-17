@@ -40,7 +40,8 @@ German: Ich lerne Japanisch.
 - **English *and* German, side by side.** Offline-first with [Argos Translate]; drop in a free [DeepL] key when you want the sharper translations.
 - **OCR for text you can't select.** Subs burned into a video, a game UI, a screenshot, manga raws — draw a box and zenbuji reads it anyway.
 - **Builds your own little dictionary.** Every DeepL lookup gets cached into a searchable word list, so you stop burning quota and start watching your vocab pile up.
-- **Turns lookups into reps.** A built-in spaced-repetition quiz drills the words you've already met. Immersion → SRS → flex, no extra Anki deck required.
+- **Turns lookups into reps.** A built-in spaced-repetition quiz drills the words you've already met, complete with level-ups as a word graduates New → Learning → Young → Mature. Immersion → SRS → flex, no extra Anki deck required.
+- **See your progress.** A statistics window tracks your level breakdown, day streak, accuracy, and 14-day activity — and every dictionary entry wears its current SRS level. Watch the vocab pile up *and* stick.
 - **Hear every word.** A read-aloud button on every reading, with proper [VOICEVOX] support so it's natural neural Japanese instead of robot voice (falls back to the system voice if you skip it).
 - **Genuinely pretty.** A frosted-glass popup that picks up your accent color and light/dark theme. Cute *and* functional ‹3
 - **Yours, offline, private.** Everything's local — DeepL is the only optional network call. Runs happily on immutable distros (Bazzite / Silverblue) with zero `rpm-ostree` layering.
@@ -133,7 +134,9 @@ it, so you can literally watch yourself level up.
 
 Browse it in the **Dictionary window** (the dictionary button in the popup, the top-bar menu,
 or `zenbuji dict`): search, delete an entry, clear all, re-translate, or pop a word back open
-in the lookup popup. It also shows your remaining DeepL quota when a key is set.
+in the lookup popup. It also shows your remaining DeepL quota when a key is set. Once a word
+enters practice, its row shows its **SRS level** badge, next-due date, and correct/wrong
+tally — and a **Statistics** button opens the full learning overview.
 
 <div align="center">
 <img src="docs/dictionary.png" alt="zenbuji dictionary window" width="360">
@@ -345,6 +348,11 @@ on Wayland for extension changes). Tail the extension logs while you hack:
 ```sh
 journalctl -f -o cat /usr/bin/gnome-shell
 ```
+
+The UI has a deliberate visual language (frosted-glass cards, the accent color,
+pill controls, cairo charts). Before adding or restyling a surface, read
+**[docs/STYLE.md](docs/STYLE.md)** — it documents the design system, the shared
+CSS classes, and the GTK gotchas so new windows match the rest.
 
 ---
 
