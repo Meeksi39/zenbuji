@@ -59,6 +59,17 @@ const UI_JA = {
     'Build a local dictionary': 'ローカル辞書を作成',
     'Cache DeepL translations and reuse them (saves quota); browse them in the Dictionary window.':
         'DeepL 翻訳をキャッシュして再利用します（クォータ節約）。辞書ウィンドウで閲覧できます。',
+    'Also store offline translations': 'オフライン翻訳も保存',
+    'Cache Argos (offline) translations in the dictionary too, not just DeepL — lets you build a practice deck without a key.':
+        'DeepL だけでなく Argos（オフライン）翻訳も辞書にキャッシュします。キーなしで練習用の単語帳を作れます。',
+    'Speech': '音声',
+    'Read words aloud': '単語を読み上げる',
+    'Speak the reading after an OCR or silent add (the Super+Shift+K shortcut).':
+        'OCR またはサイレント追加（Super+Shift+K）の後に読みを読み上げます。',
+    'Text-to-speech command': '音声合成コマンド',
+    'Leave empty to auto-detect (spd-say, then espeak-ng). Use {text} as the placeholder.':
+        '空欄で自動検出（spd-say、次に espeak-ng）。{text} をプレースホルダーに使用します。',
+    'Add screen region to dictionary (OCR)': '画面領域を辞書に追加（OCR）',
     'Popup': 'ポップアップ',
     'Close when it loses focus': 'フォーカスを失ったら閉じる',
     'Dismiss the popup automatically when you click elsewhere.':
@@ -321,6 +332,19 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         trGroup.add(dictRow);
 
+        const cacheOfflineRow = new Adw.SwitchRow({
+            title: _('Also store offline translations'),
+            subtitle: _('Cache Argos (offline) translations in the dictionary too, ' +
+                'not just DeepL — lets you build a practice deck without a key.'),
+        });
+        cacheOfflineRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--cache-offline', cacheOfflineRow.get_active() ? 'on' : 'off']);
+        });
+        trGroup.add(cacheOfflineRow);
+
         const charRow = new Adw.SpinRow({
             title: _('Translation length limit'),
             subtitle: _('Maximum characters sent to translate in one lookup.'),
@@ -404,6 +428,33 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         popupGroup.add(closeRow);
 
+        // --- Speech ------------------------------------------------------- //
+        const speechGroup = new Adw.PreferencesGroup({title: _('Speech')});
+        page.add(speechGroup);
+
+        const ttsRow = new Adw.SwitchRow({
+            title: _('Read words aloud'),
+            subtitle: _('Speak the reading after an OCR or silent add ' +
+                '(the Super+Shift+K shortcut).'),
+        });
+        ttsRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings, ['--tts', ttsRow.get_active() ? 'on' : 'off']);
+        });
+        speechGroup.add(ttsRow);
+
+        const ttsCmdRow = new Adw.EntryRow({
+            title: _('Text-to-speech command'),
+            show_apply_button: true,
+        });
+        ttsCmdRow.set_tooltip_text(
+            _('Leave empty to auto-detect (spd-say, then espeak-ng). Use {text} as the placeholder.'));
+        ttsCmdRow.connect('apply', () => {
+            this._setConfig(settings, ['--tts-command', ttsCmdRow.get_text().trim()]);
+        });
+        speechGroup.add(ttsCmdRow);
+
         // --- Learning ----------------------------------------------------- //
         const learnGroup = new Adw.PreferencesGroup({title: _('Learning')});
         page.add(learnGroup);
@@ -441,6 +492,8 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         scGroup.add(this._makeShortcutRow(_('Look up selection'), '', 'zenbuji'));
         scGroup.add(this._makeShortcutRow(_('Look up screen region (OCR)'),
             _('Needs the full (non---light) install for the OCR model.'), 'zenbuji-ocr'));
+        scGroup.add(this._makeShortcutRow(_('Add screen region to dictionary (OCR)'),
+            '', 'zenbuji-ocr-add'));
         scGroup.add(this._makeShortcutRow(_('Practice (SRS)'), '', 'zenbuji-learn'));
 
         // --- Advanced ----------------------------------------------------- //
@@ -469,6 +522,9 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 histRow.set_active(cfg.history !== false);
                 closeRow.set_active(cfg.popup_close_on_focus_loss !== false);
                 dictRow.set_active(cfg.dictionary !== false);
+                cacheOfflineRow.set_active(cfg.cache_offline === true);
+                ttsRow.set_active(cfg.tts === true);
+                ttsCmdRow.set_text(cfg.tts_command || '');
                 charRow.set_value(cfg.translation_char_limit || 200);
                 learnHintRow.set_active(cfg.learn_show_translation !== false);
                 learnLoginRow.set_active(cfg.learn_on_login === true);

@@ -18,6 +18,7 @@ import difflib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -843,46 +844,59 @@ def translate(text: str, targets: list[str], cfg: dict) -> tuple[dict, list[str]
 
 def translate_cached(text: str, targets: list[str], cfg: dict,
                      reading: str) -> tuple[dict, list[str]]:
-    """Like translate(), but for the DeepL backend reuse/record a local cache.
+    """Like translate(), but reuse/record a local dictionary cache.
 
-    Strings already translated by DeepL are served from the dictionary instead
-    of re-requesting DeepL (faster, saves quota); only the missing target
-    languages are fetched. Each lookup bumps the entry's count. Argos (offline)
-    is never cached and falls straight through to translate().
+    Strings already translated are served from the dictionary instead of being
+    re-requested (faster, and saves DeepL quota); only the missing target
+    languages are fetched. Each lookup bumps the entry's count. DeepL output is
+    always cacheable. Argos (offline) output is cached only when `cache_offline`
+    is enabled — handy for building a practice deck without a DeepL key. With
+    the dictionary off, falls straight through to translate().
     """
     backend = cfg.get("backend", "auto")
     key = cfg.get("deepl_api_key", "")
     lang = cfg.get("ui_language", "en")
     effective = ("deepl" if key else "argos") if backend == "auto" else backend
+    cache_offline = bool(cfg.get("cache_offline", False))
 
-    if not cfg.get("dictionary", True) or effective != "deepl" or not key:
+    if not cfg.get("dictionary", True):
         return translate(text, targets, cfg)
 
     entry = dict_get(text)
     cached = dict(entry.get("translations", {})) if entry else {}
     missing = [t for t in targets if not cached.get(t)]
     notes: list[str] = []
-    fresh: dict = {}
-    fallback: dict = {}
+    fresh: dict = {}          # newly fetched and cacheable
+    uncacheable: dict = {}    # newly fetched but must NOT be stored
     if missing:
-        try:
-            fresh = translate_deepl(text, missing, key, lang)
-        except TranslationError as exc:
-            notes.append(str(exc))
-            # Offline fallback for the missing langs — shown, but NOT cached.
+        if effective == "deepl" and key:
             try:
-                fallback = translate_argos(text, missing, lang)
-                notes.append(_note("fell_back_argos", lang))
-            except TranslationError:
-                pass
+                fresh = translate_deepl(text, missing, key, lang)
+            except TranslationError as exc:
+                notes.append(str(exc))
+                # Offline fallback for the missing langs; cache only if opted in.
+                try:
+                    argos = translate_argos(text, missing, lang)
+                    notes.append(_note("fell_back_argos", lang))
+                    (fresh if cache_offline else uncacheable).update(argos)
+                except TranslationError:
+                    pass
+        else:
+            # Argos (offline) backend, or DeepL requested with no key set.
+            try:
+                argos = translate_argos(text, missing, lang)
+                (fresh if cache_offline else uncacheable).update(argos)
+            except TranslationError as exc:
+                notes.append(str(exc))
 
-    deepl_only = {**cached, **fresh}
-    # Record/refresh the entry (count++ even on a pure cache hit) when we have
-    # any DeepL-sourced translation for this string.
-    if deepl_only:
-        dict_record(text, reading, deepl_only)
+    # Record/refresh the entry (count++ even on a pure cache hit) whenever we
+    # have a cacheable result — a reused entry or freshly fetched cacheable
+    # translations. Argos-only output with cache_offline off never lands here.
+    to_store = {**cached, **fresh}
+    if to_store:
+        dict_record(text, reading, to_store)
 
-    merged = {**deepl_only, **fallback}
+    merged = {**to_store, **uncacheable}
     return {t: merged.get(t) for t in targets if merged.get(t)}, notes
 
 
@@ -924,6 +938,36 @@ def read_selection() -> str:
             except (OSError, subprocess.SubprocessError):
                 continue
     return ""
+
+
+def speak(text: str, cfg: dict) -> None:
+    """Read Japanese text aloud in the background (best-effort, non-blocking).
+
+    Feed the hiragana reading for the clearest pronunciation. Honours a custom
+    command template from config (`tts_command`, with an optional `{text}`
+    placeholder); otherwise auto-detects `spd-say` (speech-dispatcher, plays via
+    its daemon so it survives this process exiting) then `espeak-ng`. Never
+    raises and never blocks — TTS is a nicety layered on top of the result.
+    """
+    text = (text or "").strip()
+    if not text:
+        return
+    try:
+        template = cfg.get("tts_command")
+        if template:
+            parts = shlex.split(template)
+            argv = ([p.replace("{text}", text) for p in parts]
+                    if any("{text}" in p for p in parts) else [*parts, text])
+        elif shutil.which("spd-say"):
+            argv = ["spd-say", "-l", "ja", "--", text]
+        elif shutil.which("espeak-ng"):
+            argv = ["espeak-ng", "-v", "ja", "--", text]
+        else:
+            return
+        subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:  # noqa: BLE001 — audio must never break a lookup
+        pass
 
 
 def resolve_input(text_args: list[str], use_selection: bool) -> str:
@@ -973,6 +1017,7 @@ Usage:
   zenbuji popup [text]        Show a GUI popup (reads selection if no text)
   zenbuji selection           Process the current text selection
   zenbuji ocr [image]         OCR a screen region (or image file) and look it up
+  zenbuji add <words…>        Translate & store words in the dictionary, no GUI
   zenbuji dict                Open the local dictionary (cached DeepL lookups)
   zenbuji learn               Practice cached words (spaced repetition quiz)
   zenbuji config              Show or set configuration
@@ -1081,6 +1126,15 @@ def cmd_config(args, cfg) -> int:
     if args.dictionary:
         cfg["dictionary"] = args.dictionary == "on"
         changed = True
+    if args.cache_offline:
+        cfg["cache_offline"] = args.cache_offline == "on"
+        changed = True
+    if args.tts:
+        cfg["tts"] = args.tts == "on"
+        changed = True
+    if args.tts_command is not None:
+        cfg["tts_command"] = args.tts_command
+        changed = True
     if args.char_limit is not None:
         cfg["translation_char_limit"] = max(10, int(args.char_limit))
         changed = True
@@ -1121,6 +1175,106 @@ def cmd_usage(args, cfg) -> int:
     return 0 if info["ok"] else 1
 
 
+def cmd_add(args, cfg) -> int:
+    """Translate words and store them in the local dictionary with no popup.
+
+    Built for bulk entry. Input may be:
+      * an OCR screen-region capture (--ocr) or image file (--ocr-image),
+      * positional words (one entry each: ``zenbuji add 日本語 勉強`` adds two),
+      * the current selection (--selection), or piped stdin.
+    Selection/stdin/OCR text is split on newlines, so a captured or pasted list
+    becomes one entry per line. The interactive OCR overlay still appears, but
+    once the screenshot is taken everything happens silently — no GUI window is
+    opened, so nothing steals focus (handy while a fullscreen game is open).
+    """
+    if args.backend:
+        cfg["backend"] = args.backend
+    languages = (
+        [s.strip() for s in args.lang.split(",") if s.strip()]
+        if args.lang
+        else cfg.get("languages", ["en", "de"])
+    )
+
+    ocr_notes: list[str] = []
+    want_ocr = args.ocr or args.ocr_image
+    if want_ocr:
+        image_path = args.ocr_image or capture_region()
+        if not image_path:
+            return 0  # user cancelled the region selection
+        text, ocr_notes = ocr_image_to_text(image_path, cfg)
+        for note in ocr_notes:
+            print(note, file=sys.stderr)
+        raw_items = text.splitlines()
+    elif args.words:
+        raw_items = list(args.words)
+    elif args.selection:
+        raw_items = read_selection().splitlines()
+    elif not sys.stdin.isatty():
+        raw_items = sys.stdin.read().splitlines()
+    else:
+        raw_items = []
+
+    # Trim, drop blanks, and de-duplicate while preserving order.
+    seen: set[str] = set()
+    items: list[str] = []
+    for item in raw_items:
+        item = item.strip()
+        if item and item not in seen:
+            seen.add(item)
+            items.append(item)
+
+    if not items:
+        if want_ocr:
+            print("No text recognised in the image.", file=sys.stderr)
+            return 1
+        print("No input (give words, use --selection, --ocr, or pipe stdin).",
+              file=sys.stderr)
+        return 2
+
+    # TTS is opt-in: the --speak flag, or a `tts: true` config default that
+    # --no-speak can override for a single run.
+    speak_on = bool(args.speak or (cfg.get("tts", False) and not args.no_speak))
+
+    # The dictionary stores DeepL output, and Argos output only when
+    # `cache_offline` is on, so warn up front if the current settings would
+    # store nothing — otherwise a bulk add looks like it silently did nothing.
+    key = cfg.get("deepl_api_key", "")
+    backend = cfg.get("backend", "auto")
+    effective = ("deepl" if key else "argos") if backend == "auto" else backend
+    will_store = bool(cfg.get("dictionary", True) and (
+        (effective == "deepl" and key) or cfg.get("cache_offline", False)))
+    if not will_store and not args.json:
+        print("note: nothing will be stored with the current settings — use the "
+              "DeepL backend, or enable 'cache offline translations' "
+              "(zenbuji config --cache-offline on), with the dictionary on.",
+              file=sys.stderr)
+
+    results = []
+    added = 0
+    for text in items:
+        result = process(text, languages, cfg, do_translate=True)
+        stored = will_store and bool(result.translations)
+        added += int(stored)
+        results.append(result)
+        if not args.quiet and not args.json:
+            tr = "; ".join(f"{lang}: {result.translations[lang]}"
+                           for lang in languages if result.translations.get(lang))
+            reading = f"（{result.reading}）" if result.reading else ""
+            mark = "✓" if stored else "·"
+            print(f"{mark} {text}{reading}" + (f" — {tr}" if tr else ""))
+
+    if speak_on:
+        spoken = "、".join(r.reading or r.text for r in results if (r.reading or r.text))
+        speak(spoken, cfg)
+
+    if args.json:
+        print(json.dumps([r.to_dict() for r in results], ensure_ascii=False))
+    elif not args.quiet:
+        noun = "entry" if len(items) == 1 else "entries"
+        print(f"Added {added}/{len(items)} {noun} to the dictionary.")
+    return 0
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = load_config()
@@ -1139,7 +1293,7 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models", "usage", "ocr", "dict", "learn",
+        "config", "models", "usage", "ocr", "dict", "learn", "add",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -1152,6 +1306,25 @@ def main(argv=None) -> int:
         rest = argv
 
     # Sub-parsers for the flag-bearing commands.
+    if command == "add":
+        p = argparse.ArgumentParser(prog="zenbuji add", add_help=False)
+        p.add_argument("--lang")
+        p.add_argument("--backend", choices=["argos", "deepl", "auto"])
+        p.add_argument("--selection", action="store_true")
+        p.add_argument("--ocr", action="store_true",
+                       help="capture a screen region and OCR it")
+        p.add_argument("--ocr-image", dest="ocr_image",
+                       help="OCR an existing image file")
+        p.add_argument("--speak", action="store_true",
+                       help="read the word aloud after adding")
+        p.add_argument("--no-speak", dest="no_speak", action="store_true",
+                       help="don't read aloud even if tts is on in config")
+        p.add_argument("--quiet", "-q", action="store_true",
+                       help="suppress the per-word summary")
+        p.add_argument("--json", action="store_true")
+        p.add_argument("words", nargs="*")
+        return cmd_add(p.parse_args(rest), cfg)
+
     if command == "config":
         p = argparse.ArgumentParser(prog="zenbuji config")
         p.add_argument("--backend", choices=["argos", "deepl", "auto"])
@@ -1162,6 +1335,14 @@ def main(argv=None) -> int:
         p.add_argument("--popup-close-on-focus-loss", dest="popup_close",
                        choices=["on", "off"])
         p.add_argument("--dictionary", choices=["on", "off"])
+        p.add_argument("--cache-offline", dest="cache_offline",
+                       choices=["on", "off"],
+                       help="also store Argos (offline) translations in the dictionary")
+        p.add_argument("--tts", choices=["on", "off"],
+                       help="read words aloud after an OCR/silent add by default")
+        p.add_argument("--tts-command", dest="tts_command",
+                       help="custom text-to-speech command ('' to reset); "
+                            "use {text} as the placeholder")
         p.add_argument("--translation-char-limit", dest="char_limit", type=int)
         p.add_argument("--learn-show-translation", dest="learn_show",
                        choices=["on", "off"])

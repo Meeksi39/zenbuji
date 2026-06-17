@@ -35,6 +35,7 @@ const UI_JA = {
     'No recent lookups': '履歴はありません',
     'Look up current selection': '選択テキストを調べる',
     'Look up screen region (OCR)': '画面領域を調べる（OCR）',
+    'Add screen region to dictionary (OCR)': '画面領域を辞書に追加（OCR）',
     'Dictionary': '辞書',
     'Practice (SRS)': '練習（SRS）',
     'Settings…': '設定…',
@@ -113,6 +114,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
         const ocrItem = new PopupMenu.PopupMenuItem(_('Look up screen region (OCR)'));
         ocrItem.connect('activate', () => this._extension.lookupRegion());
         this.menu.addMenuItem(ocrItem);
+
+        const ocrAddItem = new PopupMenu.PopupMenuItem(_('Add screen region to dictionary (OCR)'));
+        ocrAddItem.connect('activate', () => this._extension.addRegion());
+        this.menu.addMenuItem(ocrAddItem);
 
         const dictItem = new PopupMenu.PopupMenuItem(_('Dictionary'));
         dictItem.connect('activate', () => this._extension.openDictionary());
@@ -382,6 +387,12 @@ export default class ZenbujiExtension extends Extension {
 
     lookupRegion() {
         this._spawnPopup(['popup', '--ocr']);
+    }
+
+    // Same screen-region OCR, but no popup: translate, store in the dictionary,
+    // and read the word aloud — all in the background.
+    addRegion() {
+        this._spawnPopup(['add', '--ocr', '--speak']);
     }
 
     openDictionary() {
