@@ -53,29 +53,100 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
 
 /* --- buttons: Apple-style glass --- */
+/* Soft, padded pills so the controls feel friendly across every window. */
 /* Primary action: filled with the system accent. */
 .zenbuji-action {
-    border-radius: 10px;
-    font-weight: 600;
+    border-radius: 12px;
+    padding: 7px 16px;
+    min-height: 18px;
+    font-weight: 700;
     border: none;
-    background-image: none;
-    background-color: @accent_bg_color;
     color: @accent_fg_color;
+    /* A vivid gradient + a real drop shadow (plus a faint accent glow) so the
+       primary action has depth and pops without being oversized. */
+    background-color: @accent_bg_color;
+    background-image: linear-gradient(to bottom,
+        shade(@accent_bg_color, 1.16), @accent_bg_color);
+    box-shadow: 0 3px 8px alpha(#000000, 0.28), 0 1px 2px alpha(@accent_bg_color, 0.5);
 }
-.zenbuji-action:hover { background-color: shade(@accent_bg_color, 1.08); }
-.zenbuji-action:active { background-color: shade(@accent_bg_color, 0.94); }
+.zenbuji-action:hover {
+    background-image: linear-gradient(to bottom,
+        shade(@accent_bg_color, 1.24), shade(@accent_bg_color, 1.07));
+    box-shadow: 0 5px 12px alpha(#000000, 0.34), 0 1px 2px alpha(@accent_bg_color, 0.5);
+}
+.zenbuji-action:active {
+    background-image: none;
+    background-color: shade(@accent_bg_color, 0.94);
+    box-shadow: 0 1px 2px alpha(#000000, 0.22);
+}
 /* Secondary: translucent glass. */
 .zenbuji-secondary {
-    border-radius: 10px;
+    border-radius: 12px;
+    padding: 7px 16px;
+    min-height: 18px;
     font-weight: 500;
     background-image: none;
     background-color: alpha(currentColor, 0.10);
     border: 1px solid alpha(currentColor, 0.14);
 }
 .zenbuji-secondary:hover { background-color: alpha(currentColor, 0.16); }
-/* Flat icon buttons tinted with the accent (or red for destructive). */
-.zenbuji-icon { color: @accent_color; }
+/* Explicit pressed state: a faint translucent fill keeps the text (currentColor
+   / danger red) readable, instead of the theme's default solid active fill. */
+.zenbuji-secondary:active,
+.zenbuji-secondary:checked { background-color: alpha(currentColor, 0.24); }
+/* Flat icon buttons: neutral by default so dense rows stay calm, accent on
+   hover. Destructive stays red so delete reads clearly. */
+.zenbuji-icon { color: alpha(currentColor, 0.45); }
+.zenbuji-icon:hover { color: @accent_color; }
 .zenbuji-icon-danger { color: #e01b24; }
+
+/* Default text inputs (popup / dict search): subtle translucent fields that sit
+   quietly on the glass. */
+.zenbuji-card entry, .zenbuji-card entry.search {
+    border-radius: 11px;
+    padding: 7px 12px;
+    min-height: 22px;
+    background-image: none;
+    background-color: alpha(currentColor, 0.06);
+    border: 1px solid alpha(currentColor, 0.12);
+    box-shadow: none;
+}
+.zenbuji-card entry:focus-within {
+    border-color: @accent_color;
+    background-color: alpha(currentColor, 0.09);
+}
+
+/* The quiz answer field is the one "type here" hero: a larger, near-white card
+   with dark text and a bold accent focus ring, so it pops against the glass. */
+.zenbuji-card entry.zenbuji-quiz-input {
+    font-size: 19px;
+    padding: 13px 18px;
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.97);
+    color: #1c1c1e;
+    border: 1px solid alpha(#000000, 0.10);
+    box-shadow: 0 1px 3px alpha(#000000, 0.10);
+}
+.zenbuji-card entry.zenbuji-quiz-input text {
+    color: #1c1c1e; caret-color: #1c1c1e;
+}
+.zenbuji-card entry.zenbuji-quiz-input text > placeholder {
+    color: alpha(#1c1c1e, 0.40);
+}
+.zenbuji-card entry.zenbuji-quiz-input:focus-within {
+    border-color: @accent_color;
+    box-shadow: 0 0 0 3px alpha(@accent_color, 0.30), 0 1px 3px alpha(#000000, 0.10);
+}
+/* When the field is fused with the arrow tile into one pill: square the seam
+   side and drop the focus ring so the two read as a single control. */
+.zenbuji-card entry.zenbuji-quiz-input.zenbuji-combo {
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+    border-right-width: 0;
+}
+.zenbuji-card entry.zenbuji-quiz-input.zenbuji-combo:focus-within {
+    box-shadow: 0 1px 3px alpha(#000000, 0.10);
+    border-color: @accent_color;
+}
 
 /* --- shared text styles (popup + dictionary) --- */
 .zenbuji-original { font-size: 20px; font-weight: 600; }
@@ -100,6 +171,29 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 
 /* --- learning / quiz window --- */
 .zenbuji-kanji { font-size: 54px; font-weight: 700; }
+/* Slim, rounded, accent progress bar instead of the default hairline. */
+.zenbuji-quiz-progress, .zenbuji-quiz-progress trough, .zenbuji-quiz-progress progress {
+    min-height: 6px;
+    border-radius: 3px;
+}
+.zenbuji-quiz-progress trough { background-color: alpha(currentColor, 0.12); border: none; }
+.zenbuji-quiz-progress progress { background-color: @accent_color; }
+/* Result verdict chip: a single bold status pill (colour carries right/wrong). */
+.zenbuji-verdict {
+    font-size: 14px; font-weight: 700; color: #ffffff;
+    padding: 5px 16px; border-radius: 11px;
+}
+.zenbuji-verdict-ok { background-color: #21915c; }
+.zenbuji-verdict-no { background-color: #c0182a; }
+/* The revealed correct reading - the learning payload, large and in accent. */
+.zenbuji-reveal-reading { font-size: 27px; font-weight: 700; color: @accent_color; }
+/* Inline submit tile fused to the right of the field: squared seam side,
+   no fixed height so it matches the field it's linked to. */
+.zenbuji-quiz-go {
+    padding: 0; min-width: 52px;
+    border-top-left-radius: 0; border-bottom-left-radius: 0;
+    border-top-right-radius: 14px; border-bottom-right-radius: 14px;
+}
 /* Verdicts sit on a solid colour chip so they stay legible over any blurred
    background (plain coloured text had poor contrast). */
 .zenbuji-correct {
@@ -116,6 +210,41 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     font-size: 88px; font-weight: 800; color: #2ec27e;
     text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
 }
+/* Level-up flourish on a card that graduated to a higher SRS level. */
+.zenbuji-levelup {
+    font-size: 30px; font-weight: 800; color: #f5c211;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+}
+.zenbuji-levelup-note { font-size: 14px; font-weight: 700; color: #f5c211; }
+
+/* --- SRS level badges (shared: stats / dictionary / quiz) --- */
+/* A small rounded chip; each level gets a distinct, legible colour. */
+.zenbuji-level {
+    font-size: 11px; font-weight: 700; color: #ffffff;
+    border-radius: 8px; padding: 1px 8px; min-width: 56px;
+}
+.zenbuji-level-new      { background-color: #5b6066; }
+.zenbuji-level-learning { background-color: #c08a1e; }
+.zenbuji-level-young    { background-color: #1c71d8; }
+.zenbuji-level-mature   { background-color: #21915c; }
+
+/* --- statistics window --- */
+/* Soft inset panel grouping the hero stats. */
+.zenbuji-panel {
+    background-color: alpha(currentColor, 0.05);
+    border-radius: 16px;
+    padding: 16px 12px;
+    border: 1px solid alpha(currentColor, 0.06);
+}
+.zenbuji-stat-num { font-size: 29px; font-weight: 700; }
+.zenbuji-stat-num-accent { color: @accent_color; }
+.zenbuji-stat-label {
+    font-size: 10px; font-weight: 600; opacity: 0.55; letter-spacing: 0.04em;
+}
+/* Thin vertical divider between the hero stats. */
+.zenbuji-vrule { min-width: 1px; background-color: alpha(currentColor, 0.12); }
+.zenbuji-legend { font-size: 12px; opacity: 0.85; }
+.zenbuji-section-count { font-size: 11px; opacity: 0.5; }
 """
 
 _CSS_INSTALLED = False
@@ -147,6 +276,20 @@ def accent_hex(dark: bool = False) -> str | None:
                                   round(rgba.blue * 255))
     except Exception:  # noqa: BLE001  (older libadwaita without accent API)
         return None
+
+
+def accent_rgba(dark: bool = False) -> Gdk.RGBA:
+    """The system accent color as a Gdk.RGBA, for cairo drawing (charts).
+
+    Falls back to the GNOME blue (#3584e4) on older libadwaita without the
+    accent API."""
+    rgba = Gdk.RGBA()
+    try:
+        accent = Adw.StyleManager.get_default().get_accent_color()
+        return accent.to_standalone_rgba(dark)
+    except Exception:  # noqa: BLE001
+        rgba.parse("#3584e4")
+        return rgba
 
 
 def _install_focus_loss_close(win: Gtk.Window) -> None:

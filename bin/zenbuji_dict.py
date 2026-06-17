@@ -43,8 +43,16 @@ DICT_STRINGS = {
     "refresh":    {"en": "Re-translate (DeepL)", "ja": "再翻訳（DeepL）"},
     "look_up":    {"en": "Look up",      "ja": "調べる"},
     "read_aloud": {"en": "Read aloud",   "ja": "読み上げる"},
+    "stats":      {"en": "Statistics",   "ja": "統計"},
     "first":      {"en": "first",        "ja": "初回"},
     "last":       {"en": "last",         "ja": "最終"},
+    "due":        {"en": "due",          "ja": "次回"},
+}
+
+# SRS level labels, mirrored from srs_status() / zenbuji_learn.py.
+STATUS_NAMES = {
+    "en": {"new": "New", "learning": "Learning", "young": "Young", "mature": "Mature"},
+    "ja": {"new": "新規", "learning": "学習中", "young": "定着中", "mature": "習得"},
 }
 
 
@@ -78,12 +86,21 @@ def _spawn_popup(text: str):
         pass
 
 
+def _spawn_stats():
+    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    try:
+        subprocess.Popen([sys.executable, cli, "stats"], start_new_session=True)
+    except OSError:
+        pass
+
+
 def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     load_fn, delete_fn, clear_fn, stats_fn,
                     refresh_fn=None, quota_fn=None, speak_fn=None) -> int:
     """Show the dictionary window. The *_fn callables provide the data layer."""
     t = _make_tr(ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
+    status_names = STATUS_NAMES.get(ui_language, STATUS_NAMES["en"])
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -99,11 +116,17 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         title = Gtk.Label(label=t("title"), xalign=0)
         title.add_css_class("zenbuji-title")
         title.set_hexpand(True)
+        stats_btn = Gtk.Button(label=t("stats"))
+        stats_btn.add_css_class("zenbuji-secondary")
+        stats_btn.set_valign(Gtk.Align.CENTER)
+        stats_btn.set_tooltip_text(t("stats"))
+        stats_btn.connect("clicked", lambda _b: _spawn_stats())
         clear_btn = Gtk.Button(label=t("clear_all"))
         clear_btn.add_css_class("zenbuji-secondary")
         clear_btn.add_css_class("zenbuji-icon-danger")  # destructive: red text
         clear_btn.set_valign(Gtk.Align.CENTER)
         header.append(title)
+        header.append(stats_btn)
         header.append(clear_btn)
         card.append(header)
 
@@ -166,6 +189,14 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             jp.set_hexpand(True)
             jp.set_max_width_chars(30)
             top.append(jp)
+            srs = entry.get("srs") or {}
+            level = srs.get("level")
+            if level:
+                badge = Gtk.Label(label=status_names.get(level, level))
+                badge.add_css_class("zenbuji-level")
+                badge.add_css_class(f"zenbuji-level-{level}")
+                badge.set_valign(Gtk.Align.CENTER)
+                top.append(badge)
             count = Gtk.Label(label=f"×{entry.get('count', 0)}")
             count.add_css_class("zenbuji-count")
             count.set_valign(Gtk.Align.CENTER)
@@ -213,11 +244,20 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 line.set_max_width_chars(40)
                 outer.append(line)
 
-            meta = Gtk.Label(
-                label=f"{t('first')} {_short_dt(entry.get('first_seen', ''))}   ·   "
-                      f"{t('last')} {_short_dt(entry.get('last_seen', ''))}",
-                xalign=0)
+            meta_parts = [
+                f"{t('first')} {_short_dt(entry.get('first_seen', ''))}",
+                f"{t('last')} {_short_dt(entry.get('last_seen', ''))}",
+            ]
+            if srs:
+                if srs.get("due"):
+                    meta_parts.append(f"{t('due')} {_short_dt(srs['due'])[:10]}")
+                if srs.get("correct") or srs.get("wrong"):
+                    meta_parts.append(
+                        f"✓{srs.get('correct', 0)} ✗{srs.get('wrong', 0)}")
+            meta = Gtk.Label(label="   ·   ".join(meta_parts), xalign=0,
+                             wrap=True)
             meta.add_css_class("zenbuji-meta")
+            meta.set_max_width_chars(44)
             outer.append(meta)
 
             row.set_child(outer)

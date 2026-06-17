@@ -23,7 +23,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
     from zenbuji_glass import make_glass_window
@@ -43,6 +43,8 @@ LEARN_STRINGS = {
     "check":        {"en": "Check",           "ja": "確認"},
     "got_it":       {"en": "✓ Got it",        "ja": "✓ 正解"},
     "missed":       {"en": "✗ Missed",        "ja": "✗ 不正解"},
+    "verdict_ok":   {"en": "Correct",         "ja": "正解"},
+    "verdict_no":   {"en": "Not quite",       "ja": "惜しい"},
     "reading_lbl":  {"en": "Reading",         "ja": "読み"},
     "read_aloud":   {"en": "Read aloud",      "ja": "読み上げる"},
     "you":          {"en": "You typed",       "ja": "あなたの入力"},
@@ -51,6 +53,9 @@ LEARN_STRINGS = {
     "done":         {"en": "Done!",           "ja": "完了！"},
     "again":        {"en": "Practice again",  "ja": "もう一度"},
     "close":        {"en": "Close",           "ja": "閉じる"},
+    "view_stats":   {"en": "View stats",      "ja": "統計を見る"},
+    "level_up":     {"en": "Level up!",       "ja": "レベルアップ！"},
+    "leveled_up":   {"en": "{n} leveled up!", "ja": "{n} 個レベルアップ！"},
     "empty":        {"en": "No words to practise yet — look up some Japanese first.",
                      "ja": "練習する単語がありません。まず日本語を調べてください。"},
 }
@@ -59,6 +64,16 @@ STATUS_NAMES = {
     "en": {"new": "New", "learning": "Learning", "young": "Young", "mature": "Mature"},
     "ja": {"new": "新規", "learning": "学習中", "young": "定着中", "mature": "習得"},
 }
+
+# Learning levels, lowest→highest — used to detect when a card graduates.
+LEVEL_ORDER = ("new", "learning", "young", "mature")
+
+
+def _level_rank(level: str) -> int:
+    try:
+        return LEVEL_ORDER.index(level)
+    except ValueError:
+        return 0
 
 # Casual Japanese "let's start" greetings shown (and spoken, if TTS auto-read is
 # on) when a practice round opens — a random one each time. A spread of cute,
@@ -155,6 +170,23 @@ def _spawn_learn():
         subprocess.Popen([sys.executable, cli, "learn"], start_new_session=True)
     except OSError:
         pass
+
+
+def _spawn_stats():
+    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    try:
+        subprocess.Popen([sys.executable, cli, "stats"], start_new_session=True)
+    except OSError:
+        pass
+
+
+def _answer_col(width=300, spacing=12):
+    """A centered, fixed-width column so the answer input/buttons sit in a tidy
+    measure instead of stretching the full card width."""
+    col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=spacing)
+    col.set_halign(Gtk.Align.CENTER)
+    col.set_size_request(width, -1)
+    return col
 
 
 _SOUND_CTX = None
@@ -301,6 +333,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         win.connect("close-request", lambda *_a: (restore_ime(), False)[1])
 
         progress = Gtk.ProgressBar()
+        progress.add_css_class("zenbuji-quiz-progress")
         card_box.append(progress)
 
         status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -331,29 +364,48 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         kanji.set_max_width_chars(16)
         kanji.set_margin_top(8)
         kanji.set_margin_bottom(8)
+        # The card's current SRS level, shown as a chip under the counter row.
+        level_badge = Gtk.Label()
+        level_badge.add_css_class("zenbuji-level")
+        level_badge.set_halign(Gtk.Align.CENTER)
+        level_badge.set_margin_top(2)
+        card_box.append(level_badge)
+
         # Overlay hosts the transient celebration mark on a correct answer.
         kanji_overlay = Gtk.Overlay()
         kanji_overlay.set_child(kanji)
         card_box.append(kanji_overlay)
 
-        def celebrate():
+        def _fade_overlay(widget, duration):
+            kanji_overlay.add_overlay(widget)
+            target = Adw.CallbackAnimationTarget.new(widget.set_opacity)
+            anim = Adw.TimedAnimation.new(widget, 1.0, 0.0, duration, target)
+            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+            anim.connect("done", lambda *_a: kanji_overlay.remove_overlay(widget))
+            state.setdefault("_anims", []).append(anim)  # keep refs alive
+            anim.play()
+
+        def celebrate(levelup=False):
             _play_correct_sound()
             mark = Gtk.Label(label="✓")
             mark.add_css_class("zenbuji-celebrate")
             mark.set_halign(Gtk.Align.CENTER)
             mark.set_valign(Gtk.Align.CENTER)
             mark.set_can_target(False)
-            kanji_overlay.add_overlay(mark)
-            target = Adw.CallbackAnimationTarget.new(lambda v: mark.set_opacity(v))
-            anim = Adw.TimedAnimation.new(mark, 1.0, 0.0, 700, target)
-            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-            anim.connect("done", lambda *_a: kanji_overlay.remove_overlay(mark))
-            state["_anim"] = anim  # keep a ref so it isn't GC'd mid-play
-            anim.play()
+            _fade_overlay(mark, 700)
+            if levelup:
+                up = Gtk.Label(label=f"⬆ {t('level_up')}")
+                up.add_css_class("zenbuji-levelup")
+                up.set_halign(Gtk.Align.CENTER)
+                up.set_valign(Gtk.Align.END)
+                up.set_can_target(False)
+                _fade_overlay(up, 1300)
 
         hint = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
         hint.add_css_class("zenbuji-hint")
         hint.set_max_width_chars(40)
+        hint.set_margin_top(4)
+        hint.set_margin_bottom(6)
         card_box.append(hint)
 
         # Phase area, rebuilt for question vs reveal vs summary.
@@ -362,6 +414,17 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         card_box.append(phase)
 
         def clear_phase():
+            # Unset the window's default/focus BEFORE destroying the phase
+            # children. The phase holds the current default widget (the Got it /
+            # Missed button); if we destroy it while the window still points at
+            # it as default, GTK later dereferences the freed widget
+            # (set_default_widget → remove_css_class) and segfaults — the
+            # intermittent "window just closed" on confirming an answer.
+            try:
+                win.set_default_widget(None)
+                win.set_focus(None)
+            except Exception:  # noqa: BLE001
+                pass
             child = phase.get_first_child()
             while child is not None:
                 phase.remove(child)
@@ -377,6 +440,12 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             greet_lbl.set_visible(greeting and bool(GREETINGS)
                                   and state["idx"] == 0)
             cur = cards[state["idx"]]
+            lvl = cur.get("status") or "new"
+            for l in LEVEL_ORDER:
+                level_badge.remove_css_class(f"zenbuji-level-{l}")
+            level_badge.add_css_class(f"zenbuji-level-{lvl}")
+            level_badge.set_text(status_names.get(lvl, lvl))
+            level_badge.set_visible(True)
             kanji.set_text(cur["text"])
             if show_translation:
                 vals = [cur["translations"].get(l) for l in languages]
@@ -392,17 +461,35 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 ctl.connect("enter", lambda *_a: switch())
                 entry.add_controller(ctl)
 
-            reading_entry = Gtk.Entry(placeholder_text=t("reading"))
+            col = _answer_col()
+            phase.append(col)
+
+            # Reading field + arrow tile fused into one search-style pill: the
+            # field grows, the tile matches its height (valign FILL, no gap).
+            reading_entry = Gtk.Entry(placeholder_text=t("reading"), hexpand=True)
+            reading_entry.add_css_class("zenbuji-quiz-input")
+            reading_entry.add_css_class("zenbuji-combo")
+            reading_entry.set_alignment(0.5)
             on_field_focus(reading_entry, to_kana)
-            phase.append(reading_entry)
+
+            check_btn = Gtk.Button(icon_name="go-next-symbolic")
+            check_btn.add_css_class("zenbuji-action")
+            check_btn.add_css_class("zenbuji-quiz-go")
+            check_btn.set_valign(Gtk.Align.FILL)
+            check_btn.set_tooltip_text(t("check"))
+
+            input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            input_row.append(reading_entry)
+            input_row.append(check_btn)
+            col.append(input_row)
+
             trans_entry = None
             if not show_translation:
                 trans_entry = Gtk.Entry(placeholder_text=t("translation"))
+                trans_entry.add_css_class("zenbuji-quiz-input")
+                trans_entry.set_alignment(0.5)
                 on_field_focus(trans_entry, to_latin)
-                phase.append(trans_entry)
-            check_btn = Gtk.Button(label=t("check"))
-            check_btn.add_css_class("zenbuji-action")
-            phase.append(check_btn)
+                col.append(trans_entry)
 
             def submit(*_a):
                 show_reveal(cur, reading_entry.get_text(),
@@ -421,61 +508,73 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             reading_ok = bool(res["reading_ok"])
             clear_phase()
 
-            def verdict_row(label_text, ok, answer):
-                row = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
-                row.set_max_width_chars(40)
-                mark = "✓" if ok else "✗"
-                row.set_text(f"{mark}  {label_text}: {answer}")
-                row.add_css_class("zenbuji-correct" if ok else "zenbuji-wrong")
-                return row
+            col = _answer_col(width=320, spacing=10)
+            phase.append(col)
 
             def you_row(answer):
-                row = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
+                row = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
+                                halign=Gtk.Align.CENTER)
                 row.set_max_width_chars(40)
                 row.set_text(f"{t('you')}: {answer.strip() or t('blank')}")
                 row.add_css_class("zenbuji-meta")
                 return row
 
+            # 1. Verdict chip — colour carries right/wrong.
+            verdict = Gtk.Label(label=f"{'✓' if reading_ok else '✗'}  "
+                                      f"{t('verdict_ok') if reading_ok else t('verdict_no')}")
+            verdict.add_css_class("zenbuji-verdict")
+            verdict.add_css_class("zenbuji-verdict-ok" if reading_ok
+                                  else "zenbuji-verdict-no")
+            verdict.set_halign(Gtk.Align.CENTER)
+            col.append(verdict)
+
+            # 2. The correct reading, large and in accent, with the speak button.
             correct_reading = res["correct_reading"]
-            if speak_fn is not None and correct_reading:
+            if correct_reading:
                 reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
-                                      spacing=6)
-                vr = verdict_row(t("reading_lbl"), res["reading_ok"],
-                                 correct_reading)
-                vr.set_hexpand(True)
-                reading_row.append(vr)
-                speak_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
-                speak_btn.add_css_class("flat")
-                speak_btn.set_valign(Gtk.Align.CENTER)
-                speak_btn.set_tooltip_text(t("read_aloud"))
-                speak_btn.connect("clicked",
-                                  lambda _b, r=correct_reading: speak_fn(r))
-                reading_row.append(speak_btn)
-                phase.append(reading_row)
-            else:
-                phase.append(verdict_row(t("reading_lbl"), res["reading_ok"],
-                                         correct_reading))
-            # Read the correct reading aloud automatically (right or wrong) when
-            # TTS auto-read is enabled.
-            if auto_speak and speak_fn is not None and correct_reading:
-                speak_fn(correct_reading)
-            phase.append(you_row(reading_in))
+                                      spacing=6, halign=Gtk.Align.CENTER)
+                rl = Gtk.Label(label=correct_reading, wrap=True,
+                               justify=Gtk.Justification.CENTER)
+                rl.add_css_class("zenbuji-reveal-reading")
+                rl.set_max_width_chars(20)
+                reading_row.append(rl)
+                if speak_fn is not None:
+                    speak_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
+                    speak_btn.add_css_class("flat")
+                    speak_btn.add_css_class("zenbuji-icon")
+                    speak_btn.set_valign(Gtk.Align.CENTER)
+                    speak_btn.set_tooltip_text(t("read_aloud"))
+                    speak_btn.connect("clicked",
+                                      lambda _b, r=correct_reading: speak_fn(r))
+                    reading_row.append(speak_btn)
+                col.append(reading_row)
+                # Read the correct reading aloud automatically (right or wrong)
+                # when TTS auto-read is enabled.
+                if auto_speak and speak_fn is not None:
+                    speak_fn(correct_reading)
+
+            # 3. What the learner typed — only when the reading was wrong.
+            if not reading_ok:
+                col.append(you_row(reading_in))
+
+            # 4. Translations, centered.
             for lang in languages:
                 val = res["correct_translations"].get(lang)
                 if not val:
                     continue
-                lbl = Gtk.Label(xalign=0, wrap=True)
+                lbl = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
+                                halign=Gtk.Align.CENTER)
                 lbl.set_max_width_chars(40)
-                lbl.set_text(f"{lang_names.get(lang, lang.upper())}: {val}")
+                lbl.set_text(f"{lang_names.get(lang, lang.upper())}:  {val}")
                 lbl.add_css_class("zenbuji-translation")
-                phase.append(lbl)
-            # When the translation was tested, show what the user typed too.
+                col.append(lbl)
             if res["translation_ok"] is not None:
-                phase.append(you_row(translation_in))
+                col.append(you_row(translation_in))
 
+            # 5. Self-grade buttons, centered.
             btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                            homogeneous=True)
-            btns.set_margin_top(6)
+            btns.set_margin_top(8)
             got = Gtk.Button(label=t("got_it"))
             missed = Gtk.Button(label=t("missed"))
             # Whichever matches the reading result is the primary/default button.
@@ -485,7 +584,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             missed.connect("clicked", lambda _b: finalize(cur, False))
             btns.append(missed)
             btns.append(got)
-            phase.append(btns)
+            col.append(btns)
             default_btn = got if reading_ok else missed
             default_btn.grab_focus()
             try:
@@ -494,14 +593,19 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 pass
 
         def finalize(cur, correct):
+            old_status = cur.get("status", "")
             info = review_fn(cur["text"], correct) or {}
+            new_status = info.get("status", old_status)
+            leveled_up = (correct
+                          and _level_rank(new_status) > _level_rank(old_status))
             if correct:
                 state["score"] += 1
-                celebrate()
+                celebrate(levelup=leveled_up)
             state["results"].append({
                 "text": cur["text"],
                 "correct": correct,
-                "status": info.get("status", cur.get("status", "")),
+                "status": new_status,
+                "leveled_up": leveled_up,
             })
             state["idx"] += 1
             if state["idx"] < total:
@@ -515,6 +619,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             score_lbl.set_text(f"{t('score')} {state['score']} / {total}")
             kanji.set_text(t("done"))
             hint.set_visible(False)
+            level_badge.set_visible(False)
+            n_up = sum(1 for r in state["results"] if r.get("leveled_up"))
             # A random casual goodbye to send you off (spoken too, if enabled).
             if greeting and FAREWELLS:
                 bye = random.choice(FAREWELLS)
@@ -537,24 +643,53 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 line.set_max_width_chars(40)
                 mark = "✓" if r["correct"] else "✗"
                 stname = status_names.get(r["status"], r["status"])
-                line.set_text(f"{mark}  {r['text']}   ·   {stname}")
+                up = "  ⬆" if r.get("leveled_up") else ""
+                line.set_text(f"{mark}  {r['text']}   ·   {stname}{up}")
                 line.add_css_class("zenbuji-correct" if r["correct"]
                                    else "zenbuji-wrong")
                 lst.append(line)
             scroll.set_child(lst)
             phase.append(scroll)
 
+            # Celebrate any cards that graduated a level this round.
+            if n_up:
+                up_lbl = Gtk.Label(label=f"⬆ {t('leveled_up').format(n=n_up)}",
+                                   justify=Gtk.Justification.CENTER)
+                up_lbl.add_css_class("zenbuji-levelup-note")
+                up_lbl.set_halign(Gtk.Align.CENTER)
+                up_lbl.set_margin_top(4)
+                phase.append(up_lbl)
+
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                           homogeneous=True)
             again = Gtk.Button(label=t("again"))
             again.add_css_class("zenbuji-action")
             again.connect("clicked", lambda _b: (_spawn_learn(), win.close()))
+            stats = Gtk.Button(label=t("view_stats"))
+            stats.add_css_class("zenbuji-secondary")
+            stats.connect("clicked", lambda _b: (_spawn_stats(), win.close()))
             close = Gtk.Button(label=t("close"))
             close.add_css_class("zenbuji-secondary")
             close.connect("clicked", lambda _b: win.close())
             row.append(close)
+            row.append(stats)
             row.append(again)
             phase.append(row)
+
+            # Every summary button closes the window, and the summary is built
+            # right where the just-confirmed "Got it" button stood. clear_phase()
+            # already dropped the stale default/focus (so a held Enter is a
+            # no-op); also briefly disable the buttons so the same click that
+            # confirmed the last card can't carry straight into one of them.
+            for b in (close, stats, again):
+                b.set_sensitive(False)
+
+            def _arm_buttons():
+                for b in (close, stats, again):
+                    b.set_sensitive(True)
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(350, _arm_buttons)
 
         show_question()
         win.present()
