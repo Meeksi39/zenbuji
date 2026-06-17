@@ -10,6 +10,7 @@
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 
@@ -216,12 +217,112 @@ export default class ZenbujiExtension extends Extension {
         // The global selection hotkey (Super+J) is a GNOME custom keybinding set
         // up by install.sh — it works without the extension and avoids a
         // double-binding conflict, so it is intentionally not registered here.
+
+        // Keep a fullscreen game alive when a zenbuji popup appears over it (see
+        // _onWindowCreated). Without the extension enabled the popup is just a
+        // normal focus-stealing window, so this is a best-effort enhancement.
+        this._windowCreatedId = global.display.connect(
+            'window-created', this._onWindowCreated.bind(this));
     }
 
     disable() {
+        if (this._windowCreatedId) {
+            global.display.disconnect(this._windowCreatedId);
+            this._windowCreatedId = null;
+        }
         this._indicator?.destroy();
         this._indicator = null;
         this._settings = null;
+    }
+
+    // The id GTK sets on the popup / dictionary / practice windows (Wayland),
+    // matching the Adw.Application id used by the CLI.
+    static APP_ID = 'com.meeksi39.zenbuji';
+
+    _findFullscreenWindow() {
+        // A Proton/Wine fullscreen window is still in the tab list (and still
+        // reports fullscreen) even after it minimises itself on focus loss.
+        const wins = global.display.get_tab_list(Meta.TabList.NORMAL_ALL, null);
+        for (const w of wins) {
+            try {
+                if (w.is_fullscreen())
+                    return w;
+            } catch (_e) { /* window vanished */ }
+        }
+        return null;
+    }
+
+    _isZenbujiWindow(win) {
+        try {
+            if (win.get_gtk_application_id?.() === ZenbujiExtension.APP_ID)
+                return true;
+        } catch (_e) { /* not a GTK/Wayland window */ }
+        try {
+            return win.get_wm_class?.() === ZenbujiExtension.APP_ID;
+        } catch (_e) {
+            return false;
+        }
+    }
+
+    // A zenbuji window (popup/dictionary/practice) just appeared. If a fullscreen
+    // window is underneath — typically a Proton/Wine game, which minimises itself
+    // the moment it loses focus — move the popup onto a different monitor (so the
+    // game stays visible) and hand focus back to the game so it isn't left
+    // minimised. The popup stays on top but unfocused; OCR popups don't
+    // close-on-focus-loss, so the result remains readable while you keep playing.
+    _onWindowCreated(_display, win) {
+        if (!this._isZenbujiWindow(win))
+            return;
+
+        const game = this._findFullscreenWindow();
+        if (!game)
+            return; // ordinary desktop use — let the popup behave normally
+
+        const gameMonitor = game.get_monitor();
+
+        const reposition = () => {
+            try {
+                const nMonitors = global.display.get_n_monitors();
+                if (nMonitors > 1) {
+                    let target = -1;
+                    for (let i = 0; i < nMonitors; i++) {
+                        if (i !== gameMonitor) { target = i; break; }
+                    }
+                    if (target >= 0 && win.get_monitor() !== target)
+                        win.move_to_monitor(target);
+                }
+                win.make_above();
+                if (game.minimized)
+                    game.unminimize();
+                game.activate(global.get_current_time());
+            } catch (e) {
+                logError(e, 'zenbuji: repositioning popup over fullscreen window');
+            }
+        };
+
+        // Restore the game once more when the popup is dismissed, in case the
+        // user focused the popup (to correct OCR text) and the game minimised
+        // itself again.
+        win.connect('unmanaged', () => {
+            try {
+                if (game.minimized)
+                    game.unminimize();
+                game.activate(global.get_current_time());
+            } catch (_e) { /* game closed in the meantime */ }
+        });
+
+        const actor = win.get_compositor_private();
+        if (actor) {
+            const id = actor.connect('first-frame', () => {
+                actor.disconnect(id);
+                reposition();
+            });
+        } else {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+                reposition();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
     }
 
     cliArgv(args) {

@@ -1314,6 +1314,14 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
     close_on_focus_loss = bool(cfg.get("popup_close_on_focus_loss", True))
     char_limit = int(cfg.get("translation_char_limit", 200) or 200)
 
+    # OCR popups always persist until Escape/closed: you read and often correct
+    # the recognised text, and the zenbuji extension hands focus back to a
+    # fullscreen game underneath (which would otherwise dismiss the popup the
+    # instant it appears). Close-on-focus-loss only makes sense for the quick
+    # selection HUD.
+    if ocr_image:
+        close_on_focus_loss = False
+
     def quota_fn():
         # Background DeepL quota for the popup's small status node; None when no
         # key (the popup then hides the node).
