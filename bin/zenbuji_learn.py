@@ -177,6 +177,66 @@ def _play_correct_sound():
         _SOUND_CTX = False
 
 
+def _ime_switcher():
+    """Best-effort input-source switching for the quiz fields.
+
+    On GNOME the active input source is the ``current`` index into
+    ``org.gnome.desktop.input-sources`` ``sources``; gnome-shell switches live
+    when it changes. We pick the first kana-capable IBus engine (mozc/anthy/…)
+    for the reading field and the first latin layout (xkb or mozc-off) for the
+    translation field. Returns ``(to_kana, to_latin, restore)`` callables;
+    ``restore`` puts back the source that was active when the quiz opened. When
+    GNOME or a suitable source is missing they are no-ops, so other setups keep
+    their system default and nothing breaks.
+    """
+    noop = (lambda: None, lambda: None, lambda: None)
+    try:
+        schema_id = "org.gnome.desktop.input-sources"
+        src = Gio.SettingsSchemaSource.get_default()
+        if src is None or src.lookup(schema_id, True) is None:
+            return noop
+        ime = Gio.Settings.new(schema_id)
+        sources = ime.get_value("sources")  # a(ss): (type, id)
+    except Exception:
+        return noop
+
+    kana_idx = latin_idx = None
+    # Engines that actually produce kana — skip mozc-off and plain xkb:jp,
+    # which are latin layouts despite the Japanese label.
+    kana_hint = ("mozc-on", "mozc-jp", "mozc", "anthy", "kkc", "skk", "kana")
+    for i in range(sources.n_children()):
+        typ, ident = sources.get_child_value(i).unpack()
+        low = ident.lower()
+        is_kana = (typ == "ibus" and "off" not in low
+                   and "xkb" not in low
+                   and any(h in low for h in kana_hint))
+        if is_kana:
+            if kana_idx is None:
+                kana_idx = i
+        elif latin_idx is None:
+            latin_idx = i
+
+    def make(idx):
+        if idx is None:
+            return lambda: None
+
+        def switch():
+            try:
+                if ime.get_uint("current") != idx:
+                    ime.set_uint("current", idx)
+            except Exception:
+                pass
+
+        return switch
+
+    try:
+        original = ime.get_uint("current")
+    except Exception:
+        original = None
+
+    return make(kana_idx), make(latin_idx), make(original)
+
+
 def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                   ui_language="en", grade_fn, review_fn, speak_fn=None,
                   auto_speak=False, greeting=True) -> int:
@@ -204,6 +264,11 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             card_box.append(msg)
             win.present()
             return
+
+        # Best-effort: hiragana IME on the reading field, latin on translation;
+        # put the user's original input source back when the quiz closes.
+        to_kana, to_latin, restore_ime = _ime_switcher()
+        win.connect("close-request", lambda *_a: (restore_ime(), False)[1])
 
         progress = Gtk.ProgressBar()
         card_box.append(progress)
@@ -291,11 +356,19 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 hint.set_visible(False)
 
             clear_phase()
+
+            def on_field_focus(entry, switch):
+                ctl = Gtk.EventControllerFocus()
+                ctl.connect("enter", lambda *_a: switch())
+                entry.add_controller(ctl)
+
             reading_entry = Gtk.Entry(placeholder_text=t("reading"))
+            on_field_focus(reading_entry, to_kana)
             phase.append(reading_entry)
             trans_entry = None
             if not show_translation:
                 trans_entry = Gtk.Entry(placeholder_text=t("translation"))
+                on_field_focus(trans_entry, to_latin)
                 phase.append(trans_entry)
             check_btn = Gtk.Button(label=t("check"))
             check_btn.add_css_class("zenbuji-action")
