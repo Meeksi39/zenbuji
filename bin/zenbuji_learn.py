@@ -401,12 +401,30 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 up.set_can_target(False)
                 _fade_overlay(up, 1300)
 
-        hint = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
-        hint.add_css_class("zenbuji-hint")
-        hint.set_max_width_chars(40)
+        # Translation hint: one label per language, divided by a vrule so the
+        # EN / DE glosses read as clearly separate (not run together by spaces).
+        hint = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        hint.set_halign(Gtk.Align.CENTER)
         hint.set_margin_top(4)
         hint.set_margin_bottom(6)
         card_box.append(hint)
+
+        def set_hint(values):
+            child = hint.get_first_child()
+            while child is not None:
+                hint.remove(child)
+                child = hint.get_first_child()
+            for i, val in enumerate(values):
+                if i:
+                    sep = Gtk.Box()
+                    sep.add_css_class("zenbuji-vrule")
+                    sep.set_margin_top(2)
+                    sep.set_margin_bottom(2)
+                    hint.append(sep)
+                lbl = Gtk.Label(label=val)
+                lbl.add_css_class("zenbuji-hint")
+                hint.append(lbl)
+            hint.set_visible(bool(values))
 
         # Phase area, rebuilt for question vs reveal vs summary.
         phase = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -449,8 +467,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             kanji.set_text(cur["text"])
             if show_translation:
                 vals = [cur["translations"].get(l) for l in languages]
-                hint.set_text("   ".join(v for v in vals if v))
-                hint.set_visible(True)
+                set_hint([v for v in vals if v])
             else:
                 hint.set_visible(False)
 
