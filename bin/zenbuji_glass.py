@@ -116,6 +116,35 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     font-size: 88px; font-weight: 800; color: #2ec27e;
     text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
 }
+/* Level-up flourish on a card that graduated to a higher SRS level. */
+.zenbuji-levelup {
+    font-size: 30px; font-weight: 800; color: #f5c211;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+}
+.zenbuji-levelup-note { font-size: 14px; font-weight: 700; color: #f5c211; }
+
+/* --- SRS level badges (shared: stats / dictionary / quiz) --- */
+/* A small rounded chip; each level gets a distinct, legible colour. */
+.zenbuji-level {
+    font-size: 11px; font-weight: 700; color: #ffffff;
+    border-radius: 8px; padding: 1px 8px; min-width: 56px;
+}
+.zenbuji-level-new      { background-color: #5b6066; }
+.zenbuji-level-learning { background-color: #c08a1e; }
+.zenbuji-level-young    { background-color: #1c71d8; }
+.zenbuji-level-mature   { background-color: #21915c; }
+
+/* --- statistics window --- */
+.zenbuji-stat-num { font-size: 22px; font-weight: 700; }
+.zenbuji-stat-label { font-size: 10px; opacity: 0.6; }
+.zenbuji-level-bar trough, .zenbuji-level-bar block {
+    border-radius: 5px; min-height: 8px;
+}
+.zenbuji-level-bar block.filled { background-color: @accent_bg_color; }
+.zenbuji-activity-bar {
+    background-color: @accent_bg_color; border-radius: 3px; min-width: 6px;
+}
+.zenbuji-activity-empty { background-color: alpha(currentColor, 0.12); }
 """
 
 _CSS_INSTALLED = False

@@ -38,6 +38,7 @@ const UI_JA = {
     'Add screen region to dictionary (OCR)': '画面領域を辞書に追加（OCR）',
     'Dictionary': '辞書',
     'Practice (SRS)': '練習（SRS）',
+    'Statistics': '統計',
     'Start VOICEVOX': 'VOICEVOX を起動',
     'Starting VOICEVOX…': 'VOICEVOX を起動中…',
     'Settings…': '設定…',
@@ -128,6 +129,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
         const learnItem = new PopupMenu.PopupMenuItem(_('Practice (SRS)'));
         learnItem.connect('activate', () => this._extension.openLearning());
         this.menu.addMenuItem(learnItem);
+
+        const statsItem = new PopupMenu.PopupMenuItem(_('Statistics'));
+        statsItem.connect('activate', () => this._extension.openStatistics());
+        this.menu.addMenuItem(statsItem);
 
         if (this._extension.voicevoxAvailable()) {
             const vvItem = new PopupMenu.PopupMenuItem(_('Start VOICEVOX'));
@@ -412,6 +417,10 @@ export default class ZenbujiExtension extends Extension {
 
     openLearning() {
         this._spawnPopup(['learn']);
+    }
+
+    openStatistics() {
+        this._spawnPopup(['stats']);
     }
 
     _spawnPopup(args) {

@@ -167,6 +167,19 @@ and "Got it" is pre-selected, miss it and "Missed" is. The correct reading is re
 greeting from ずんだもん — cute, silly, or a little bit cursed — and waves you off with a
 matching goodbye at the end. Switch it off if it's not your thing.
 
+Each card shows its **current level** while you practice, and when a correct answer bumps a
+word up a level (New → Learning → Young → Mature) you get a **"Level up!"** flourish — the
+summary tallies how many words graduated that round.
+
+### Statistics
+
+See how the learning is actually going. **Statistics** (`zenbuji stats`, the top-bar menu,
+the 📊 button in the dictionary, or **View stats** on a finished round) opens a frosted-glass
+overview: how many words sit at each level, how many are due today, your overall accuracy and
+**day streak** 🔥, a 14-day activity strip, and the words you miss the most. The streak and
+activity graph build up from your daily reviews (logged to
+`~/.local/share/zenbuji/activity.json`).
+
 - `--learn-show-translation on|off` — show the meaning as a hint (test only the reading) vs. hide it (test reading **and** translation)
 - `--learn-on-login on|off` — auto-open a round once a day on login (off by default — opt in if you want the daily nudge)
 - `--learn-greeting on|off` — the random opening greeting (on by default)
@@ -233,6 +246,7 @@ zenbuji popup 速い                # GTK popup window
 zenbuji ocr                       # capture a screen region and OCR it
 zenbuji dict                      # open the local dictionary window
 zenbuji learn                     # spaced-repetition practice over the cache
+zenbuji stats                     # learning statistics (add --json for scripting)
 zenbuji speak こんにちは            # read text aloud (VOICEVOX / system voice)
 zenbuji voices                    # list available VOICEVOX speakers
 zenbuji voicevox start            # start the local VOICEVOX engine (stop/restart/status too)

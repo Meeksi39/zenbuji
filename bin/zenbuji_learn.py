@@ -51,6 +51,9 @@ LEARN_STRINGS = {
     "done":         {"en": "Done!",           "ja": "完了！"},
     "again":        {"en": "Practice again",  "ja": "もう一度"},
     "close":        {"en": "Close",           "ja": "閉じる"},
+    "view_stats":   {"en": "View stats",      "ja": "統計を見る"},
+    "level_up":     {"en": "Level up!",       "ja": "レベルアップ！"},
+    "leveled_up":   {"en": "{n} leveled up!", "ja": "{n} 個レベルアップ！"},
     "empty":        {"en": "No words to practise yet — look up some Japanese first.",
                      "ja": "練習する単語がありません。まず日本語を調べてください。"},
 }
@@ -59,6 +62,16 @@ STATUS_NAMES = {
     "en": {"new": "New", "learning": "Learning", "young": "Young", "mature": "Mature"},
     "ja": {"new": "新規", "learning": "学習中", "young": "定着中", "mature": "習得"},
 }
+
+# Learning levels, lowest→highest — used to detect when a card graduates.
+LEVEL_ORDER = ("new", "learning", "young", "mature")
+
+
+def _level_rank(level: str) -> int:
+    try:
+        return LEVEL_ORDER.index(level)
+    except ValueError:
+        return 0
 
 # Casual Japanese "let's start" greetings shown (and spoken, if TTS auto-read is
 # on) when a practice round opens — a random one each time. A spread of cute,
@@ -153,6 +166,14 @@ def _spawn_learn():
     cli = str(Path(__file__).resolve().parent / "zenbuji.py")
     try:
         subprocess.Popen([sys.executable, cli, "learn"], start_new_session=True)
+    except OSError:
+        pass
+
+
+def _spawn_stats():
+    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    try:
+        subprocess.Popen([sys.executable, cli, "stats"], start_new_session=True)
     except OSError:
         pass
 
@@ -331,25 +352,42 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         kanji.set_max_width_chars(16)
         kanji.set_margin_top(8)
         kanji.set_margin_bottom(8)
+        # The card's current SRS level, shown as a chip under the counter row.
+        level_badge = Gtk.Label()
+        level_badge.add_css_class("zenbuji-level")
+        level_badge.set_halign(Gtk.Align.CENTER)
+        level_badge.set_margin_top(2)
+        card_box.append(level_badge)
+
         # Overlay hosts the transient celebration mark on a correct answer.
         kanji_overlay = Gtk.Overlay()
         kanji_overlay.set_child(kanji)
         card_box.append(kanji_overlay)
 
-        def celebrate():
+        def _fade_overlay(widget, duration):
+            kanji_overlay.add_overlay(widget)
+            target = Adw.CallbackAnimationTarget.new(widget.set_opacity)
+            anim = Adw.TimedAnimation.new(widget, 1.0, 0.0, duration, target)
+            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+            anim.connect("done", lambda *_a: kanji_overlay.remove_overlay(widget))
+            state.setdefault("_anims", []).append(anim)  # keep refs alive
+            anim.play()
+
+        def celebrate(levelup=False):
             _play_correct_sound()
             mark = Gtk.Label(label="✓")
             mark.add_css_class("zenbuji-celebrate")
             mark.set_halign(Gtk.Align.CENTER)
             mark.set_valign(Gtk.Align.CENTER)
             mark.set_can_target(False)
-            kanji_overlay.add_overlay(mark)
-            target = Adw.CallbackAnimationTarget.new(lambda v: mark.set_opacity(v))
-            anim = Adw.TimedAnimation.new(mark, 1.0, 0.0, 700, target)
-            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-            anim.connect("done", lambda *_a: kanji_overlay.remove_overlay(mark))
-            state["_anim"] = anim  # keep a ref so it isn't GC'd mid-play
-            anim.play()
+            _fade_overlay(mark, 700)
+            if levelup:
+                up = Gtk.Label(label=f"⬆ {t('level_up')}")
+                up.add_css_class("zenbuji-levelup")
+                up.set_halign(Gtk.Align.CENTER)
+                up.set_valign(Gtk.Align.END)
+                up.set_can_target(False)
+                _fade_overlay(up, 1300)
 
         hint = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
         hint.add_css_class("zenbuji-hint")
@@ -377,6 +415,12 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             greet_lbl.set_visible(greeting and bool(GREETINGS)
                                   and state["idx"] == 0)
             cur = cards[state["idx"]]
+            lvl = cur.get("status") or "new"
+            for l in LEVEL_ORDER:
+                level_badge.remove_css_class(f"zenbuji-level-{l}")
+            level_badge.add_css_class(f"zenbuji-level-{lvl}")
+            level_badge.set_text(status_names.get(lvl, lvl))
+            level_badge.set_visible(True)
             kanji.set_text(cur["text"])
             if show_translation:
                 vals = [cur["translations"].get(l) for l in languages]
@@ -494,14 +538,19 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 pass
 
         def finalize(cur, correct):
+            old_status = cur.get("status", "")
             info = review_fn(cur["text"], correct) or {}
+            new_status = info.get("status", old_status)
+            leveled_up = (correct
+                          and _level_rank(new_status) > _level_rank(old_status))
             if correct:
                 state["score"] += 1
-                celebrate()
+                celebrate(levelup=leveled_up)
             state["results"].append({
                 "text": cur["text"],
                 "correct": correct,
-                "status": info.get("status", cur.get("status", "")),
+                "status": new_status,
+                "leveled_up": leveled_up,
             })
             state["idx"] += 1
             if state["idx"] < total:
@@ -515,6 +564,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             score_lbl.set_text(f"{t('score')} {state['score']} / {total}")
             kanji.set_text(t("done"))
             hint.set_visible(False)
+            level_badge.set_visible(False)
+            n_up = sum(1 for r in state["results"] if r.get("leveled_up"))
             # A random casual goodbye to send you off (spoken too, if enabled).
             if greeting and FAREWELLS:
                 bye = random.choice(FAREWELLS)
@@ -537,22 +588,36 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 line.set_max_width_chars(40)
                 mark = "✓" if r["correct"] else "✗"
                 stname = status_names.get(r["status"], r["status"])
-                line.set_text(f"{mark}  {r['text']}   ·   {stname}")
+                up = "  ⬆" if r.get("leveled_up") else ""
+                line.set_text(f"{mark}  {r['text']}   ·   {stname}{up}")
                 line.add_css_class("zenbuji-correct" if r["correct"]
                                    else "zenbuji-wrong")
                 lst.append(line)
             scroll.set_child(lst)
             phase.append(scroll)
 
+            # Celebrate any cards that graduated a level this round.
+            if n_up:
+                up_lbl = Gtk.Label(label=f"⬆ {t('leveled_up').format(n=n_up)}",
+                                   justify=Gtk.Justification.CENTER)
+                up_lbl.add_css_class("zenbuji-levelup-note")
+                up_lbl.set_halign(Gtk.Align.CENTER)
+                up_lbl.set_margin_top(4)
+                phase.append(up_lbl)
+
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                           homogeneous=True)
             again = Gtk.Button(label=t("again"))
             again.add_css_class("zenbuji-action")
             again.connect("clicked", lambda _b: (_spawn_learn(), win.close()))
+            stats = Gtk.Button(label=t("view_stats"))
+            stats.add_css_class("zenbuji-secondary")
+            stats.connect("clicked", lambda _b: (_spawn_stats(), win.close()))
             close = Gtk.Button(label=t("close"))
             close.add_css_class("zenbuji-secondary")
             close.connect("clicked", lambda _b: win.close())
             row.append(close)
+            row.append(stats)
             row.append(again)
             phase.append(row)
 

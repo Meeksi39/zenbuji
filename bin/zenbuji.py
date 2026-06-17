@@ -43,6 +43,8 @@ HISTORY_PATH = DATA_DIR / "history.json"
 DICT_PATH = DATA_DIR / "dictionary.json"
 # Spaced-repetition learning state, keyed by text (see the SRS section).
 SRS_PATH = DATA_DIR / "srs.json"
+# Daily review tallies for the statistics window (streak + recent activity).
+ACTIVITY_PATH = DATA_DIR / "activity.json"
 # Date-stamp so the "open on login" autostart fires at most once per day.
 LAST_LEARN_PATH = DATA_DIR / "last_learn.txt"
 AUTOSTART_PATH = Path(
@@ -340,6 +342,7 @@ def srs_review(text: str, correct: bool) -> dict:
     s["due"] = (now + timedelta(days=interval)).isoformat(timespec="seconds")
     data[text] = s
     save_srs(data)
+    log_activity(correct)
     return s
 
 
@@ -371,6 +374,160 @@ def srs_select(limit: int = 10) -> list:
             "status": srs_status(st),
         })
     return cards
+
+
+# --- Daily activity log (powers the statistics streak + recent graph) ------ #
+def load_activity() -> dict:
+    """Per-day review tallies: {"YYYY-MM-DD": {"reviews": int, "correct": int}}."""
+    try:
+        if ACTIVITY_PATH.exists():
+            data = json.loads(ACTIVITY_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def save_activity(data: dict) -> None:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        ACTIVITY_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def log_activity(correct: bool) -> None:
+    """Record one review against today's tally (called from srs_review)."""
+    data = load_activity()
+    today = datetime.now().date().isoformat()
+    day = data.get(today) or {"reviews": 0, "correct": 0}
+    day["reviews"] = int(day.get("reviews", 0)) + 1
+    if correct:
+        day["correct"] = int(day.get("correct", 0)) + 1
+    data[today] = day
+    save_activity(data)
+
+
+def activity_streak(data: dict | None = None) -> int:
+    """Consecutive days with at least one review, counting back from today.
+
+    Today not yet practised doesn't break the streak — we start from yesterday
+    in that case so an unfinished day still shows the run you're on.
+    """
+    if data is None:
+        data = load_activity()
+    today = datetime.now().date()
+    cur = today
+    if data.get(today.isoformat(), {}).get("reviews", 0) <= 0:
+        cur = today - timedelta(days=1)
+    streak = 0
+    while data.get(cur.isoformat(), {}).get("reviews", 0) > 0:
+        streak += 1
+        cur -= timedelta(days=1)
+    return streak
+
+
+def activity_recent(days: int = 14, data: dict | None = None) -> list:
+    """The last `days` days (oldest→newest) as {date, reviews, correct}."""
+    if data is None:
+        data = load_activity()
+    today = datetime.now().date()
+    out = []
+    for i in range(days - 1, -1, -1):
+        d = (today - timedelta(days=i)).isoformat()
+        day = data.get(d, {})
+        out.append({"date": d,
+                    "reviews": int(day.get("reviews", 0)),
+                    "correct": int(day.get("correct", 0))})
+    return out
+
+
+def _due_date(iso: str):
+    """Parse an SRS due/last-reviewed ISO stamp to a date, or None."""
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso).date()
+    except ValueError:
+        return None
+
+
+def srs_summary(text: str, srs: dict | None = None) -> dict | None:
+    """Compact per-card SRS info for the dictionary rows, or None if unstudied."""
+    st = (srs if srs is not None else load_srs()).get(text.strip())
+    if not st:
+        return None
+    return {
+        "level": srs_status(st),
+        "due": st.get("due"),
+        "correct": int(st.get("correct", 0)),
+        "wrong": int(st.get("wrong", 0)),
+    }
+
+
+def srs_stats() -> dict:
+    """Aggregate the whole learning state for the statistics window."""
+    d = load_dict()
+    srs = load_srs()
+    today = datetime.now().date()
+
+    by_level = {"new": 0, "learning": 0, "young": 0, "mature": 0}
+    total = reviewed = due_now = due_today = 0
+    for text, e in d.items():
+        if not e.get("reading"):
+            continue
+        if not any((e.get("translations") or {}).values()):
+            continue
+        total += 1
+        st = srs.get(text)
+        by_level[srs_status(st)] += 1
+        if st and st.get("last_reviewed"):
+            reviewed += 1
+        due = _due_date((st or {}).get("due"))
+        if due is not None and due <= today:
+            due_today += 1
+            if (st or {}).get("interval", 0) == 0 or due < today:
+                due_now += 1
+
+    reviews_total = correct_total = wrong_total = lapses_total = 0
+    hardest = []
+    for text, st in srs.items():
+        c, w = int(st.get("correct", 0)), int(st.get("wrong", 0))
+        correct_total += c
+        wrong_total += w
+        reviews_total += c + w
+        lapses_total += int(st.get("lapses", 0))
+        if w or int(st.get("lapses", 0)):
+            e = d.get(text, {})
+            hardest.append({"text": text, "reading": e.get("reading", ""),
+                            "lapses": int(st.get("lapses", 0)),
+                            "wrong": w, "correct": c})
+    hardest.sort(key=lambda h: (h["lapses"], h["wrong"]), reverse=True)
+
+    activity = load_activity()
+    today_day = activity.get(today.isoformat(), {})
+    accuracy = (correct_total / reviews_total) if reviews_total else None
+    return {
+        "total": total,
+        "reviewed": reviewed,
+        "by_level": by_level,
+        "due_now": due_now,
+        "due_today": due_today,
+        "reviews_total": reviews_total,
+        "correct_total": correct_total,
+        "wrong_total": wrong_total,
+        "accuracy": accuracy,
+        "lapses_total": lapses_total,
+        "hardest": hardest[:5],
+        "streak": activity_streak(activity),
+        "today_reviews": int(today_day.get("reviews", 0)),
+        "today_correct": int(today_day.get("correct", 0)),
+        "recent": activity_recent(14, activity),
+    }
 
 
 # --- Answer grading ------------------------------------------------------- #
@@ -1143,6 +1300,7 @@ Usage:
   zenbuji add <words…>        Translate & store words in the dictionary, no GUI
   zenbuji dict                Open the local dictionary (cached DeepL lookups)
   zenbuji learn               Practice cached words (spaced repetition quiz)
+  zenbuji stats               Show learning statistics (--json for machines)
   zenbuji speak [text]        Read text aloud (reads the selection if no text)
   zenbuji voices              List local VOICEVOX speakers (--json for machines)
   zenbuji voicevox [start|stop|restart|status]   Control the VOICEVOX engine
@@ -1504,7 +1662,7 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models", "usage", "ocr", "dict", "learn", "add",
+        "config", "models", "usage", "ocr", "dict", "learn", "stats", "add",
         "speak", "voices", "voicevox",
     }
 
@@ -1660,6 +1818,16 @@ def main(argv=None) -> int:
                 pass
         return launch_learning(cfg)
 
+    if command == "stats":
+        p = argparse.ArgumentParser(prog="zenbuji stats")
+        p.add_argument("--json", action="store_true",
+                       help="print the statistics as JSON")
+        a = p.parse_args(rest)
+        if a.json:
+            print(json.dumps(srs_stats(), ensure_ascii=False))
+            return 0
+        return launch_stats(cfg)
+
     # Shared options for the text commands.
     p = argparse.ArgumentParser(prog=f"zenbuji {command}", add_help=False)
     p.add_argument("--lang")
@@ -1807,10 +1975,22 @@ def launch_dictionary(cfg: dict) -> int:
         fresh = translate_deepl(text, targets, key, lang)
         return dict_record(text, reading, fresh)
 
+    def load_dict_with_srs():
+        """Dictionary entries annotated with their SRS summary (level/due/…).
+
+        Used only by the dict window so each row can show its learning level;
+        `load_dict` itself stays SRS-free for every other caller.
+        """
+        srs = load_srs()
+        data = load_dict()
+        for text, entry in data.items():
+            entry["srs"] = srs_summary(text, srs)
+        return data
+
     return show_dictionary(
         ui_language=cfg.get("ui_language", "en"),
         languages=cfg.get("languages", ["en", "de"]),
-        load_fn=load_dict,
+        load_fn=load_dict_with_srs,
         delete_fn=dict_delete,
         clear_fn=clear_dict,
         stats_fn=dict_stats,
@@ -1818,6 +1998,21 @@ def launch_dictionary(cfg: dict) -> int:
         quota_fn=lambda: (deepl_usage(cfg.get("deepl_api_key", ""))
                           if cfg.get("deepl_api_key") else None),
         speak_fn=lambda t: speak(t, cfg),
+    )
+
+
+def launch_stats(cfg: dict) -> int:
+    """Show the SRS statistics window."""
+    try:
+        from zenbuji_stats import show_statistics
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from zenbuji_stats import show_statistics
+
+    return show_statistics(
+        ui_language=cfg.get("ui_language", "en"),
+        languages=cfg.get("languages", ["en", "de"]),
+        stats_fn=srs_stats,
     )
 
 
