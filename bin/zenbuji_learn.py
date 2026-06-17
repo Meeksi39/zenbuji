@@ -177,64 +177,94 @@ def _play_correct_sound():
         _SOUND_CTX = False
 
 
-def _ime_switcher():
-    """Best-effort input-source switching for the quiz fields.
+def _resolve_xkb_engine(bus, gnome_id):
+    """Map a GNOME xkb source id (e.g. ``de`` / ``de+nodeadkeys``) to its IBus
+    engine name (e.g. ``xkb:de::deu``)."""
+    layout, _, variant = gnome_id.partition("+")
+    try:
+        for e in bus.list_engines():
+            name = e.get_name()
+            if not name.startswith("xkb:"):
+                continue
+            parts = name.split(":")
+            if len(parts) >= 3 and parts[1] == layout and parts[2] == variant:
+                return name
+    except Exception:
+        pass
+    return None
 
-    On GNOME the active input source is the ``current`` index into
-    ``org.gnome.desktop.input-sources`` ``sources``; gnome-shell switches live
-    when it changes. We pick the first kana-capable IBus engine (mozc/anthy/…)
-    for the reading field and the first latin layout (xkb or mozc-off) for the
-    translation field. Returns ``(to_kana, to_latin, restore)`` callables;
-    ``restore`` puts back the source that was active when the quiz opened. When
-    GNOME or a suitable source is missing they are no-ops, so other setups keep
-    their system default and nothing breaks.
+
+def _ime_switcher():
+    """Best-effort input-method switching for the quiz fields.
+
+    Setting ``org.gnome.desktop.input-sources current`` does NOT make
+    gnome-shell switch the live engine, so we drive IBus directly:
+    ``Bus.set_global_engine`` actually swaps the active engine for the focused
+    window. We pick the first kana-capable IBus engine (mozc/anthy/…) for the
+    reading field and a latin layout for the translation field, both resolved
+    from the user's configured GNOME sources. Returns ``(to_kana, to_latin,
+    restore)`` callables; ``restore`` puts back whatever engine was active when
+    the quiz opened. When IBus or a suitable engine is missing they are no-ops,
+    so other setups keep their default and nothing breaks.
     """
     noop = (lambda: None, lambda: None, lambda: None)
     try:
-        schema_id = "org.gnome.desktop.input-sources"
-        src = Gio.SettingsSchemaSource.get_default()
-        if src is None or src.lookup(schema_id, True) is None:
+        gi.require_version("IBus", "1.0")
+        from gi.repository import IBus
+        IBus.init()
+        bus = IBus.Bus()
+        if not bus.is_connected():
             return noop
-        ime = Gio.Settings.new(schema_id)
-        sources = ime.get_value("sources")  # a(ss): (type, id)
+    except (ValueError, ImportError):
+        return noop
     except Exception:
         return noop
 
-    kana_idx = latin_idx = None
     # Engines that actually produce kana — skip mozc-off and plain xkb:jp,
-    # which are latin layouts despite the Japanese label.
+    # which are latin despite the Japanese label.
     kana_hint = ("mozc-on", "mozc-jp", "mozc", "anthy", "kkc", "skk", "kana")
-    for i in range(sources.n_children()):
-        typ, ident = sources.get_child_value(i).unpack()
-        low = ident.lower()
-        is_kana = (typ == "ibus" and "off" not in low
-                   and "xkb" not in low
-                   and any(h in low for h in kana_hint))
-        if is_kana:
-            if kana_idx is None:
-                kana_idx = i
-        elif latin_idx is None:
-            latin_idx = i
+    kana_engine = latin_engine = None
+    try:
+        schema_id = "org.gnome.desktop.input-sources"
+        ss = Gio.SettingsSchemaSource.get_default()
+        if ss is not None and ss.lookup(schema_id, True) is not None:
+            sources = Gio.Settings.new(schema_id).get_value("sources")
+            for i in range(sources.n_children()):
+                typ, ident = sources.get_child_value(i).unpack()  # (type, id)
+                low = ident.lower()
+                if (typ == "ibus" and "off" not in low and "xkb" not in low
+                        and any(h in low for h in kana_hint)):
+                    kana_engine = kana_engine or ident  # ibus id == engine name
+                elif typ == "xkb" and latin_engine is None:
+                    latin_engine = _resolve_xkb_engine(bus, ident)
+                elif (typ == "ibus" and latin_engine is None
+                        and ("off" in low or "xkb" in low)):
+                    latin_engine = ident
+    except Exception:
+        pass
 
-    def make(idx):
-        if idx is None:
+    try:
+        active = bus.get_global_engine()
+        original = active.get_name() if active is not None else None
+    except Exception:
+        original = None
+    # Fall back to the engine active at open (usually latin) if no xkb source.
+    if latin_engine is None:
+        latin_engine = original
+
+    def make(name):
+        if not name:
             return lambda: None
 
         def switch():
             try:
-                if ime.get_uint("current") != idx:
-                    ime.set_uint("current", idx)
+                bus.set_global_engine(name)
             except Exception:
                 pass
 
         return switch
 
-    try:
-        original = ime.get_uint("current")
-    except Exception:
-        original = None
-
-    return make(kana_idx), make(latin_idx), make(original)
+    return make(kana_engine), make(latin_engine), make(original)
 
 
 def show_learning(*, cards, show_translation=True, languages=("en", "de"),
