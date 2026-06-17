@@ -85,6 +85,10 @@ DEFAULT_CONFIG = {
     "tts": False,
     # Automatically read the reading aloud after a popup lookup (Super+J etc.).
     "tts_on_lookup": False,
+    # After a background OCR add (--speak), also read the English translation
+    # aloud, prefixed with 「英語で」 ("in English"). VOICEVOX is Japanese-only,
+    # so the English is approximated in katakana — fine as a vocab cue.
+    "tts_add_translation": False,
     "tts_engine": "auto",
     # Local VOICEVOX engine — natural Japanese neural TTS, run via podman (see
     # install.sh --voicevox). host:port of its HTTP API, and the speaker id.
@@ -1237,6 +1241,9 @@ def cmd_config(args, cfg) -> int:
     if args.tts_on_lookup:
         cfg["tts_on_lookup"] = args.tts_on_lookup == "on"
         changed = True
+    if args.tts_add_translation:
+        cfg["tts_add_translation"] = args.tts_add_translation == "on"
+        changed = True
     if args.tts_engine:
         cfg["tts_engine"] = args.tts_engine
         changed = True
@@ -1378,7 +1385,15 @@ def cmd_add(args, cfg) -> int:
             print(f"{mark} {text}{reading}" + (f" — {tr}" if tr else ""))
 
     if speak_on:
-        spoken = "、".join(r.reading or r.text for r in results if (r.reading or r.text))
+        speak_tr = bool(cfg.get("tts_add_translation", False))
+        chunks = []
+        for r in results:
+            jp = r.reading or r.text
+            if not jp:
+                continue
+            en = r.translations.get("en") if speak_tr else None
+            chunks.append(f"{jp}、英語で{en}" if en else jp)
+        spoken = "、".join(chunks)
         speak(spoken, cfg, block=True)  # wait, or this process exits mid-audio
 
     if args.json:
@@ -1487,6 +1502,9 @@ def main(argv=None) -> int:
         p.add_argument("--tts-on-lookup", dest="tts_on_lookup",
                        choices=["on", "off"],
                        help="read the reading aloud automatically after a popup lookup")
+        p.add_argument("--tts-add-translation", dest="tts_add_translation",
+                       choices=["on", "off"],
+                       help="after an OCR add, also speak the English translation (英語で…)")
         p.add_argument("--tts-engine", dest="tts_engine",
                        choices=["auto", "voicevox", "system", "command", "off"],
                        help="text-to-speech engine (default auto)")

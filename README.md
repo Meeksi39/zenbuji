@@ -270,6 +270,7 @@ zenbuji config --tts-engine voicevox    # auto | voicevox | system | command | o
 zenbuji config --voicevox-speaker 3     # voice id (see: zenbuji voices)
 zenbuji config --tts on                 # read words aloud after an OCR/silent add
 zenbuji config --tts-on-lookup on       # auto-read the reading after a popup lookup
+zenbuji config --tts-add-translation on # OCR add also speaks the English meaning (英語で…)
 zenbuji config --history off            # stop recording recent lookups
 zenbuji config --clear-history          # forget recorded lookups
 zenbuji usage                           # check the DeepL key + remaining quota

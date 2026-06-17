@@ -72,6 +72,9 @@ const UI_JA = {
     'Read aloud after a lookup': '検索後に読み上げる',
     'Speak the reading automatically when you look up a word (Super+J).':
         '単語を調べたとき（Super+J）に自動的に読みを読み上げます。',
+    'Also speak the English translation': '英語訳も読み上げる',
+    'After a background OCR add, read the English meaning too (英語で…).':
+        'バックグラウンドの OCR 追加の後、英語の意味も読み上げます（英語で…）。',
     'Read selection aloud': '選択を読み上げる',
     'Voice engine': '音声エンジン',
     'VOICEVOX gives natural Japanese; auto falls back to the system voice.':
@@ -478,6 +481,18 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         speechGroup.add(ttsLookupRow);
 
+        const ttsAddTrRow = new Adw.SwitchRow({
+            title: _('Also speak the English translation'),
+            subtitle: _('After a background OCR add, read the English meaning too (英語で…).'),
+        });
+        ttsAddTrRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--tts-add-translation', ttsAddTrRow.get_active() ? 'on' : 'off']);
+        });
+        speechGroup.add(ttsAddTrRow);
+
         const engineRow = new Adw.ComboRow({
             title: _('Voice engine'),
             subtitle: _('VOICEVOX gives natural Japanese; auto falls back to the system voice.'),
@@ -607,6 +622,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 cacheOfflineRow.set_active(cfg.cache_offline === true);
                 ttsRow.set_active(cfg.tts === true);
                 ttsLookupRow.set_active(cfg.tts_on_lookup === true);
+                ttsAddTrRow.set_active(cfg.tts_add_translation === true);
                 ttsCmdRow.set_text(cfg.tts_command || '');
                 const engIdx = TTS_ENGINES.indexOf(cfg.tts_engine || 'auto');
                 engineRow.selected = engIdx >= 0 ? engIdx : 0;
