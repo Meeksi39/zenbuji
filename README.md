@@ -187,6 +187,14 @@ available) and hit **Test**. Without VOICEVOX, zenbuji falls back to `spd-say`/`
 Engine and voice are configurable: `zenbuji config --tts-engine voicevox --voicevox-speaker 3`,
 list voices with `zenbuji voices`, or wire any command with `--tts-command '… {text}'`.
 
+<div align="center">
+
+<img src="docs/settings-speech.png" alt="zenbuji Speech settings — engine, voice, speed" width="420">
+
+<em>Learn with ずんだもん！</em>
+
+</div>
+
 Press **`Super+Shift+S`** to read the current selection aloud without a popup. Turn on
 **Read aloud after a lookup** (Settings ▸ Speech, or `zenbuji config --tts-on-lookup on`)
 to have `Super+J` speak the reading automatically every time you look something up.
