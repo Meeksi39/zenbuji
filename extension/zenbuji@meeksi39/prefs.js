@@ -104,6 +104,9 @@ const UI_JA = {
     'Dismiss the popup automatically when you click elsewhere.':
         '他の場所をクリックすると自動的に閉じます。',
     'Learning': '学習',
+    'Greeting when practice opens': '練習開始時のあいさつ',
+    'Show a random casual greeting (spoken too, if read-aloud is on).':
+        'ランダムなカジュアルなあいさつを表示します（読み上げが有効なら音声でも）。',
     'Show translation as a hint': '翻訳をヒントとして表示',
     'Show the meaning during practice (test only the reading).':
         '練習中に意味を表示します（読みのみ出題）。',
@@ -597,6 +600,18 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         learnGroup.add(learnLoginRow);
 
+        const learnGreetingRow = new Adw.SwitchRow({
+            title: _('Greeting when practice opens'),
+            subtitle: _('Show a random casual greeting (spoken too, if read-aloud is on).'),
+        });
+        learnGreetingRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--learn-greeting', learnGreetingRow.get_active() ? 'on' : 'off']);
+        });
+        learnGroup.add(learnGreetingRow);
+
         // --- Shortcuts ---------------------------------------------------- //
         const scGroup = new Adw.PreferencesGroup({
             title: _('Shortcuts'),
@@ -672,6 +687,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 charRow.set_value(cfg.translation_char_limit || 200);
                 learnHintRow.set_active(cfg.learn_show_translation !== false);
                 learnLoginRow.set_active(cfg.learn_on_login === true);
+                learnGreetingRow.set_active(cfg.learn_greeting !== false);
             } else if (err) {
                 trGroup.set_description(
                     _('Could not read zenbuji config — check the command in Advanced.'));

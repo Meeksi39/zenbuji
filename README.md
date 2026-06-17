@@ -161,8 +161,14 @@ next review drifts further out (New → Learning → Young → Mature), whiff it
 comes right back to haunt you. Each round pulls the most-due/new words (10 by default) and
 ends with a little summary.
 
+When the answer's revealed, the **Got it / Missed** default follows your *reading* — match it
+and "Got it" is pre-selected, miss it and "Missed" is. The correct reading is read aloud too
+(right or wrong) if you've got auto-read on. And every round opens with a random casual
+greeting from ずんだもん — cute, silly, or a little bit cursed — which you can switch off.
+
 - `--learn-show-translation on|off` — show the meaning as a hint (test only the reading) vs. hide it (test reading **and** translation)
 - `--learn-on-login on|off` — auto-open a round once a day on login (off by default — opt in if you want the daily nudge)
+- `--learn-greeting on|off` — the random opening greeting (on by default)
 
 ### Hear it spoken
 
@@ -269,6 +275,7 @@ zenbuji config --dictionary off         # stop caching DeepL translations
 zenbuji config --translation-char-limit 200   # max characters per lookup
 zenbuji config --learn-show-translation off   # quiz reading AND translation
 zenbuji config --learn-on-login on      # open a practice round once a day on login
+zenbuji config --learn-greeting off     # turn off the random opening greeting
 zenbuji config --tts-engine voicevox    # auto | voicevox | system | command | off
 zenbuji config --voicevox-speaker 3     # voice id (see: zenbuji voices)
 zenbuji config --tts-speed 0.9          # speaking rate, 1.0 = normal (0.5–2.0)

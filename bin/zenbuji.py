@@ -79,6 +79,9 @@ DEFAULT_CONFIG = {
     "learn_show_translation": True,
     "learn_on_login": False,
     "learn_count": 10,
+    # Show (and, with TTS auto-read on, speak) a random casual greeting when a
+    # practice round opens.
+    "learn_greeting": True,
     # Text-to-speech (read words aloud). Engine: "auto" (a local VOICEVOX engine
     # if it is reachable, else the system voice), "voicevox", "system"
     # (spd-say/espeak-ng), "command" (run tts_command), or "off".
@@ -1285,6 +1288,9 @@ def cmd_config(args, cfg) -> int:
         cfg["learn_on_login"] = args.learn_on_login == "on"
         changed = True
         _write_learn_autostart(args.learn_on_login == "on")
+    if args.learn_greeting:
+        cfg["learn_greeting"] = args.learn_greeting == "on"
+        changed = True
     if changed:
         save_config(cfg)
     if args.clear_history:
@@ -1541,6 +1547,9 @@ def main(argv=None) -> int:
                        choices=["on", "off"])
         p.add_argument("--learn-on-login", dest="learn_on_login",
                        choices=["on", "off"])
+        p.add_argument("--learn-greeting", dest="learn_greeting",
+                       choices=["on", "off"],
+                       help="show/speak a random greeting when practice opens")
         p.add_argument("--clear-history", action="store_true")
         p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
@@ -1806,6 +1815,8 @@ def launch_learning(cfg: dict) -> int:
         grade_fn=grade_fn,
         review_fn=review_fn,
         speak_fn=lambda t: speak(t, cfg),
+        auto_speak=bool(cfg.get("tts_on_lookup", False)),
+        greeting=bool(cfg.get("learn_greeting", True)),
     )
 
 

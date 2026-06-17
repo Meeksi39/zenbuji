@@ -13,6 +13,7 @@ All data/grading logic is injected by `launch_learning` in zenbuji.py:
 
 from __future__ import annotations
 
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -59,6 +60,55 @@ STATUS_NAMES = {
     "ja": {"new": "新規", "learning": "学習中", "young": "定着中", "mature": "習得"},
 }
 
+# Casual Japanese "let's start" greetings shown (and spoken, if TTS auto-read is
+# on) when a practice round opens — a random one each time. A spread of cute,
+# funny, and playfully-creepy, because ずんだもん should have range. Toggle with
+# the learn_greeting config / the prefs switch.
+GREETINGS = [
+    # — cute —
+    "やっほー！いっしょにがんばろうね！",
+    "きょうも勉強えらい！大好き！",
+    "さあ、はじめよう！きみならできるよ！",
+    "ふぁいと〜！むりはしないでね。",
+    "おかえり！待ってたよ〜。",
+    "いっしょに単語、おぼえよっ！",
+    "きみのやる気、サイコー！",
+    "ちょっとだけでも、えらいよ！",
+    "つぎの単語、いってみよ〜！",
+    "リラックスして、たのしくいこ！",
+    "きみのペースでいいんだよ。",
+    "ちいさな一歩が、大きな上達！",
+    "深呼吸して、いっぽずつね。",
+    "まちがえても大丈夫、それが勉強だよ。",
+    "さあ、ことばのぼうけんへ出発！",
+    "つかれたら、いつでも休んでいいからね。",
+    "いっしょなら、なんでもできる気がする！",
+    "今日のきみ、いつもよりかしこく見える！",
+    # — funny —
+    "さぼってないで、勉強の時間だよ！",
+    "ねむい？コーヒーでものんで、はじめよ！",
+    "逃げちゃだめだよ、単語が待ってる！",
+    "脳みそ、あたためていこ〜！",
+    "今日サボったら、明日の自分が泣くよ？",
+    "やる気スイッチ、ポチッとな！",
+    "漢字はともだち、こわくないよ…たぶん。",
+    "はい、言い訳タイムはおしまい！",
+    "勉強しないと、ずんだもんが食べちゃうぞ！",
+    "単語帳が「会いたい」って言ってるよ。",
+    "おはよ！…って、もう夜かな？まあいっか、勉強しよ！",
+    # — playfully creepy —
+    "ふふ…逃がさないよ。さあ、勉強しよ？",
+    "ずっと…見てたよ。べんきょうの時間だね。",
+    "きみの後ろにいるよ。ふりむかないで、勉強して。",
+    "まだ起きてるの？…ちょうどいい、勉強しよ。",
+    "その単語、おぼえるまで帰さないよ。",
+    "ねえ、いっしょにいようね。ずっと、ずっと。",
+    "暗いところで勉強するの、すきでしょ？",
+    "きみの夢に出てきちゃうかも。さあ、はじめよ。",
+    "一問まちがえるごとに、ちょっとずつ近づくよ…。",
+    "しずかに…単語が聞いてるよ。",
+]
+
 
 def _spawn_learn():
     cli = str(Path(__file__).resolve().parent / "zenbuji.py")
@@ -89,7 +139,8 @@ def _play_correct_sound():
 
 
 def show_learning(*, cards, show_translation=True, languages=("en", "de"),
-                  ui_language="en", grade_fn, review_fn, speak_fn=None) -> int:
+                  ui_language="en", grade_fn, review_fn, speak_fn=None,
+                  auto_speak=False, greeting=True) -> int:
     def t(key):
         e = LEARN_STRINGS.get(key, {})
         return e.get(ui_language) or e.get("en") or key
@@ -126,6 +177,20 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         status_row.append(counter)
         status_row.append(score_lbl)
         card_box.append(status_row)
+
+        # A random casual greeting when the round opens — shown on the first
+        # card, then it steps aside. Spoken too when TTS auto-read is on.
+        greet_lbl = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
+        greet_lbl.add_css_class("zenbuji-hint")
+        greet_lbl.set_max_width_chars(40)
+        card_box.append(greet_lbl)
+        if greeting and GREETINGS:
+            hello = random.choice(GREETINGS)
+            greet_lbl.set_text(hello)
+            if auto_speak and speak_fn is not None:
+                speak_fn(hello)
+        else:
+            greet_lbl.set_visible(False)
 
         kanji = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
         kanji.add_css_class("zenbuji-kanji")
@@ -175,6 +240,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
 
         def show_question():
             refresh_header()
+            greet_lbl.set_visible(greeting and bool(GREETINGS)
+                                  and state["idx"] == 0)
             cur = cards[state["idx"]]
             kanji.set_text(cur["text"])
             if show_translation:
@@ -207,7 +274,9 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
 
         def show_reveal(cur, reading_in, translation_in):
             res = grade_fn(cur, reading_in, translation_in)
-            auto = res["reading_ok"] and (res["translation_ok"] is not False)
+            # The reading (furigana) decides the default: "Got it" only when it
+            # actually matched, otherwise "Missed" is the primary/default button.
+            reading_ok = bool(res["reading_ok"])
             clear_phase()
 
             def verdict_row(label_text, ok, answer):
@@ -244,6 +313,10 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             else:
                 phase.append(verdict_row(t("reading_lbl"), res["reading_ok"],
                                          correct_reading))
+            # Read the correct reading aloud automatically (right or wrong) when
+            # TTS auto-read is enabled.
+            if auto_speak and speak_fn is not None and correct_reading:
+                speak_fn(correct_reading)
             phase.append(you_row(reading_in))
             for lang in languages:
                 val = res["correct_translations"].get(lang)
@@ -262,15 +335,21 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                            homogeneous=True)
             btns.set_margin_top(6)
             got = Gtk.Button(label=t("got_it"))
-            got.add_css_class("zenbuji-action")
             missed = Gtk.Button(label=t("missed"))
-            missed.add_css_class("zenbuji-secondary")
+            # Whichever matches the reading result is the primary/default button.
+            (got if reading_ok else missed).add_css_class("zenbuji-action")
+            (missed if reading_ok else got).add_css_class("zenbuji-secondary")
             got.connect("clicked", lambda _b: finalize(cur, True))
             missed.connect("clicked", lambda _b: finalize(cur, False))
             btns.append(missed)
             btns.append(got)
             phase.append(btns)
-            (got if auto else missed).grab_focus()
+            default_btn = got if reading_ok else missed
+            default_btn.grab_focus()
+            try:
+                win.set_default_widget(default_btn)
+            except Exception:  # noqa: BLE001 — focus alone is enough
+                pass
 
         def finalize(cur, correct):
             info = review_fn(cur["text"], correct) or {}
