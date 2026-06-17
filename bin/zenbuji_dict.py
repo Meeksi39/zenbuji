@@ -116,7 +116,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         title = Gtk.Label(label=t("title"), xalign=0)
         title.add_css_class("zenbuji-title")
         title.set_hexpand(True)
-        stats_btn = Gtk.Button(label=f"📊 {t('stats')}")
+        stats_btn = Gtk.Button(label=t("stats"))
         stats_btn.add_css_class("zenbuji-secondary")
         stats_btn.set_valign(Gtk.Align.CENTER)
         stats_btn.set_tooltip_text(t("stats"))

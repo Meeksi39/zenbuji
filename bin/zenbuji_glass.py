@@ -135,16 +135,15 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-level-mature   { background-color: #21915c; }
 
 /* --- statistics window --- */
-.zenbuji-stat-num { font-size: 22px; font-weight: 700; }
-.zenbuji-stat-label { font-size: 10px; opacity: 0.6; }
-.zenbuji-level-bar trough, .zenbuji-level-bar block {
-    border-radius: 5px; min-height: 8px;
+.zenbuji-stat-num { font-size: 27px; font-weight: 700; }
+.zenbuji-stat-num-accent { color: @accent_color; }
+.zenbuji-stat-label {
+    font-size: 10px; font-weight: 600; opacity: 0.55; letter-spacing: 0.04em;
 }
-.zenbuji-level-bar block.filled { background-color: @accent_bg_color; }
-.zenbuji-activity-bar {
-    background-color: @accent_bg_color; border-radius: 3px; min-width: 6px;
-}
-.zenbuji-activity-empty { background-color: alpha(currentColor, 0.12); }
+/* Thin vertical divider between the hero stats. */
+.zenbuji-vrule { min-width: 1px; background-color: alpha(currentColor, 0.12); }
+.zenbuji-legend { font-size: 12px; opacity: 0.85; }
+.zenbuji-section-count { font-size: 11px; opacity: 0.5; }
 """
 
 _CSS_INSTALLED = False
@@ -176,6 +175,20 @@ def accent_hex(dark: bool = False) -> str | None:
                                   round(rgba.blue * 255))
     except Exception:  # noqa: BLE001  (older libadwaita without accent API)
         return None
+
+
+def accent_rgba(dark: bool = False) -> Gdk.RGBA:
+    """The system accent color as a Gdk.RGBA, for cairo drawing (charts).
+
+    Falls back to the GNOME blue (#3584e4) on older libadwaita without the
+    accent API."""
+    rgba = Gdk.RGBA()
+    try:
+        accent = Adw.StyleManager.get_default().get_accent_color()
+        return accent.to_standalone_rgba(dark)
+    except Exception:  # noqa: BLE001
+        rgba.parse("#3584e4")
+        return rgba
 
 
 def _install_focus_loss_close(win: Gtk.Window) -> None:
