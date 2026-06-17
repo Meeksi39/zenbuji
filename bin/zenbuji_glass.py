@@ -177,6 +177,10 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-verdict-no { background-color: #c0182a; }
 /* The revealed correct reading - the learning payload, large and in accent. */
 .zenbuji-reveal-reading { font-size: 27px; font-weight: 700; color: @accent_color; }
+/* Inline submit button: a square accent tile (arrow icon) beside the input. */
+.zenbuji-quiz-go {
+    padding: 0; min-width: 50px; min-height: 50px; border-radius: 14px;
+}
 /* Verdicts sit on a solid colour chip so they stay legible over any blurred
    background (plain coloured text had poor contrast). */
 .zenbuji-correct {

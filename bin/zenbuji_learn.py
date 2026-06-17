@@ -404,6 +404,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         hint = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
         hint.add_css_class("zenbuji-hint")
         hint.set_max_width_chars(40)
+        hint.set_margin_top(4)
+        hint.set_margin_bottom(6)
         card_box.append(hint)
 
         # Phase area, rebuilt for question vs reveal vs summary.
@@ -462,11 +464,24 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             col = _answer_col()
             phase.append(col)
 
-            reading_entry = Gtk.Entry(placeholder_text=t("reading"))
+            # Reading field + the arrow submit button share one row (search-bar
+            # style): the field grows, the action is a compact accent tile.
+            reading_entry = Gtk.Entry(placeholder_text=t("reading"), hexpand=True)
             reading_entry.add_css_class("zenbuji-quiz-input")
             reading_entry.set_alignment(0.5)
             on_field_focus(reading_entry, to_kana)
-            col.append(reading_entry)
+
+            check_btn = Gtk.Button(icon_name="go-next-symbolic")
+            check_btn.add_css_class("zenbuji-action")
+            check_btn.add_css_class("zenbuji-quiz-go")
+            check_btn.set_valign(Gtk.Align.CENTER)
+            check_btn.set_tooltip_text(t("check"))
+
+            input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            input_row.append(reading_entry)
+            input_row.append(check_btn)
+            col.append(input_row)
+
             trans_entry = None
             if not show_translation:
                 trans_entry = Gtk.Entry(placeholder_text=t("translation"))
@@ -474,9 +489,6 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 trans_entry.set_alignment(0.5)
                 on_field_focus(trans_entry, to_latin)
                 col.append(trans_entry)
-            check_btn = Gtk.Button(label=t("check"))
-            check_btn.add_css_class("zenbuji-action")
-            col.append(check_btn)
 
             def submit(*_a):
                 show_reveal(cur, reading_entry.get_text(),
