@@ -8,7 +8,7 @@
 No copy-pasting into a dictionary app. No leaving what you're doing. Works in your
 browser, your editor, a chat window — and even on text you *can't* select, via screen OCR.
 
-<img src="docs/popup-lookup.png" alt="zenbuji popup showing furigana plus English and German" width="460">
+<img src="docs/overview.png" alt="zenbuji in action — lookup popup, dictionary, practice quiz, settings, and top-bar menu" width="900">
 
 <sub>Furigana is real word-level analysis (not naïve kana mapping) · translation is offline-first · the whole thing runs on your machine.</sub>
 
@@ -19,10 +19,6 @@ browser, your editor, a chat window — and even on text you *can't* select, via
 ## See it in action
 
 Select Japanese in **any** app, press the hotkey, read it. That's the whole loop:
-
-<video src="https://github.com/Meeksi39/zenbuji/raw/main/docs/demo-selection-lookup.webm" controls muted width="720"></video>
-
-> *Video not playing? [Watch demo-selection-lookup.webm](docs/demo-selection-lookup.webm).*
 
 ```text
 $ zenbuji 日本語を勉強しています
@@ -138,10 +134,6 @@ lookup popup. The popup also shows your remaining DeepL quota when a key is set.
 
 <div align="center">
 <img src="docs/dictionary.png" alt="zenbuji dictionary window" width="360">
-
-<video src="https://github.com/Meeksi39/zenbuji/raw/main/docs/demo-dictionary.webm" controls muted width="640"></video>
-
-<sub><em>Video not playing? <a href="docs/demo-dictionary.webm">Watch demo-dictionary.webm</a>.</em></sub>
 </div>
 
 ### 🎴 Practice (spaced repetition)
@@ -158,9 +150,6 @@ DE) with a self-grade override (✓/✗) when the wording differs.
 |:---:|:---:|
 | <img src="docs/practice-question.png" alt="practice quiz prompt" width="320"> | <img src="docs/practice-answer.png" alt="practice quiz graded answer" width="320"> |
 
-<video src="https://github.com/Meeksi39/zenbuji/raw/main/docs/demo-practice.webm" controls muted width="640"></video>
-
-<sub><em>Video not playing? <a href="docs/demo-practice.webm">Watch demo-practice.webm</a> · <a href="docs/demo-practice-flashcards.webm">flashcard variant</a>.</em></sub>
 </div>
 
 Results drive an SM-2-style schedule in `~/.local/share/zenbuji/srs.json`: correct answers
