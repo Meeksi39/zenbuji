@@ -59,14 +59,26 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border-radius: 13px;
     padding: 10px 22px;
     min-height: 20px;
-    font-weight: 600;
+    font-weight: 700;
     border: none;
-    background-image: none;
-    background-color: @accent_bg_color;
     color: @accent_fg_color;
+    /* A vivid gradient + soft accent glow so the primary action pops instead of
+       reading flat/dull next to the accent focus ring and furigana. */
+    background-color: @accent_bg_color;
+    background-image: linear-gradient(to bottom,
+        shade(@accent_bg_color, 1.16), @accent_bg_color);
+    box-shadow: 0 2px 7px alpha(@accent_bg_color, 0.45);
 }
-.zenbuji-action:hover { background-color: shade(@accent_bg_color, 1.08); }
-.zenbuji-action:active { background-color: shade(@accent_bg_color, 0.94); }
+.zenbuji-action:hover {
+    background-image: linear-gradient(to bottom,
+        shade(@accent_bg_color, 1.24), shade(@accent_bg_color, 1.07));
+    box-shadow: 0 3px 10px alpha(@accent_bg_color, 0.55);
+}
+.zenbuji-action:active {
+    background-image: none;
+    background-color: shade(@accent_bg_color, 0.94);
+    box-shadow: none;
+}
 /* Secondary: translucent glass. */
 .zenbuji-secondary {
     border-radius: 13px;

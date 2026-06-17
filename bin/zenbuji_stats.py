@@ -20,13 +20,13 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
-    from zenbuji_glass import accent_rgba, make_glass_window
+    from zenbuji_glass import accent_hex, accent_rgba, make_glass_window
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import accent_rgba, make_glass_window
+    from zenbuji_glass import accent_hex, accent_rgba, make_glass_window
 
 # Learning levels, lowest→highest. Kept in sync with srs_status() in zenbuji.py.
 LEVEL_ORDER = ("new", "learning", "young", "mature")
@@ -305,18 +305,27 @@ def _activity_chart(recent):
 
 
 def _hardest_list(stats):
+    accent = accent_hex(Adw.StyleManager.get_default().get_dark())
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
     box.set_margin_top(4)
     for h in stats.get("hardest", [])[:3]:
         line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         text = h.get("text", "")
         reading = h.get("reading", "")
-        label = f"{text}（{reading}）" if reading and reading != text else text
-        jp = Gtk.Label(label=label, xalign=0, wrap=True,
-                       halign=Gtk.Align.START)
+        jp = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
         jp.add_css_class("zenbuji-dict-jp")
         jp.set_hexpand(True)
         jp.set_max_width_chars(28)
+        # Word at full size; reading smaller and accent-coloured, mirroring the
+        # dictionary's reading style.
+        if reading and reading != text:
+            esc_r = GLib.markup_escape_text(reading)
+            colour = f' foreground="{accent}"' if accent else ""
+            jp.set_markup(
+                f'{GLib.markup_escape_text(text)}  '
+                f'<span{colour} size="78%" weight="normal">{esc_r}</span>')
+        else:
+            jp.set_text(text)
         line.append(jp)
         miss = Gtk.Label(label=f"×{h.get('wrong', 0)}", xalign=1)
         miss.add_css_class("zenbuji-meta")
