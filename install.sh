@@ -76,7 +76,7 @@ if [[ "$MODE" == uninstall ]]; then
     # Remove our custom keybindings from the list (leaves other customs intact).
     MK=org.gnome.settings-daemon.plugins.media-keys
     if command -v gsettings >/dev/null; then
-        for slug in zenbuji zenbuji-ocr zenbuji-ocr-add zenbuji-learn; do
+        for slug in zenbuji zenbuji-ocr zenbuji-ocr-add zenbuji-speak zenbuji-learn; do
             KBPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$slug/"
             cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
             if [[ "$cur" == *"$KBPATH"* ]]; then
@@ -231,6 +231,8 @@ if command -v gsettings >/dev/null; then
         "$BIN_DIR/zenbuji popup --ocr" '<Super><Shift>j' 'zenbuji popup --ocr'
     register_keybinding zenbuji-ocr-add 'zenbuji: OCR a region into the dictionary (silent + speak)' \
         "$BIN_DIR/zenbuji add --ocr --speak" '<Super><Shift>k' 'zenbuji add --ocr --speak (silent, reads aloud)'
+    register_keybinding zenbuji-speak 'zenbuji: read selection aloud' \
+        "$BIN_DIR/zenbuji speak --selection" '<Super><Shift>s' 'zenbuji speak --selection'
     register_keybinding zenbuji-learn 'zenbuji: practice (SRS)' \
         "$BIN_DIR/zenbuji learn" '<Super><Shift>l' 'zenbuji learn'
 fi
@@ -345,6 +347,7 @@ Next steps:
   • Screen OCR:            Super+Shift+J reads on-screen text (draw a box)
   • OCR → dictionary:      Super+Shift+K OCRs a region silently into the
                            dictionary and reads the word aloud (no popup)
+  • Read aloud:            Super+Shift+S reads the current selection aloud
 EOF
 
 if [[ "$WITH_VOICEVOX" -eq 1 ]]; then

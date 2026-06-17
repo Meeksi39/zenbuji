@@ -187,6 +187,10 @@ available) and hit **Test**. Without VOICEVOX, zenbuji falls back to `spd-say`/`
 Engine and voice are configurable: `zenbuji config --tts-engine voicevox --voicevox-speaker 3`,
 list voices with `zenbuji voices`, or wire any command with `--tts-command '… {text}'`.
 
+Press **`Super+Shift+S`** to read the current selection aloud without a popup. Turn on
+**Read aloud after a lookup** (Settings ▸ Speech, or `zenbuji config --tts-on-lookup on`)
+to have `Super+J` speak the reading automatically every time you look something up.
+
 ### 🪟 Frosted-glass popup
 
 The popup is a headerless, translucent floating card that follows your system light/dark
@@ -265,6 +269,7 @@ zenbuji config --learn-on-login on      # open a practice round once a day on lo
 zenbuji config --tts-engine voicevox    # auto | voicevox | system | command | off
 zenbuji config --voicevox-speaker 3     # voice id (see: zenbuji voices)
 zenbuji config --tts on                 # read words aloud after an OCR/silent add
+zenbuji config --tts-on-lookup on       # auto-read the reading after a popup lookup
 zenbuji config --history off            # stop recording recent lookups
 zenbuji config --clear-history          # forget recorded lookups
 zenbuji usage                           # check the DeepL key + remaining quota

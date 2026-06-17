@@ -117,7 +117,7 @@ def _copy_row(window, label_widget, text, copy_label="Copy",
 def show_popup(languages, *, result=None, ocr_image=None,
                process_fn=None, ocr_fn=None, ui_language="en",
                close_on_focus_loss=True, quota_fn=None, char_limit=200,
-               speak_fn=None) -> int:
+               speak_fn=None, auto_speak=False) -> int:
     """Display the popup.
 
     Exactly one of `result` (already-processed) or `ocr_image` (recognise text
@@ -280,6 +280,12 @@ def show_popup(languages, *, result=None, ocr_image=None,
                 n = Gtk.Label(label=note, wrap=True, xalign=0)
                 n.add_css_class("zenbuji-note")
                 result_box.append(n)
+
+            # Read the reading aloud automatically when enabled (tts_on_lookup).
+            if auto_speak and speak_fn is not None:
+                spoken = res.reading or res.text
+                if spoken:
+                    speak_fn(spoken)
 
         # --- Lookup (threaded) -------------------------------------------- //
         def do_lookup(text):

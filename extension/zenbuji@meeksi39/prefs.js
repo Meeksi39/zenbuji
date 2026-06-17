@@ -69,6 +69,10 @@ const UI_JA = {
     'Read words aloud': '単語を読み上げる',
     'Speak the reading after an OCR/silent add, and via the 🔊 buttons.':
         'OCR・サイレント追加の後、および 🔊 ボタンで読みを読み上げます。',
+    'Read aloud after a lookup': '検索後に読み上げる',
+    'Speak the reading automatically when you look up a word (Super+J).':
+        '単語を調べたとき（Super+J）に自動的に読みを読み上げます。',
+    'Read selection aloud': '選択を読み上げる',
     'Voice engine': '音声エンジン',
     'VOICEVOX gives natural Japanese; auto falls back to the system voice.':
         'VOICEVOX は自然な日本語音声です。auto は利用できない場合システム音声に切り替えます。',
@@ -462,6 +466,18 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         speechGroup.add(ttsRow);
 
+        const ttsLookupRow = new Adw.SwitchRow({
+            title: _('Read aloud after a lookup'),
+            subtitle: _('Speak the reading automatically when you look up a word (Super+J).'),
+        });
+        ttsLookupRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--tts-on-lookup', ttsLookupRow.get_active() ? 'on' : 'off']);
+        });
+        speechGroup.add(ttsLookupRow);
+
         const engineRow = new Adw.ComboRow({
             title: _('Voice engine'),
             subtitle: _('VOICEVOX gives natural Japanese; auto falls back to the system voice.'),
@@ -558,6 +574,8 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
             _('Needs the full (non---light) install for the OCR model.'), 'zenbuji-ocr'));
         scGroup.add(this._makeShortcutRow(_('Add screen region to dictionary (OCR)'),
             '', 'zenbuji-ocr-add'));
+        scGroup.add(this._makeShortcutRow(_('Read selection aloud'),
+            '', 'zenbuji-speak'));
         scGroup.add(this._makeShortcutRow(_('Practice (SRS)'), '', 'zenbuji-learn'));
 
         // --- Advanced ----------------------------------------------------- //
@@ -588,6 +606,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 dictRow.set_active(cfg.dictionary !== false);
                 cacheOfflineRow.set_active(cfg.cache_offline === true);
                 ttsRow.set_active(cfg.tts === true);
+                ttsLookupRow.set_active(cfg.tts_on_lookup === true);
                 ttsCmdRow.set_text(cfg.tts_command || '');
                 const engIdx = TTS_ENGINES.indexOf(cfg.tts_engine || 'auto');
                 engineRow.selected = engIdx >= 0 ? engIdx : 0;

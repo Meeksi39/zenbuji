@@ -83,6 +83,8 @@ DEFAULT_CONFIG = {
     # if it is reachable, else the system voice), "voicevox", "system"
     # (spd-say/espeak-ng), "command" (run tts_command), or "off".
     "tts": False,
+    # Automatically read the reading aloud after a popup lookup (Super+J etc.).
+    "tts_on_lookup": False,
     "tts_engine": "auto",
     # Local VOICEVOX engine — natural Japanese neural TTS, run via podman (see
     # install.sh --voicevox). host:port of its HTTP API, and the speaker id.
@@ -1232,6 +1234,9 @@ def cmd_config(args, cfg) -> int:
     if args.tts:
         cfg["tts"] = args.tts == "on"
         changed = True
+    if args.tts_on_lookup:
+        cfg["tts_on_lookup"] = args.tts_on_lookup == "on"
+        changed = True
     if args.tts_engine:
         cfg["tts_engine"] = args.tts_engine
         changed = True
@@ -1479,6 +1484,9 @@ def main(argv=None) -> int:
                        help="also store Argos (offline) translations in the dictionary")
         p.add_argument("--tts", choices=["on", "off"],
                        help="read words aloud after an OCR/silent add by default")
+        p.add_argument("--tts-on-lookup", dest="tts_on_lookup",
+                       choices=["on", "off"],
+                       help="read the reading aloud automatically after a popup lookup")
         p.add_argument("--tts-engine", dest="tts_engine",
                        choices=["auto", "voicevox", "system", "command", "off"],
                        help="text-to-speech engine (default auto)")
@@ -1500,11 +1508,18 @@ def main(argv=None) -> int:
 
     if command == "speak":
         p = argparse.ArgumentParser(prog="zenbuji speak", add_help=False)
+        p.add_argument("--selection", action="store_true",
+                       help="read the current text selection aloud")
         p.add_argument("words", nargs="*")
         a = p.parse_args(rest)
-        text = " ".join(a.words).strip() or read_selection().strip()
+        text = " ".join(a.words).strip()
+        if not text and (a.selection or not sys.stdin.isatty()):
+            text = (read_selection() if a.selection else sys.stdin.read()).strip()
+        elif not text:
+            text = read_selection().strip()
         if not text:
-            print("No text to speak (give words or select some).", file=sys.stderr)
+            print("No text to speak (give words, --selection, or pipe stdin).",
+                  file=sys.stderr)
             return 2
         speak(text, cfg, block=True)
         return 0
@@ -1659,6 +1674,7 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
     ui_language = cfg.get("ui_language", "en")
     close_on_focus_loss = bool(cfg.get("popup_close_on_focus_loss", True))
     char_limit = int(cfg.get("translation_char_limit", 200) or 200)
+    auto_speak = bool(cfg.get("tts_on_lookup", False))
 
     # OCR popups always persist until Escape/closed: you read and often correct
     # the recognised text, and the zenbuji extension hands focus back to a
@@ -1680,14 +1696,14 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
                           ui_language=ui_language,
                           close_on_focus_loss=close_on_focus_loss,
                           quota_fn=quota_fn, char_limit=char_limit,
-                          speak_fn=speak_fn)
+                          speak_fn=speak_fn, auto_speak=auto_speak)
     result = process_fn(text) if text else None
     return show_popup(languages, result=result,
                       process_fn=process_fn, ocr_fn=ocr_fn,
                       ui_language=ui_language,
                       close_on_focus_loss=close_on_focus_loss,
                       quota_fn=quota_fn, char_limit=char_limit,
-                      speak_fn=speak_fn)
+                      speak_fn=speak_fn, auto_speak=auto_speak)
 
 
 def launch_dictionary(cfg: dict) -> int:
