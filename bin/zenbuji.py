@@ -22,6 +22,10 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
+import threading
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -75,6 +79,18 @@ DEFAULT_CONFIG = {
     "learn_show_translation": True,
     "learn_on_login": False,
     "learn_count": 10,
+    # Text-to-speech (read words aloud). Engine: "auto" (a local VOICEVOX engine
+    # if it is reachable, else the system voice), "voicevox", "system"
+    # (spd-say/espeak-ng), "command" (run tts_command), or "off".
+    "tts": False,
+    "tts_engine": "auto",
+    # Local VOICEVOX engine — natural Japanese neural TTS, run via podman (see
+    # install.sh --voicevox). host:port of its HTTP API, and the speaker id.
+    "voicevox_host": "127.0.0.1:50021",
+    "voicevox_speaker": 3,  # ずんだもん (Zundamon), normal style
+    # Custom TTS command template ({text} placeholder); when set it overrides
+    # tts_engine. Left here mostly for power users / other engines.
+    "tts_command": "",
 }
 
 
@@ -940,34 +956,116 @@ def read_selection() -> str:
     return ""
 
 
-def speak(text: str, cfg: dict) -> None:
-    """Read Japanese text aloud in the background (best-effort, non-blocking).
+VOICEVOX_DEFAULT_HOST = "127.0.0.1:50021"
+VOICEVOX_DEFAULT_SPEAKER = 3  # ずんだもん (Zundamon), normal style
+_AUDIO_PLAYERS = ("pw-play", "paplay", "aplay", "ffplay")
 
-    Feed the hiragana reading for the clearest pronunciation. Honours a custom
-    command template from config (`tts_command`, with an optional `{text}`
-    placeholder); otherwise auto-detects `spd-say` (speech-dispatcher, plays via
-    its daemon so it survives this process exiting) then `espeak-ng`. Never
-    raises and never blocks — TTS is a nicety layered on top of the result.
+
+def voicevox_synthesize(text: str, host: str, speaker: int) -> bytes:
+    """Return WAV audio for `text` from a local VOICEVOX engine.
+
+    Two-step HTTP API: POST /audio_query builds the synthesis parameters, POST
+    /synthesis renders them to a WAV. Raises (URLError/timeout) if the engine
+    isn't reachable — callers treat that as "no VOICEVOX".
+    """
+    base = f"http://{host}"
+    query = urllib.parse.urlencode({"text": text, "speaker": speaker})
+    req = urllib.request.Request(f"{base}/audio_query?{query}", method="POST")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        audio_query = resp.read()
+    req = urllib.request.Request(
+        f"{base}/synthesis?speaker={speaker}", data=audio_query,
+        headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return resp.read()
+
+
+def _play_wav(wav: bytes) -> None:
+    """Play in-memory WAV bytes through the first available audio player."""
+    player = next((p for p in _AUDIO_PLAYERS if shutil.which(p)), None)
+    if not player or not wav:
+        return
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(wav)
+        path = f.name
+    try:
+        if player == "ffplay":
+            argv = ["ffplay", "-autoexit", "-nodisp", "-loglevel", "quiet", path]
+        elif player == "aplay":
+            argv = ["aplay", "-q", path]
+        else:  # pw-play / paplay
+            argv = [player, path]
+        subprocess.run(argv, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def speak(text: str, cfg: dict, block: bool = False) -> None:
+    """Read Japanese text aloud (best-effort, non-blocking by default).
+
+    Feed the hiragana reading for the clearest pronunciation. The engine is
+    chosen by cfg["tts_engine"]:
+      * "voicevox" — synthesize via the local VOICEVOX engine (natural neural)
+      * "system"   — spd-say (speech-dispatcher) then espeak-ng (robotic)
+      * "auto"     — VOICEVOX if its engine answers, otherwise the system voice
+      * "command"  — run cfg["tts_command"] (kept for power users)
+      * "off"      — silent
+    A non-empty tts_command always wins, whatever the engine, for backwards
+    compatibility. With block=True the call waits for playback to finish —
+    needed by short-lived CLI runs (e.g. `add --speak`) that would otherwise
+    exit and cut the audio off. Never raises: audio is a nicety on top.
     """
     text = (text or "").strip()
     if not text:
         return
-    try:
-        template = cfg.get("tts_command")
-        if template:
-            parts = shlex.split(template)
-            argv = ([p.replace("{text}", text) for p in parts]
-                    if any("{text}" in p for p in parts) else [*parts, text])
-        elif shutil.which("spd-say"):
-            argv = ["spd-say", "-l", "ja", "--", text]
-        elif shutil.which("espeak-ng"):
-            argv = ["espeak-ng", "-v", "ja", "--", text]
-        else:
-            return
-        subprocess.Popen(argv, stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:  # noqa: BLE001 — audio must never break a lookup
-        pass
+    engine = cfg.get("tts_engine", "auto")
+    if engine == "off":
+        return
+
+    def run():
+        try:
+            command = cfg.get("tts_command")
+            if command or engine == "command":
+                if not command:
+                    return
+                parts = shlex.split(command)
+                argv = ([p.replace("{text}", text) for p in parts]
+                        if any("{text}" in p for p in parts) else [*parts, text])
+                subprocess.run(argv, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+
+            if engine in ("voicevox", "auto"):
+                try:
+                    wav = voicevox_synthesize(
+                        text, cfg.get("voicevox_host", VOICEVOX_DEFAULT_HOST),
+                        cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER))
+                    _play_wav(wav)
+                    return
+                except Exception:  # engine unreachable / synthesis failed
+                    if engine == "voicevox":
+                        return  # explicit choice — don't surprise with a robot
+                    # "auto" falls through to the system voice below.
+
+            if shutil.which("spd-say"):
+                subprocess.run(["spd-say", "-w", "-l", "ja", "--", text],
+                               stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif shutil.which("espeak-ng"):
+                subprocess.run(["espeak-ng", "-v", "ja", "--", text],
+                               stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:  # noqa: BLE001 — audio must never break a lookup
+            pass
+
+    if block:
+        run()
+    else:
+        threading.Thread(target=run, daemon=True).start()
 
 
 def resolve_input(text_args: list[str], use_selection: bool) -> str:
@@ -1020,6 +1118,8 @@ Usage:
   zenbuji add <words…>        Translate & store words in the dictionary, no GUI
   zenbuji dict                Open the local dictionary (cached DeepL lookups)
   zenbuji learn               Practice cached words (spaced repetition quiz)
+  zenbuji speak [text]        Read text aloud (reads the selection if no text)
+  zenbuji voices              List local VOICEVOX speakers (--json for machines)
   zenbuji config              Show or set configuration
   zenbuji usage               Check the DeepL key and show remaining quota
   zenbuji models --install    Download offline Argos models (ja->en, en->de)
@@ -1131,6 +1231,15 @@ def cmd_config(args, cfg) -> int:
         changed = True
     if args.tts:
         cfg["tts"] = args.tts == "on"
+        changed = True
+    if args.tts_engine:
+        cfg["tts_engine"] = args.tts_engine
+        changed = True
+    if args.voicevox_speaker is not None:
+        cfg["voicevox_speaker"] = int(args.voicevox_speaker)
+        changed = True
+    if args.voicevox_host:
+        cfg["voicevox_host"] = args.voicevox_host
         changed = True
     if args.tts_command is not None:
         cfg["tts_command"] = args.tts_command
@@ -1265,13 +1374,42 @@ def cmd_add(args, cfg) -> int:
 
     if speak_on:
         spoken = "、".join(r.reading or r.text for r in results if (r.reading or r.text))
-        speak(spoken, cfg)
+        speak(spoken, cfg, block=True)  # wait, or this process exits mid-audio
 
     if args.json:
         print(json.dumps([r.to_dict() for r in results], ensure_ascii=False))
     elif not args.quiet:
         noun = "entry" if len(items) == 1 else "entries"
         print(f"Added {added}/{len(items)} {noun} to the dictionary.")
+    return 0
+
+
+def cmd_voices(args, cfg) -> int:
+    """List the speakers/styles the local VOICEVOX engine offers.
+
+    Used by the prefs voice picker (via --json) and handy for finding a speaker
+    id for `zenbuji config --voicevox-speaker`.
+    """
+    host = cfg.get("voicevox_host", VOICEVOX_DEFAULT_HOST)
+    try:
+        with urllib.request.urlopen(f"http://{host}/speakers", timeout=5) as resp:
+            data = json.loads(resp.read())
+    except Exception as exc:  # noqa: BLE001 — engine simply not running
+        if args.json:
+            print("[]")
+        else:
+            print(f"VOICEVOX engine not reachable at {host} ({exc}).",
+                  file=sys.stderr)
+            print("Set it up with: ./install.sh --voicevox", file=sys.stderr)
+        return 1
+    voices = [{"id": style["id"], "name": s["name"], "style": style["name"]}
+              for s in data for style in s.get("styles", [])]
+    voices.sort(key=lambda v: v["id"])
+    if args.json:
+        print(json.dumps(voices, ensure_ascii=False))
+    else:
+        for v in voices:
+            print(f"{v['id']:>4}  {v['name']} — {v['style']}")
     return 0
 
 
@@ -1294,6 +1432,7 @@ def main(argv=None) -> int:
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
         "config", "models", "usage", "ocr", "dict", "learn", "add",
+        "speak", "voices",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -1340,6 +1479,13 @@ def main(argv=None) -> int:
                        help="also store Argos (offline) translations in the dictionary")
         p.add_argument("--tts", choices=["on", "off"],
                        help="read words aloud after an OCR/silent add by default")
+        p.add_argument("--tts-engine", dest="tts_engine",
+                       choices=["auto", "voicevox", "system", "command", "off"],
+                       help="text-to-speech engine (default auto)")
+        p.add_argument("--voicevox-speaker", dest="voicevox_speaker", type=int,
+                       help="VOICEVOX speaker/style id (list them: zenbuji voices)")
+        p.add_argument("--voicevox-host", dest="voicevox_host",
+                       help="VOICEVOX engine host:port (default 127.0.0.1:50021)")
         p.add_argument("--tts-command", dest="tts_command",
                        help="custom text-to-speech command ('' to reset); "
                             "use {text} as the placeholder")
@@ -1351,6 +1497,22 @@ def main(argv=None) -> int:
         p.add_argument("--clear-history", action="store_true")
         p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
+
+    if command == "speak":
+        p = argparse.ArgumentParser(prog="zenbuji speak", add_help=False)
+        p.add_argument("words", nargs="*")
+        a = p.parse_args(rest)
+        text = " ".join(a.words).strip() or read_selection().strip()
+        if not text:
+            print("No text to speak (give words or select some).", file=sys.stderr)
+            return 2
+        speak(text, cfg, block=True)
+        return 0
+
+    if command == "voices":
+        p = argparse.ArgumentParser(prog="zenbuji voices")
+        p.add_argument("--json", action="store_true")
+        return cmd_voices(p.parse_args(rest), cfg)
 
     if command == "usage":
         p = argparse.ArgumentParser(prog="zenbuji usage")
