@@ -87,6 +87,12 @@ gnome-extensions enable zenbuji@meeksi39
 On **Wayland you have to log out and back in** for GNOME to actually load the extension
 (I know, I know — Wayland moment). The hotkey (`Super+J`) works right away, no logout needed.
 
+> **Just want the extension?** Each [release](https://github.com/Meeksi39/zenbuji/releases) ships a
+> prebuilt `zenbuji@meeksi39.shell-extension.zip` —
+> `gnome-extensions install zenbuji@meeksi39.shell-extension.zip --force`, then log out/in. Note
+> that's the top-bar UI only; furigana/translation/OCR/practice/TTS still need the Python backend
+> from `./install.sh`.
+
 **Lighter install** (no offline backend, ~300 MB instead of ~1.7 GB of models — just use DeepL):
 
 ```sh
