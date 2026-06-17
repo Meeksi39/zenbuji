@@ -151,6 +151,9 @@ def show_popup(languages, *, result=None, ocr_image=None,
                 pic.set_can_shrink(True)
                 pic.set_size_request(-1, 120)
                 pic.add_css_class("zenbuji-ocr-image")
+                # border-radius on a GtkPicture only rounds the CSS box; the
+                # texture itself is clipped to it only with overflow=HIDDEN.
+                pic.set_overflow(Gtk.Overflow.HIDDEN)
                 box.append(pic)
             except Exception:  # noqa: BLE001  (unreadable capture)
                 pass
