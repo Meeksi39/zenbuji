@@ -2,15 +2,16 @@
 
 # zenbuji 〜 全部字
 
-### Read *any* Japanese on your screen — furigana + English & German — in one keypress.
+### Read *any* Japanese on your screen — furigana + English & German — in one keypress ✨
 
-**Select text anywhere, press `Super+J`, and get the readings and the meaning instantly.**
-No copy-pasting into a dictionary app. No leaving what you're doing. Works in your
-browser, your editor, a chat window — and even on text you *can't* select, via screen OCR.
+Highlight some text, mash `Super+J`, and *boom* — readings and meaning pop up right over
+whatever you're doing. No alt-tabbing into a dictionary app, no breaking immersion in the
+middle of an episode. Works in your browser, your editor, a chat window — and even on text
+you *can't* select, because screen OCR has your back. (｡•̀ᴗ-)✧
 
 <img src="docs/overview.png" alt="zenbuji in action — lookup popup, dictionary, practice quiz, settings, and top-bar menu" width="900">
 
-<sub>Furigana is real word-level analysis (not naïve kana mapping) · translation is offline-first · the whole thing runs on your machine.</sub>
+<sub>Furigana from real word-level analysis (not lazy kana-by-kana guessing) · translation is offline-first · everything runs on your own machine.</sub>
 
 </div>
 
@@ -18,7 +19,7 @@ browser, your editor, a chat window — and even on text you *can't* select, via
 
 ## See it in action
 
-Select Japanese in **any** app, press the hotkey, read it. That's the whole loop:
+Highlight Japanese in **any** app, hit the hotkey, read it. That's the whole loop — that's the magic:
 
 ```text
 $ zenbuji 日本語を勉強しています
@@ -32,17 +33,17 @@ German: Ich lerne Japanisch.
 
 ---
 
-## Why zenbuji?
+## Why you'll love it
 
-- 🟣 **One keypress, anywhere.** A GNOME global shortcut reads your current selection and shows a popup over whatever you're looking at. No app-switching, no breaking immersion.
-- 🔤 **Furigana that's actually correct.** Readings come from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and irregular readings are right — not a character-by-character guess.
-- 🌍 **English *and* German, side by side.** Offline-first with [Argos Translate]; plug in a free [DeepL] key for sharper translations when you want them.
-- 👁️ **OCR for unselectable text.** Subtitles, a game, a UI label, an image — draw a box and zenbuji reads it.
-- 📖 **Builds your personal dictionary.** Every DeepL lookup is cached into a searchable word list, so you stop re-spending quota and start seeing your progress.
-- 🎴 **Turns words into practice.** A built-in spaced-repetition quiz drills the words you've already looked up.
-- 🔊 **Hear every word.** A read-aloud button on every reading, with first-class [VOICEVOX] support for natural Japanese neural voices (falls back to the system voice).
-- 🪟 **Polished, native feel.** A frosted-glass popup that follows your accent color and light/dark theme.
-- 🔒 **Yours, offline, private.** All processing is local (DeepL is the only optional network call). Runs on immutable distros (Bazzite / Silverblue) with no `rpm-ostree` layering.
+- 🟣 **One keypress, anywhere.** A global GNOME shortcut grabs your selection and floats a popup over whatever app you're in. No context-switching, no killing the vibe.
+- 🔤 **Furigana that's actually *right*.** Readings come from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and sneaky irregular readings come out correct — not a character-by-character guess that falls apart on 今日.
+- 🌍 **English *and* German, side by side.** Offline-first with [Argos Translate]; drop in a free [DeepL] key when you want the sharper translations.
+- 👁️ **OCR for text you can't select.** Subs burned into a video, a game UI, a screenshot, manga raws — draw a box and zenbuji reads it anyway.
+- 📖 **Builds your own little dictionary.** Every DeepL lookup gets cached into a searchable word list, so you stop burning quota and start watching your vocab pile up.
+- 🎴 **Turns lookups into reps.** A built-in spaced-repetition quiz drills the words you've already met. Immersion → SRS → flex, no extra Anki deck required.
+- 🔊 **Hear every word.** A read-aloud button on every reading, with proper [VOICEVOX] support so it's natural neural Japanese instead of robot voice (falls back to the system voice if you skip it).
+- 🪟 **Genuinely pretty.** A frosted-glass popup that picks up your accent color and light/dark theme. Cute *and* functional ‹3
+- 🔒 **Yours, offline, private.** Everything's local — DeepL is the only optional network call. Runs happily on immutable distros (Bazzite / Silverblue) with zero `rpm-ostree` layering.
 
 ---
 
@@ -58,7 +59,8 @@ zenbuji meets you wherever the text is:
 | 📁 **Files menu** | Right-click a text file ▸ *Scripts ▸ zenbuji* | Looks up a whole file |
 | 💻 **CLI** | `zenbuji <text>` / pipe / `--selection` | Scriptable output (incl. `--json`) |
 
-All the language processing lives in one `zenbuji` Python CLI — every surface just calls it and renders the result, so they always stay in sync.
+Under the hood all the language stuff lives in one `zenbuji` Python CLI — every surface just
+calls it and renders the result, so they never drift out of sync. (One brain, many faces.)
 
 <div align="center">
 <img src="docs/topbar-menu.png" alt="zenbuji top-bar menu" width="340">
@@ -76,24 +78,24 @@ cd ~/zenbuji
 gnome-extensions enable zenbuji@meeksi39
 ```
 
-On **Wayland you must log out and back in** for GNOME to load the extension.
-The hotkey (`Super+J`) works immediately, no logout needed.
+On **Wayland you have to log out and back in** for GNOME to actually load the extension
+(I know, I know — Wayland moment). The hotkey (`Super+J`) works right away, no logout needed.
 
-**Lighter install** (no offline backend, ~300 MB — use DeepL instead of ~1.7 GB of models):
+**Lighter install** (no offline backend, ~300 MB instead of ~1.7 GB of models — just use DeepL):
 
 ```sh
 ./install.sh --light
 zenbuji config --backend deepl --deepl-key <YOUR_DEEPL_KEY>
 ```
 
-`install.sh` only ever touches `~/.local/bin/{zenbuji,zb}`, the extension dir, the
-Nautilus script, and a venv at `~/.local/share/zenbuji/venv`. Your config in
-`~/.config/zenbuji/` is never deleted. Remove everything with `./install.sh --uninstall`.
+`install.sh` only ever touches `~/.local/bin/{zenbuji,zb}`, the extension dir, the Nautilus
+script, and a venv at `~/.local/share/zenbuji/venv`. Your config in `~/.config/zenbuji/`
+is never deleted — promise. Nuke everything with `./install.sh --uninstall`.
 
-**Requirements:** GNOME Shell 45–50 on Wayland · `python3` with PyGObject + GTK 4
-(standard on GNOME) · `wl-clipboard` for selection lookup. On Bazzite/Silverblue the
-system Python is immutable, so all deps go in the venv (created with
-`--system-site-packages`) — no layering, no reboot.
+**Requirements:** GNOME Shell 45–50 on Wayland · `python3` with PyGObject + GTK 4 (already
+there on GNOME) · `wl-clipboard` for selection lookup. On Bazzite/Silverblue the system
+Python is immutable, so every dep lives in the venv (made with `--system-site-packages`) —
+no layering, no reboots, no tears.
 
 ---
 
@@ -101,20 +103,20 @@ system Python is immutable, so all deps go in the venv (created with
 
 ### 👁️ Screen-region OCR
 
-Lots of Japanese on screen isn't selectable — text baked into a UI, a game, a video
-frame, an image. Press **`Super+Shift+J`** (or top-bar ▸ *Look up screen region*),
-**draw a box**, and zenbuji reads it with OCR, then shows furigana + EN/DE. The captured
-image is shown for reference and the recognized text sits in an **editable field** — OCR
-isn't perfect, so fix a stray character and press Enter to look it up again.
+So much Japanese on screen just *isn't* selectable — text baked into a UI, a game, a video
+frame, an image. Press **`Super+Shift+J`** (or top-bar ▸ *Look up screen region*), **draw a
+box**, and zenbuji OCRs it and serves up furigana + EN/DE. It shows the captured image for
+reference and drops the recognized text into an **editable field** — OCR isn't psychic, so
+if it grabs a stray character just fix it and hit Enter to look it up again.
 
 <div align="center">
 <img src="docs/ocr-popup.png" alt="OCR popup with captured image and editable recognized text" width="440">
 </div>
 
-OCR is [manga-ocr] (a Japanese-tuned model) running **fully offline**. It needs the full
-install (not `--light`) and downloads a ~450 MB model on first use; the first lookup takes
-a few seconds while the model loads (the popup shows a spinner). Capture goes through the
-desktop Screenshot portal, so it works on Wayland.
+OCR is [manga-ocr] (a lovely Japanese-tuned model) running **fully offline**. It needs the
+full install (not `--light`) and grabs a ~450 MB model on first use; the very first lookup
+takes a few seconds while the model wakes up (the popup shows a spinner). Capture goes
+through the desktop Screenshot portal, so it's happy on Wayland.
 
 ```sh
 zenbuji ocr                  # capture a region interactively
@@ -123,14 +125,15 @@ zenbuji ocr image.png        # or OCR a file you already have
 
 ### 📖 Personal dictionary
 
-When the **DeepL** backend is active, every translation is cached to
-`~/.local/share/zenbuji/dictionary.json`. Repeat lookups are served from the cache — faster,
-and it preserves your free-tier quota — while building up a personal word list. Each entry
-records how often you've looked it up and the first/last time, so you can watch your progress.
+With the **DeepL** backend active, every translation gets cached to
+`~/.local/share/zenbuji/dictionary.json`. Repeat lookups come straight from the cache —
+faster, and it protects your free-tier quota — all while quietly building a personal word
+list. Each entry tracks how many times you've looked it up and the first/last time you saw
+it, so you can literally watch yourself level up.
 
 Browse it in the **Dictionary window** (the 📖 icon in the popup, the top-bar menu, or
-`zenbuji dict`): search, delete an entry, clear all, re-translate, or re-open a word in the
-lookup popup. The popup also shows your remaining DeepL quota when a key is set.
+`zenbuji dict`): search, delete an entry, clear all, re-translate, or pop a word back open
+in the lookup popup. It also shows your remaining DeepL quota when a key is set.
 
 <div align="center">
 <img src="docs/dictionary.png" alt="zenbuji dictionary window" width="360">
@@ -138,11 +141,12 @@ lookup popup. The popup also shows your remaining DeepL quota when a key is set.
 
 ### 🎴 Practice (spaced repetition)
 
-Turn the words you've looked up into active recall. **Practice** (`zenbuji learn`, the
-**`Super+Shift+L`** hotkey, or the top-bar menu) shows a word as **large kanji** with no
-furigana; you type the **reading** (and the **translation**, unless it's shown as a hint),
-and the answer is revealed and graded — the reading exactly, the translation fuzzily (EN or
-DE) with a self-grade override (✓/✗) when the wording differs.
+Take the words you've already met and turn them into actual recall. **Practice**
+(`zenbuji learn`, the **`Super+Shift+L`** hotkey, or the top-bar menu) shows a word as
+**big chunky kanji** with no furigana; you type the **reading** (and the **translation**,
+unless it's shown as a hint), then the answer is revealed and graded — the reading exactly,
+the translation fuzzily (EN or DE) with a self-grade override (✓/✗) for when your wording
+was *basically* right.
 
 <div align="center">
 
@@ -152,54 +156,56 @@ DE) with a self-grade override (✓/✗) when the wording differs.
 
 </div>
 
-Results drive an SM-2-style schedule in `~/.local/share/zenbuji/srs.json`: correct answers
-push the next review further out (New → Learning → Young → Mature), wrong answers bring it
-back. Each round picks the most-due/new words (10 by default) and ends with a summary.
+Results feed an SM-2-style schedule in `~/.local/share/zenbuji/srs.json`: nail it and the
+next review drifts further out (New → Learning → Young → Mature), whiff it and the word
+comes right back to haunt you. Each round pulls the most-due/new words (10 by default) and
+ends with a little summary.
 
 - `--learn-show-translation on|off` — show the meaning as a hint (test only the reading) vs. hide it (test reading **and** translation)
-- `--learn-on-login on|off` — open a round automatically, at most once a day, on login (off by default)
+- `--learn-on-login on|off` — auto-open a round once a day on login (off by default — opt in if you want the daily nudge)
 
 ### 🔊 Hear it spoken
 
-Every reading has a **🔊 read-aloud button** — in the popup, beside each dictionary
-entry, and on the quiz answer screen — so you hear the pronunciation, not just see it.
+Every reading gets a **🔊 read-aloud button** — in the popup, next to each dictionary entry,
+and on the quiz answer screen — so you actually *hear* the pronunciation instead of just
+squinting at kana.
 
-For natural Japanese (rather than the robotic system voice), zenbuji has first-class
-support for **[VOICEVOX]**, a free local neural TTS engine. Set it up in one step:
+For natural Japanese (and not the cursed robotic system voice), zenbuji has first-class
+support for **[VOICEVOX]**, a free local neural TTS engine. One step to set it up:
 
 ```sh
-./install.sh --voicevox   # pulls the engine (rootless podman), runs it as a user service
+./install.sh --voicevox   # pulls the engine (rootless podman) and runs it as a user service
 ```
 
-Then pick a voice in **Settings ▸ Speech** (default: ずんだもん / Zundamon — 100+ voices
-available) and hit **Test**. Without VOICEVOX, zenbuji falls back to `spd-say`/`espeak-ng`.
-Engine and voice are configurable: `zenbuji config --tts-engine voicevox --voicevox-speaker 3`,
-list voices with `zenbuji voices`, or wire any command with `--tts-command '… {text}'`.
+Then pick a voice in **Settings ▸ Speech** (default: my beloved ずんだもん / Zundamon —
+100+ voices to choose from) and smash **Test**. No VOICEVOX? zenbuji quietly falls back to
+`spd-say`/`espeak-ng`. Engine and voice are configurable:
+`zenbuji config --tts-engine voicevox --voicevox-speaker 3`, list voices with
+`zenbuji voices`, or wire up any command you like with `--tts-command '… {text}'`.
 
 <div align="center">
 
 <img src="docs/settings-speech.png" alt="zenbuji Speech settings — engine, voice, speed" width="420">
 
-<em>Learn with ずんだもん！</em>
+<em>Learn with ずんだもん！(◕ᴗ◕✿)</em>
 
 </div>
 
-Press **`Super+Shift+S`** to read the current selection aloud without a popup. Turn on
-**Read aloud after a lookup** (Settings ▸ Speech, or `zenbuji config --tts-on-lookup on`)
-to have `Super+J` speak the reading automatically every time you look something up.
+Press **`Super+Shift+S`** to read the current selection aloud with no popup at all. Flip on
+**Read aloud after a lookup** (Settings ▸ Speech, or `zenbuji config --tts-on-lookup on`) and
+`Super+J` will speak the reading automatically every single time — perfect for shadowing.
 
 ### 🪟 Frosted-glass popup
 
-The popup is a headerless, translucent floating card that follows your system light/dark
-theme and **system accent color**, can be **dragged** from any empty spot, and dismisses on
-**Escape** (and optionally when it loses focus). Each reading and translation has a **copy
-button**.
+The popup is a headerless, translucent floating card that follows your light/dark theme and
+**system accent color**, can be **dragged** from any empty spot, and dismisses on **Escape**
+(and optionally when it loses focus). Every reading and translation has a **copy button**.
 
-GNOME/Mutter can't blur behind an app's own window, so the real blur is supplied by
+GNOME/Mutter can't blur behind an app's own window, so the real blur comes from
 [Blur My Shell] — `install.sh` adds `com.meeksi39.zenbuji` to its **Applications ▸ whitelist**
-automatically (idempotent; removed on uninstall). For the best effect: Applications blur
-**on**, static blur **off**, hacks level **1+**. Without Blur My Shell the popup degrades
-gracefully to a clean translucent panel.
+automatically (idempotent, removed on uninstall). For peak prettiness: Applications blur
+**on**, static blur **off**, hacks level **1+**. Without Blur My Shell it degrades gracefully
+to a clean translucent panel, no drama.
 
 ---
 
@@ -220,12 +226,12 @@ zenbuji speak こんにちは            # read text aloud (VOICEVOX / system vo
 zenbuji voices                    # list available VOICEVOX speakers
 ```
 
-`zb` is a short alias for `zenbuji`.
+`zb` is a short alias for `zenbuji` (for when typing eight whole characters is too much).
 
 ### Re-binding the hotkey
 
 `install.sh` registers `Super+J` as a GNOME *custom keyboard shortcut* running
-`zenbuji popup --selection` (works without the extension). Re-bind it under **Settings ▸
+`zenbuji popup --selection` (works even without the extension). Re-bind it under **Settings ▸
 Keyboard ▸ Custom Shortcuts**, in the extension settings, or with gsettings:
 
 ```sh
@@ -235,11 +241,11 @@ gsettings set "$P" binding '<Super>F9'
 
 ### Configuration
 
-The easiest way is the **extension settings UI** (`gnome-extensions prefs zenbuji@meeksi39`,
-or *Extensions ▸ zenbuji ▸ Settings*): set the DeepL key, pick the backend and languages,
-choose the interface language (English or 日本語), verify the key (shows remaining quota),
-toggle the history, flip the popup's close-on-focus-loss, and rebind the hotkeys. It reads
-and writes the same config file the CLI uses, so every surface stays in sync.
+Easiest path is the **extension settings UI** (`gnome-extensions prefs zenbuji@meeksi39`, or
+*Extensions ▸ zenbuji ▸ Settings*): set the DeepL key, pick the backend and languages, choose
+the interface language (English or 日本語), verify the key (shows remaining quota), toggle the
+history, flip the popup's close-on-focus-loss, and rebind the hotkeys. It reads and writes the
+same config file the CLI uses, so every surface stays in lockstep.
 
 <div align="center">
 
@@ -287,26 +293,27 @@ zenbuji models --install   # download ja↔en, en↔de packages
 zenbuji models --list      # show installed language packs
 ```
 
-German is produced by pivoting through English (ja→en→de) when no direct model exists —
-DeepL gives better German if you have a key.
+German pivots through English (ja→en→de) when there's no direct model — DeepL gives nicer
+German if you've got a key.
 
 ---
 
 ## Motivation
 
-I'm learning Japanese and wanted a reading + meaning for *anything* on screen without
-breaking immersion — subtitles, a web page, a chat message — instead of copying text into a
-separate dictionary app every time. zenbuji puts furigana and an EN/DE gloss one keypress
-away, anywhere in the OS.
+Okay so — I'm learning Japanese, and I got *so* tired of pausing every five seconds to copy
+some text into a separate dictionary app just to read one kanji. I wanted readings + meaning
+for *anything* on screen, instantly, without ever breaking immersion — subtitles, a web page,
+a chat message, a visual novel, whatever. So I built the thing I wished existed: furigana and
+an EN/DE gloss one keypress away, anywhere in the OS. 勉強, but make it painless ♡
 
-> Built for my own Bazzite (Fedora Silverblue) / GNOME Wayland system first. Free to use and
-> adapt for your own setup — **just mention me** (Meeksi39).
+> Built for my own Bazzite (Fedora Silverblue) / GNOME Wayland setup first. Free to use and
+> remix for your own rig — **just credit me** (Meeksi39) and we're good (｀・ω・´)ゞ
 
 ## Development
 
 The repo is the source of truth; `install.sh` symlinks the extension and points the CLI
 launcher at `bin/zenbuji.py`, so edits take effect immediately (reload GNOME Shell / log out
-on Wayland for extension changes). Watch extension logs:
+on Wayland for extension changes). Tail the extension logs while you hack:
 
 ```sh
 journalctl -f -o cat /usr/bin/gnome-shell
