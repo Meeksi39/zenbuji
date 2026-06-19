@@ -107,6 +107,11 @@ def test_stats_window_empty(gui):
     _launch_ok(gui.env, ["stats"])
 
 
+def test_game_window(gui):
+    _seed(gui, "dictionary.json", _CARD)
+    _launch_ok(gui.env, ["game"])
+
+
 def test_dict_window(gui):
     _seed(gui, "dictionary.json", {
         "水": {"text": "水", "reading": "みず",

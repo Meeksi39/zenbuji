@@ -203,6 +203,15 @@ activity graph build up from your daily reviews (logged to
 - `--learn-on-login on|off` — auto-open a round once a day on login (off by default — opt in if you want the daily nudge)
 - `--learn-greeting on|off` — the random opening greeting (on by default)
 
+### Game helper
+
+`zenbuji game` (or the top-bar menu) opens a trimmed, glanceable **overlay** built for
+playing: your current **shortcuts** (read live from your GNOME bindings), a **status light**
+that spins while a translation or OCR is running in the background, and the **live word list**
+— newly-captured words fade in at the top. Park it on a second monitor; the extension keeps
+zenbuji off your fullscreen game's monitor, so `Super+Shift+K` grabs a word and it just
+appears.
+
 ### Hear it spoken
 
 Every reading gets a **read-aloud button** — in the popup, next to each dictionary entry,

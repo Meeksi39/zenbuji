@@ -168,6 +168,16 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-dict-list { background: transparent; }
 .zenbuji-dict-list > row { background: transparent; border-radius: 8px; }
 .zenbuji-excluded { opacity: 0.45; }  /* word excluded from practice */
+
+/* --- game helper --- */
+/* Keyboard-shortcut chip. */
+.zenbuji-kbd {
+    font-size: 12px; font-weight: 700;
+    padding: 2px 9px; border-radius: 7px;
+    background-color: alpha(currentColor, 0.10);
+    border: 1px solid alpha(currentColor, 0.12);
+}
+.zenbuji-busy { font-size: 12px; color: @accent_color; }
 .zenbuji-dict-scroll { background: transparent; }
 
 /* --- learning / quiz window --- */

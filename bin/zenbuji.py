@@ -45,6 +45,8 @@ DICT_PATH = DATA_DIR / "dictionary.json"
 SRS_PATH = DATA_DIR / "srs.json"
 # Daily review tallies for the statistics window (streak + recent activity).
 ACTIVITY_PATH = DATA_DIR / "activity.json"
+# Transient marker so the game-helper can show when a translation/OCR is running.
+BUSY_PATH = DATA_DIR / "busy.json"
 # Date-stamp so the "open on login" autostart fires at most once per day.
 LAST_LEARN_PATH = DATA_DIR / "last_learn.txt"
 AUTOSTART_PATH = Path(
@@ -488,6 +490,50 @@ def activity_recent(days: int = 14, data: dict | None = None) -> list:
     return out
 
 
+# --- Background-busy marker (read by the game-helper window) ---------------- #
+def set_busy(stage: str) -> None:
+    """Mark that a translation/OCR is running (stage: 'reading' | 'translating')."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        BUSY_PATH.write_text(
+            json.dumps({"stage": stage,
+                        "ts": datetime.now().isoformat(timespec="seconds")}),
+            encoding="utf-8")
+    except OSError:
+        pass
+
+
+def clear_busy() -> None:
+    try:
+        BUSY_PATH.unlink()
+    except (FileNotFoundError, OSError):
+        pass
+
+
+def read_busy(max_age: float = 120.0) -> dict | None:
+    """Current busy state, or None when idle/stale (a crashed run can't stick)."""
+    try:
+        data = json.loads(BUSY_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    ts = _due_date_dt(data.get("ts"))
+    try:
+        if ts is not None and (datetime.now() - ts).total_seconds() > max_age:
+            return None
+    except TypeError:  # mismatched naive/aware timestamp — treat as fresh
+        pass
+    return data if isinstance(data, dict) else None
+
+
+def _due_date_dt(iso: str):
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+
+
 def _due_date(iso: str):
     """Parse an SRS due/last-reviewed ISO stamp to a date, or None."""
     if not iso:
@@ -509,6 +555,19 @@ def srs_summary(text: str, srs: dict | None = None) -> dict | None:
         "correct": int(st.get("correct", 0)),
         "wrong": int(st.get("wrong", 0)),
     }
+
+
+def dict_with_srs() -> dict:
+    """Dictionary entries annotated with their SRS summary (level/due/…).
+
+    Used by the dictionary + game-helper windows so each row can show its
+    learning level; `load_dict` itself stays SRS-free for every other caller.
+    """
+    srs = load_srs()
+    data = load_dict()
+    for text, entry in data.items():
+        entry["srs"] = srs_summary(text, srs)
+    return data
 
 
 def srs_stats() -> dict:
@@ -730,12 +789,15 @@ def ocr_image_to_text(path: str, cfg: dict) -> tuple[str, list[str]]:
     if backend != "mangaocr":
         notes.append(_note("ocr_unknown_backend", lang, backend=backend))
     try:
+        set_busy("reading")
         with _quiet_stderr():
             text = _manga_ocr()(path)
     except ImportError:
         return "", [_note("ocr_not_installed", lang)]
     except Exception as exc:  # noqa: BLE001
         return "", [_note("ocr_failed", lang, error=exc)]
+    finally:
+        clear_busy()
     return (text or "").strip(), notes
 
 
@@ -1034,6 +1096,14 @@ def translate_argos(text: str, targets: list[str], lang: str = "en") -> dict:
 
 def translate(text: str, targets: list[str], cfg: dict) -> tuple[dict, list[str]]:
     """Translate text into each target language. Returns (translations, notes)."""
+    set_busy("translating")
+    try:
+        return _translate_impl(text, targets, cfg)
+    finally:
+        clear_busy()
+
+
+def _translate_impl(text: str, targets: list[str], cfg: dict) -> tuple[dict, list[str]]:
     backend = cfg.get("backend", "auto")
     key = cfg.get("deepl_api_key", "")
     lang = cfg.get("ui_language", "en")
@@ -1102,25 +1172,29 @@ def translate_cached(text: str, targets: list[str], cfg: dict,
     fresh: dict = {}          # newly fetched and cacheable
     uncacheable: dict = {}    # newly fetched but must NOT be stored
     if missing:
-        if effective == "deepl" and key:
-            try:
-                fresh = translate_deepl(text, missing, key, lang)
-            except TranslationError as exc:
-                notes.append(str(exc))
-                # Offline fallback for the missing langs; cache only if opted in.
+        set_busy("translating")  # real fetch ahead (cache hits stay instant)
+        try:
+            if effective == "deepl" and key:
+                try:
+                    fresh = translate_deepl(text, missing, key, lang)
+                except TranslationError as exc:
+                    notes.append(str(exc))
+                    # Offline fallback for the missing langs; cache if opted in.
+                    try:
+                        argos = translate_argos(text, missing, lang)
+                        notes.append(_note("fell_back_argos", lang))
+                        (fresh if cache_offline else uncacheable).update(argos)
+                    except TranslationError:
+                        pass
+            else:
+                # Argos (offline) backend, or DeepL requested with no key set.
                 try:
                     argos = translate_argos(text, missing, lang)
-                    notes.append(_note("fell_back_argos", lang))
                     (fresh if cache_offline else uncacheable).update(argos)
-                except TranslationError:
-                    pass
-        else:
-            # Argos (offline) backend, or DeepL requested with no key set.
-            try:
-                argos = translate_argos(text, missing, lang)
-                (fresh if cache_offline else uncacheable).update(argos)
-            except TranslationError as exc:
-                notes.append(str(exc))
+                except TranslationError as exc:
+                    notes.append(str(exc))
+        finally:
+            clear_busy()
 
     # Record/refresh the entry (count++ even on a pure cache hit) whenever we
     # have a cacheable result — a reused entry or freshly fetched cacheable
@@ -1349,6 +1423,7 @@ Usage:
   zenbuji dict                Open the local dictionary (cached DeepL lookups)
   zenbuji learn               Practice cached words (spaced repetition quiz)
   zenbuji stats               Show learning statistics (--json for machines)
+  zenbuji game                Game-helper overlay (shortcuts + live dictionary)
   zenbuji speak [text]        Read text aloud (reads the selection if no text)
   zenbuji voices              List local VOICEVOX speakers (--json for machines)
   zenbuji voicevox [start|stop|restart|status]   Control the VOICEVOX engine
@@ -1710,8 +1785,8 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models", "usage", "ocr", "dict", "learn", "stats", "add",
-        "speak", "voices", "voicevox",
+        "config", "models", "usage", "ocr", "dict", "learn", "stats", "game",
+        "add", "speak", "voices", "voicevox",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -1876,6 +1951,10 @@ def main(argv=None) -> int:
             return 0
         return launch_stats(cfg)
 
+    if command == "game":
+        argparse.ArgumentParser(prog="zenbuji game").parse_args(rest)
+        return launch_game(cfg)
+
     # Shared options for the text commands.
     p = argparse.ArgumentParser(prog=f"zenbuji {command}", add_help=False)
     p.add_argument("--lang")
@@ -2005,6 +2084,81 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
                       speak_fn=speak_fn, auto_speak=auto_speak)
 
 
+# Global hotkeys registered by install.sh (slug, default accel, label key).
+_SHORTCUT_SPEC = [
+    ("zenbuji-ocr-add", "<Super><Shift>k", "ocr_add"),
+    ("zenbuji-ocr",     "<Super><Shift>j", "ocr_lookup"),
+    ("zenbuji",         "<Super>j",        "selection"),
+    ("zenbuji-learn",   "<Super><Shift>l", "practice"),
+]
+_SHORTCUT_LABELS = {
+    "ocr_add":    {"en": "Capture & add (OCR)",   "ja": "画面領域を追加（OCR）"},
+    "ocr_lookup": {"en": "Look up region (OCR)",  "ja": "画面領域を調べる（OCR）"},
+    "selection":  {"en": "Look up selection",     "ja": "選択を調べる"},
+    "practice":   {"en": "Practice",              "ja": "練習"},
+}
+
+
+def _read_keybinding(slug: str) -> str | None:
+    """The live accelerator for a zenbuji custom keybinding, or None."""
+    try:
+        from gi.repository import Gio
+        schema = "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding"
+        src = Gio.SettingsSchemaSource.get_default()
+        if src is None or src.lookup(schema, True) is None:
+            return None
+        path = ("/org/gnome/settings-daemon/plugins/media-keys/"
+                f"custom-keybindings/{slug}/")
+        binding = Gio.Settings.new_with_path(schema, path).get_string("binding")
+        return binding or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _pretty_accel(accel: str) -> str:
+    """'<Super><Shift>k' -> 'Super+Shift+K'."""
+    parts = re.findall(r"<([^>]+)>", accel)
+    rest = re.sub(r"<[^>]+>", "", accel).strip()
+    if rest:
+        parts.append(rest.upper() if len(rest) == 1 else rest.capitalize())
+    return "+".join(parts) if parts else accel
+
+
+def shortcuts_info(ui_language: str = "en") -> list:
+    """Localized [{keys, label}] for the game-helper shortcut panel.
+
+    Reads the user's live bindings when available, else the install defaults.
+    """
+    out = []
+    for slug, default, key in _SHORTCUT_SPEC:
+        accel = _read_keybinding(slug) or default
+        label = _SHORTCUT_LABELS[key].get(ui_language) or _SHORTCUT_LABELS[key]["en"]
+        out.append({"keys": _pretty_accel(accel), "label": label})
+    return out
+
+
+def launch_game(cfg: dict) -> int:
+    """Show the trimmed game-helper overlay (live dictionary + shortcuts + status)."""
+    try:
+        from zenbuji_dict import show_dictionary
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from zenbuji_dict import show_dictionary
+
+    return show_dictionary(
+        ui_language=cfg.get("ui_language", "en"),
+        languages=cfg.get("languages", ["en", "de"]),
+        load_fn=dict_with_srs,
+        delete_fn=dict_delete,
+        clear_fn=clear_dict,
+        stats_fn=dict_stats,
+        speak_fn=lambda t: speak(t, cfg),
+        game_mode=True,
+        shortcuts=shortcuts_info(cfg.get("ui_language", "en")),
+        busy_path=BUSY_PATH,
+    )
+
+
 def launch_dictionary(cfg: dict) -> int:
     """Show the GTK dictionary window (browse/manage cached DeepL lookups)."""
     try:
@@ -2023,22 +2177,10 @@ def launch_dictionary(cfg: dict) -> int:
         fresh = translate_deepl(text, targets, key, lang)
         return dict_record(text, reading, fresh)
 
-    def load_dict_with_srs():
-        """Dictionary entries annotated with their SRS summary (level/due/…).
-
-        Used only by the dict window so each row can show its learning level;
-        `load_dict` itself stays SRS-free for every other caller.
-        """
-        srs = load_srs()
-        data = load_dict()
-        for text, entry in data.items():
-            entry["srs"] = srs_summary(text, srs)
-        return data
-
     return show_dictionary(
         ui_language=cfg.get("ui_language", "en"),
         languages=cfg.get("languages", ["en", "de"]),
-        load_fn=load_dict_with_srs,
+        load_fn=dict_with_srs,
         delete_fn=dict_delete,
         clear_fn=clear_dict,
         stats_fn=dict_stats,
