@@ -371,9 +371,18 @@ pytest                       # run the suite
 python -m compileall bin     # syntax-check every module
 ```
 
-GitHub Actions runs both on every push and pull request
-(`.github/workflows/ci.yml`); the compile step also guards against non-ASCII
-sneaking into the CSS string.
+There are also **GUI smoke tests** that launch each window and assert it renders
+without crashing — they need a display, so run them locally or under `xvfb`:
+
+```sh
+xvfb-run -a pytest                 # includes the GUI smoke tests
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs a fast dependency-light gate
+plus a full job that installs GTK4/libadwaita and runs everything under `xvfb`
+with coverage measured across the in-process tests *and* the CLI/GUI
+subprocesses they spawn. The compile step also guards against non-ASCII sneaking
+into the CSS string.
 
 The UI has a deliberate visual language (frosted-glass cards, the accent color,
 pill controls, cairo charts). Before adding or restyling a surface, read

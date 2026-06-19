@@ -1,0 +1,10 @@
+# parallel + the COVERAGE_PROCESS_START hook let coverage also measure the CLI
+# and GUI subprocesses the tests spawn, not just the in-process pytest run.
+[run]
+parallel = true
+source = bin
+# GUI smoke tests terminate the window with SIGTERM; flush coverage data then.
+sigterm = true
+
+[report]
+show_missing = false
