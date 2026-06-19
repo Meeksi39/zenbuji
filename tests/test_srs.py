@@ -74,6 +74,14 @@ def test_select_respects_limit(store):
     assert len(zenbuji.srs_select(3)) == 3
 
 
+def test_select_skips_excluded(store):
+    zenbuji.dict_record("有", "ゆう", {"en": "have"})
+    zenbuji.dict_record("無", "む", {"en": "none"})
+    zenbuji.dict_set_exclude("無", True)
+    texts = [c["text"] for c in zenbuji.srs_select(10)]
+    assert "有" in texts and "無" not in texts
+
+
 def test_summary_none_when_unstudied(store):
     zenbuji.dict_record("X", "えっくす", {"en": "x"})
     assert zenbuji.srs_summary("X") is None

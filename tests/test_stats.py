@@ -53,6 +53,26 @@ def test_aggregation(store):
     assert s["hardest"][0]["reading"] == "あ"
 
 
+def test_excluded_words_drop_from_stats(store):
+    dict_data = {
+        "a": {"text": "a", "reading": "あ", "translations": {"en": "a"}},
+        "b": {"text": "b", "reading": "べ", "translations": {"en": "b"},
+              "exclude": True},
+    }
+    srs_data = {
+        "a": {"interval": 1, "last_reviewed": "2026-01-01T00:00:00",
+              "correct": 1, "wrong": 0, "lapses": 0},
+        "b": {"interval": 1, "last_reviewed": "2026-01-01T00:00:00",
+              "correct": 0, "wrong": 5, "lapses": 5},
+    }
+    _seed(store, dict_data, srs_data)
+    s = zenbuji.srs_stats()
+    assert s["total"] == 1                       # only a counts
+    assert s["reviews_total"] == 1               # b's reviews excluded
+    assert s["wrong_total"] == 0
+    assert all(h["text"] != "b" for h in s["hardest"])  # b not in hardest
+
+
 def test_streak_and_today_from_activity(store):
     today = dt.datetime.now().date()
     activity = {(today - dt.timedelta(days=i)).isoformat(): {"reviews": 3, "correct": 2}

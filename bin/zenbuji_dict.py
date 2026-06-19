@@ -44,6 +44,11 @@ DICT_STRINGS = {
     "look_up":    {"en": "Look up",      "ja": "調べる"},
     "read_aloud": {"en": "Read aloud",   "ja": "読み上げる"},
     "stats":      {"en": "Statistics",   "ja": "統計"},
+    "edit":       {"en": "Edit translations", "ja": "翻訳を編集"},
+    "save":       {"en": "Save",         "ja": "保存"},
+    "cancel":     {"en": "Cancel",       "ja": "キャンセル"},
+    "exclude":    {"en": "Exclude from practice", "ja": "練習から除外"},
+    "excluded":   {"en": "Excluded from practice", "ja": "練習から除外中"},
     "first":      {"en": "first",        "ja": "初回"},
     "last":       {"en": "last",         "ja": "最終"},
     "due":        {"en": "due",          "ja": "次回"},
@@ -96,11 +101,21 @@ def _spawn_stats():
 
 def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     load_fn, delete_fn, clear_fn, stats_fn,
-                    refresh_fn=None, quota_fn=None, speak_fn=None) -> int:
-    """Show the dictionary window. The *_fn callables provide the data layer."""
+                    refresh_fn=None, update_fn=None, set_exclude_fn=None,
+                    watch_path=None, quota_fn=None, speak_fn=None) -> int:
+    """Show the dictionary window. The *_fn callables provide the data layer.
+
+    `update_fn(text, {lang: value})` corrects an entry's translations,
+    `set_exclude_fn(text, bool)` toggles a word out of the practice quiz, and
+    `watch_path` (the dictionary file) drives live auto-refresh so background
+    OCR-adds show up in an already-open window.
+    """
     t = _make_tr(ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
     status_names = STATUS_NAMES.get(ui_language, STATUS_NAMES["en"])
+    # `editing` pauses auto-refresh so an external add can't wipe a half-typed
+    # correction; the deferred refresh runs when the edit closes.
+    state = {"editing": False, "pending": False, "token": 0, "monitors": []}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -174,95 +189,175 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         listbox.set_filter_func(filter_func)
         search.connect("search-changed", lambda _s: listbox.invalidate_filter())
 
+        def _langs_in(trans):
+            return [*languages, *[l for l in trans if l not in languages]]
+
         def make_row(entry):
             text = entry.get("text", "")
+            reading = entry.get("reading", "")
+            trans = entry.get("translations", {})
             row = Gtk.ListBoxRow()
-            outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            outer.set_margin_top(8)
-            outer.set_margin_bottom(8)
-            outer.set_margin_start(6)
-            outer.set_margin_end(6)
+            row._haystack = " ".join([text, reading, *trans.values()]).lower()
 
-            top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            jp = Gtk.Label(label=text, xalign=0, wrap=True, selectable=True)
-            jp.add_css_class("zenbuji-dict-jp")
-            jp.set_hexpand(True)
-            jp.set_max_width_chars(30)
-            top.append(jp)
-            srs = entry.get("srs") or {}
-            level = srs.get("level")
-            if level:
-                badge = Gtk.Label(label=status_names.get(level, level))
-                badge.add_css_class("zenbuji-level")
-                badge.add_css_class(f"zenbuji-level-{level}")
-                badge.set_valign(Gtk.Align.CENTER)
-                top.append(badge)
-            count = Gtk.Label(label=f"×{entry.get('count', 0)}")
-            count.add_css_class("zenbuji-count")
-            count.set_valign(Gtk.Align.CENTER)
-            top.append(count)
-            for icon, key, cb in (
-                ("audio-volume-high-symbolic", "read_aloud",
-                 lambda _b, r=(entry.get("reading") or text): speak_fn(r)),
-                ("accessories-dictionary-symbolic", "look_up",
-                 lambda _b, x=text: _spawn_popup(x)),
-                ("view-refresh-symbolic", "refresh",
-                 lambda _b, x=text: do_refresh(x)),
-                ("user-trash-symbolic", "delete",
-                 lambda _b, x=text: do_delete(x)),
-            ):
-                if key == "refresh" and refresh_fn is None:
-                    continue
-                if key == "read_aloud" and speak_fn is None:
-                    continue
+            def _icon_btn(icon, key, cb, danger=False):
                 b = Gtk.Button(icon_name=icon)
                 b.add_css_class("flat")
-                b.add_css_class("zenbuji-icon-danger" if key == "delete"
-                                else "zenbuji-icon")
+                b.add_css_class("zenbuji-icon-danger" if danger else "zenbuji-icon")
                 b.set_valign(Gtk.Align.CENTER)
                 b.set_tooltip_text(t(key))
                 b.connect("clicked", cb)
-                top.append(b)
-            outer.append(top)
+                return b
 
-            reading = entry.get("reading", "")
-            if reading and reading != text:
-                rl = Gtk.Label(label=reading, xalign=0, wrap=True)
-                rl.add_css_class("zenbuji-reading")
-                rl.set_max_width_chars(40)
-                outer.append(rl)
+            def build_view():
+                outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                outer.set_margin_top(8)
+                outer.set_margin_bottom(8)
+                outer.set_margin_start(6)
+                outer.set_margin_end(6)
+                if entry.get("exclude"):
+                    outer.add_css_class("zenbuji-excluded")
 
-            trans = entry.get("translations", {})
-            for lang in [*languages, *[l for l in trans if l not in languages]]:
-                val = trans.get(lang)
-                if not val:
-                    continue
-                line = Gtk.Label(
-                    label=f"{lang_names.get(lang, lang.upper())}:  {val}",
-                    xalign=0, wrap=True, selectable=True)
-                line.add_css_class("zenbuji-translation")
-                line.set_max_width_chars(40)
-                outer.append(line)
+                top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                jp = Gtk.Label(label=text, xalign=0, wrap=True, selectable=True)
+                jp.add_css_class("zenbuji-dict-jp")
+                jp.set_hexpand(True)
+                jp.set_max_width_chars(30)
+                top.append(jp)
+                srs = entry.get("srs") or {}
+                level = srs.get("level")
+                if level and not entry.get("exclude"):
+                    badge = Gtk.Label(label=status_names.get(level, level))
+                    badge.add_css_class("zenbuji-level")
+                    badge.add_css_class(f"zenbuji-level-{level}")
+                    badge.set_valign(Gtk.Align.CENTER)
+                    top.append(badge)
+                count = Gtk.Label(label=f"×{entry.get('count', 0)}")
+                count.add_css_class("zenbuji-count")
+                count.set_valign(Gtk.Align.CENTER)
+                top.append(count)
 
-            meta_parts = [
-                f"{t('first')} {_short_dt(entry.get('first_seen', ''))}",
-                f"{t('last')} {_short_dt(entry.get('last_seen', ''))}",
-            ]
-            if srs:
-                if srs.get("due"):
-                    meta_parts.append(f"{t('due')} {_short_dt(srs['due'])[:10]}")
-                if srs.get("correct") or srs.get("wrong"):
-                    meta_parts.append(
-                        f"✓{srs.get('correct', 0)} ✗{srs.get('wrong', 0)}")
-            meta = Gtk.Label(label="   ·   ".join(meta_parts), xalign=0,
-                             wrap=True)
-            meta.add_css_class("zenbuji-meta")
-            meta.set_max_width_chars(44)
-            outer.append(meta)
+                if speak_fn is not None:
+                    top.append(_icon_btn(
+                        "audio-volume-high-symbolic", "read_aloud",
+                        lambda _b, r=(reading or text): speak_fn(r)))
+                top.append(_icon_btn("accessories-dictionary-symbolic", "look_up",
+                                     lambda _b, x=text: _spawn_popup(x)))
+                if update_fn is not None:
+                    top.append(_icon_btn("document-edit-symbolic", "edit",
+                                         lambda _b: show_edit()))
+                if refresh_fn is not None:
+                    top.append(_icon_btn("view-refresh-symbolic", "refresh",
+                                         lambda _b, x=text: do_refresh(x)))
+                if set_exclude_fn is not None:
+                    tog = Gtk.ToggleButton(icon_name="action-unavailable-symbolic")
+                    tog.add_css_class("flat")
+                    tog.add_css_class("zenbuji-icon")
+                    tog.set_valign(Gtk.Align.CENTER)
+                    tog.set_active(bool(entry.get("exclude")))
+                    tog.set_tooltip_text(t("excluded") if entry.get("exclude")
+                                         else t("exclude"))
 
-            row.set_child(outer)
-            hay = " ".join([text, reading, *trans.values()]).lower()
-            row._haystack = hay
+                    def _on_tog(b, _outer=outer):
+                        ex = b.get_active()
+                        entry["exclude"] = ex
+                        (_outer.add_css_class if ex else _outer.remove_css_class)(
+                            "zenbuji-excluded")
+                        b.set_tooltip_text(t("excluded") if ex else t("exclude"))
+                        try:
+                            set_exclude_fn(text, ex)
+                        except Exception:  # noqa: BLE001
+                            pass
+
+                    tog.connect("toggled", _on_tog)
+                    top.append(tog)
+                top.append(_icon_btn("user-trash-symbolic", "delete",
+                                     lambda _b, x=text: do_delete(x), danger=True))
+                outer.append(top)
+
+                if reading and reading != text:
+                    rl = Gtk.Label(label=reading, xalign=0, wrap=True)
+                    rl.add_css_class("zenbuji-reading")
+                    rl.set_max_width_chars(40)
+                    outer.append(rl)
+
+                for lang in _langs_in(trans):
+                    val = trans.get(lang)
+                    if not val:
+                        continue
+                    line = Gtk.Label(
+                        label=f"{lang_names.get(lang, lang.upper())}:  {val}",
+                        xalign=0, wrap=True, selectable=True)
+                    line.add_css_class("zenbuji-translation")
+                    line.set_max_width_chars(40)
+                    outer.append(line)
+
+                meta_parts = [
+                    f"{t('first')} {_short_dt(entry.get('first_seen', ''))}",
+                    f"{t('last')} {_short_dt(entry.get('last_seen', ''))}",
+                ]
+                if srs:
+                    if srs.get("due"):
+                        meta_parts.append(f"{t('due')} {_short_dt(srs['due'])[:10]}")
+                    if srs.get("correct") or srs.get("wrong"):
+                        meta_parts.append(
+                            f"✓{srs.get('correct', 0)} ✗{srs.get('wrong', 0)}")
+                meta = Gtk.Label(label="   ·   ".join(meta_parts), xalign=0,
+                                 wrap=True)
+                meta.add_css_class("zenbuji-meta")
+                meta.set_max_width_chars(44)
+                outer.append(meta)
+                return outer
+
+            def build_edit():
+                outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+                outer.set_margin_top(8)
+                outer.set_margin_bottom(8)
+                outer.set_margin_start(6)
+                outer.set_margin_end(6)
+                head = Gtk.Label(label=f"{text}　{reading}" if reading else text,
+                                 xalign=0, wrap=True)
+                head.add_css_class("zenbuji-dict-jp")
+                head.set_max_width_chars(40)
+                outer.append(head)
+
+                fields = {}
+                for lang in _langs_in(trans):
+                    e = Gtk.Entry(text=trans.get(lang, ""), hexpand=True)
+                    e.set_placeholder_text(lang_names.get(lang, lang.upper()))
+                    fields[lang] = e
+                    outer.append(e)
+
+                def on_save(*_a):
+                    do_save(text, {l: w.get_text() for l, w in fields.items()})
+
+                btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                               homogeneous=True)
+                cancel_b = Gtk.Button(label=t("cancel"))
+                cancel_b.add_css_class("zenbuji-secondary")
+                cancel_b.connect("clicked", lambda _b: cancel_edit())
+                save_b = Gtk.Button(label=t("save"))
+                save_b.add_css_class("zenbuji-action")
+                save_b.connect("clicked", on_save)
+                for w in fields.values():
+                    w.connect("activate", on_save)
+                btns.append(cancel_b)
+                btns.append(save_b)
+                outer.append(btns)
+                return outer
+
+            def show_view():
+                state["editing"] = False
+                row.set_child(build_view())
+                _run_pending()
+
+            def show_edit():
+                state["editing"] = True
+                row.set_child(build_edit())
+
+            def cancel_edit():
+                show_view()
+
+            row.set_child(build_view())
             return row
 
         def rebuild():
@@ -278,6 +373,66 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         def do_delete(text):
             delete_fn(text)
             rebuild()
+
+        def do_save(text, translations):
+            state["editing"] = False
+            if update_fn is not None:
+                try:
+                    update_fn(text, translations)
+                except Exception:  # noqa: BLE001
+                    pass
+            state["pending"] = False
+            rebuild()
+
+        def _run_pending():
+            if state["pending"] and not state["editing"]:
+                state["pending"] = False
+                rebuild()
+
+        def schedule_rebuild():
+            # Debounce a burst of file-monitor events into one rebuild, and hold
+            # off entirely while the user is editing a row.
+            if state["editing"]:
+                state["pending"] = True
+                return
+            state["token"] += 1
+            tok = state["token"]
+
+            def fire():
+                if tok == state["token"] and not state["editing"]:
+                    rebuild()
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(300, fire)
+
+        def setup_watch():
+            if not watch_path:
+                return
+            try:
+                gfile = Gio.File.new_for_path(str(watch_path))
+                mon = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
+                mon.connect("changed", lambda *_a: schedule_rebuild())
+                state["monitors"].append(mon)  # keep a ref so it isn't GC'd
+                return
+            except Exception:  # noqa: BLE001  (fall back to polling)
+                pass
+
+            def _mtime():
+                try:
+                    return Path(watch_path).stat().st_mtime
+                except OSError:
+                    return 0
+
+            last = {"m": _mtime()}
+
+            def poll():
+                m = _mtime()
+                if m != last["m"]:
+                    last["m"] = m
+                    schedule_rebuild()
+                return True
+
+            GLib.timeout_add_seconds(2, poll)
 
         def do_refresh(text):
             if refresh_fn is None:
@@ -325,6 +480,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         rebuild()
         win.present()
         refresh_quota()
+        setup_watch()
 
     app.connect("activate", on_activate)
     return app.run([])

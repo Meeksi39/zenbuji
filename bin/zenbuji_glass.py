@@ -167,6 +167,7 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-meta { font-size: 10px; opacity: 0.5; }
 .zenbuji-dict-list { background: transparent; }
 .zenbuji-dict-list > row { background: transparent; border-radius: 8px; }
+.zenbuji-excluded { opacity: 0.45; }  /* word excluded from practice */
 .zenbuji-dict-scroll { background: transparent; }
 
 /* --- learning / quiz window --- */
