@@ -262,6 +262,46 @@ def dict_record(text: str, reading: str, deepl_translations: dict) -> dict:
     return entry
 
 
+def dict_update_translations(text: str, translations: dict) -> dict | None:
+    """Manually correct an entry's translations (no lookup-count bump).
+
+    Replaces the given languages' values; a blank value drops that language.
+    Other languages, the reading, count and timestamps are left untouched.
+    Returns the updated entry, or None if there's no such entry.
+    """
+    text = text.strip()
+    data = load_dict()
+    entry = data.get(text)
+    if entry is None:
+        return None
+    merged = dict(entry.get("translations", {}))
+    for lang, val in translations.items():
+        val = (val or "").strip()
+        if val:
+            merged[lang] = val
+        else:
+            merged.pop(lang, None)
+    entry["translations"] = merged
+    data[text] = entry
+    save_dict(data)
+    return entry
+
+
+def dict_set_exclude(text: str, excluded: bool) -> None:
+    """Flag (or unflag) an entry as excluded from the practice quiz/SRS."""
+    text = text.strip()
+    data = load_dict()
+    entry = data.get(text)
+    if entry is None:
+        return
+    if excluded:
+        entry["exclude"] = True
+    else:
+        entry.pop("exclude", None)
+    data[text] = entry
+    save_dict(data)
+
+
 # --------------------------------------------------------------------------- #
 # Spaced repetition (SRS) — a learning schedule layered over the dictionary
 # --------------------------------------------------------------------------- #
@@ -357,6 +397,8 @@ def srs_select(limit: int = 10) -> list:
     srs = load_srs()
     candidates = []
     for text, e in d.items():
+        if e.get("exclude"):
+            continue
         if not e.get("reading"):
             continue
         if not any((e.get("translations") or {}).values()):
@@ -474,10 +516,14 @@ def srs_stats() -> dict:
     d = load_dict()
     srs = load_srs()
     today = datetime.now().date()
+    # Words excluded from practice don't count toward the learning stats.
+    excluded = {text for text, e in d.items() if e.get("exclude")}
 
     by_level = {"new": 0, "learning": 0, "young": 0, "mature": 0}
     total = reviewed = due_now = due_today = 0
     for text, e in d.items():
+        if text in excluded:
+            continue
         if not e.get("reading"):
             continue
         if not any((e.get("translations") or {}).values()):
@@ -496,6 +542,8 @@ def srs_stats() -> dict:
     reviews_total = correct_total = wrong_total = lapses_total = 0
     hardest = []
     for text, st in srs.items():
+        if text in excluded:
+            continue
         c, w = int(st.get("correct", 0)), int(st.get("wrong", 0))
         correct_total += c
         wrong_total += w
@@ -1995,6 +2043,9 @@ def launch_dictionary(cfg: dict) -> int:
         clear_fn=clear_dict,
         stats_fn=dict_stats,
         refresh_fn=refresh_fn,
+        update_fn=dict_update_translations,
+        set_exclude_fn=dict_set_exclude,
+        watch_path=DICT_PATH,
         quota_fn=lambda: (deepl_usage(cfg.get("deepl_api_key", ""))
                           if cfg.get("deepl_api_key") else None),
         speak_fn=lambda t: speak(t, cfg),

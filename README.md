@@ -149,6 +149,11 @@ in the lookup popup. It also shows your remaining DeepL quota when a key is set.
 enters practice, its row shows its **SRS level** badge, next-due date, and correct/wrong
 tally — and a **Statistics** button opens the full learning overview.
 
+The window **refreshes live**, so words you grab with the background OCR-add shortcut
+(`Super+Shift+K`) pop in while it's open on a second monitor — handy mid-game. You can **fix a
+translation** in place (the edit button on a row) and **exclude a word from practice** (the
+exclude toggle) when you don't want it in the quiz.
+
 <div align="center">
 <img src="docs/dictionary.png" alt="zenbuji dictionary window" width="360">
 </div>

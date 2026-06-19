@@ -42,3 +42,28 @@ def test_delete_and_clear(store):
     zenbuji.dict_record("b", "べ", {"en": "b"})
     zenbuji.clear_dict()
     assert zenbuji.load_dict() == {}
+
+
+def test_update_translations_replaces_value(store):
+    zenbuji.dict_record("水", "みず", {"en": "watr", "de": "Wasser"})
+    e = zenbuji.dict_update_translations("水", {"en": "water"})
+    assert e["translations"] == {"en": "water", "de": "Wasser"}
+    assert e["reading"] == "みず" and e["count"] == 1   # untouched
+
+
+def test_update_translations_blank_drops_language(store):
+    zenbuji.dict_record("水", "みず", {"en": "water", "de": "Wasser"})
+    e = zenbuji.dict_update_translations("水", {"de": "  "})
+    assert "de" not in e["translations"] and e["translations"]["en"] == "water"
+
+
+def test_update_translations_unknown_entry_returns_none(store):
+    assert zenbuji.dict_update_translations("nope", {"en": "x"}) is None
+
+
+def test_set_exclude_toggles_flag(store):
+    zenbuji.dict_record("水", "みず", {"en": "water"})
+    zenbuji.dict_set_exclude("水", True)
+    assert zenbuji.dict_get("水")["exclude"] is True
+    zenbuji.dict_set_exclude("水", False)
+    assert "exclude" not in zenbuji.dict_get("水")
