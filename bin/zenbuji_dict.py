@@ -25,10 +25,10 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
-    from zenbuji_glass import make_glass_window
+    from zenbuji_glass import make_footer, make_glass_window
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import make_glass_window
+    from zenbuji_glass import make_footer, make_glass_window
 
 LANG_NAMES_BY_UI = {
     "en": {"en": "English", "de": "Deutsch", "ja": "日本語"},
@@ -165,14 +165,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             title.add_css_class("zenbuji-title")
             card.append(title)
 
-            # Compact footer: a small spinner+status on the left, the background-
-            # add shortcuts as small chips on the right. Built now, appended
-            # below the word list so it sits at the bottom of the window.
-            game_footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            fhair = Gtk.Box()
-            fhair.add_css_class("zenbuji-hairline")
-            game_footer.append(fhair)
-            frow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            # Compact footer (reusable component): a small spinner+status on the
+            # left, the background-add shortcuts as small chips on the right.
+            # Appended below the word list so it sits at the bottom.
+            game_footer, frow = make_footer()
 
             busy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             spinner = Gtk.Spinner()
@@ -196,7 +192,6 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 pair.append(cap)
                 keys_box.append(pair)
             frow.append(keys_box)
-            game_footer.append(frow)
         else:
             # --- Header: title + stats + clear-all ------------------------ //
             header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
