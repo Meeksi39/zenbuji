@@ -187,12 +187,14 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-busy { font-size: 12px; color: @accent_color; }
 /* Box around the newest entry in the game overlay (the latest translation):
    roomy padding + a larger, easier-to-read type scale. */
+/* The newest entry wears a gold, LEVEL-UP-style champion box. */
 .zenbuji-latest {
-    border: 1.5px solid @accent_color;
+    border: 2px solid #f5c211;
     border-radius: 12px;
-    background-color: alpha(@accent_color, 0.12);
+    background-image: linear-gradient(to bottom,
+        alpha(#ffd84a, 0.20), alpha(#f5c211, 0.08));
     padding: 10px 14px;
-    box-shadow: 0 0 14px alpha(@accent_color, 0.45);   /* dramatic glow */
+    box-shadow: 0 0 18px alpha(#f5c211, 0.50);
 }
 .zenbuji-latest .zenbuji-dict-jp { font-size: 21px; }
 .zenbuji-latest .zenbuji-reading { font-size: 17px; }
@@ -222,6 +224,24 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     box-shadow: 0 1px 5px alpha(#000000, 0.35);
 }
 .zenbuji-quip { font-size: 13px; font-weight: 700; color: @accent_color; }
+/* Transient capture banner that pops over the list (JRPG flourish). */
+.zenbuji-capture-banner {
+    font-size: 22px; font-weight: 800;
+    padding: 6px 24px; border-radius: 10px;
+    text-shadow: 0 2px 6px alpha(#000000, 0.55);
+    box-shadow: 0 3px 16px alpha(#000000, 0.45);
+}
+/* Re-captured word -> gold LEVEL UP. */
+.zenbuji-levelup-banner {
+    color: #3a2600;
+    background-image: linear-gradient(to bottom, #ffe27a, #e0a200);
+    text-shadow: 0 1px 1px alpha(#ffffff, 0.5);
+}
+/* Brand-new word -> pink Booster. */
+.zenbuji-booster-banner {
+    color: #ffffff; font-style: italic;
+    background-image: linear-gradient(to bottom right, #ff5fa2, #c0186a);
+}
 .zenbuji-dict-scroll { background: transparent; }
 
 /* --- learning / quiz window --- */

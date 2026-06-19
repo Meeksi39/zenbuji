@@ -62,24 +62,17 @@ DICT_STRINGS = {
     "busy_translating": {"en": "Translating…",  "ja": "翻訳中…"},
 }
 
-# Playful, ずんだもん-spirited lines for the game overlay (idle vs. on-capture),
-# in the vein of the quiz greetings — a little overdramatic on purpose.
-GAME_QUIPS = {
-    "en": ["ずんだもん is watching… capture something!",
-           "Your quest log hungers for words.",
-           "Spot a word? Snatch it!",
-           "Adventure awaits — grab a phrase!",
-           "The hunt continues…"],
-    "ja": ["ずんだもん、見てるよ…ことばを集めよう！",
-           "クエストログが単語を求めている…！",
-           "気になることば、見つけた？ゲットだ！",
-           "ぼうけんはこれから！フレーズをつかめ！",
-           "狩りはつづく…"],
-}
-GAME_CELEBRATIONS = {
-    "en": ["Nice! +1 ✦", "Got it! Into the log!", "Critical hit! ✦", "Combo!", "Word acquired!"],
-    "ja": ["ナイス！+1 ✦", "ゲット！ログに追加！", "クリティカル！✦", "コンボ！", "ことばを かくとく！"],
-}
+# The game overlay is intentionally Japanese-only for flavour (immersion):
+GAME_TITLE = "✦ 漢字キャプチャー ✦"   # "KanjiCapture", JRPG-style
+# Playful, ずんだもん-spirited idle lines (in the vein of the quiz greetings).
+GAME_QUIPS = ["ずんだもん、見てるよ…ことばを集めよう！",
+              "クエストログが単語を求めている…！",
+              "気になることば、見つけた？ゲットだ！",
+              "ぼうけんはこれから！フレーズをつかめ！",
+              "狩りはつづく…"]
+# Transient capture banners (JRPG flourish): new word vs. re-captured word.
+GAME_BANNER_NEW = "✦ 新規ゲット！ ✦"    # brand-new word -> pink "Booster"
+GAME_BANNER_LEVELUP = "✦ レベルアップ！ ✦"  # re-captured -> gold "LEVEL UP"
 
 
 def _read_busy(path, max_age=120.0):
@@ -163,7 +156,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     # correction; the deferred refresh runs when the edit closes.
     state = {"editing": False, "pending": False, "token": 0, "monitors": [],
              "seen": {}, "primed": False, "anims": [],
-             "session": 0, "celebrating": False, "celeb_token": 0}
+             "session": 0, "quip_mode": "idle", "banner_token": 0}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -186,7 +179,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             # --- Game overlay: a dramatic gradient banner + combo + quip ---- //
             banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             banner.add_css_class("zenbuji-game-banner")
-            gtitle = Gtk.Label(label=t("game_banner"), xalign=0, hexpand=True,
+            gtitle = Gtk.Label(label=GAME_TITLE, xalign=0, hexpand=True,
                                halign=Gtk.Align.START)
             gtitle.add_css_class("zenbuji-game-title")
             banner.append(gtitle)
@@ -272,7 +265,24 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         listbox.add_css_class("zenbuji-dict-list")
         listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         scroll.set_child(listbox)
-        card.append(scroll)
+
+        capture_banner = None
+        if game_mode:
+            # Overlay so the LEVEL UP / Booster banner can pop over the list.
+            overlay = Gtk.Overlay()
+            overlay.set_vexpand(True)
+            overlay.set_child(scroll)
+            capture_banner = Gtk.Label()
+            capture_banner.add_css_class("zenbuji-capture-banner")
+            capture_banner.set_halign(Gtk.Align.CENTER)
+            capture_banner.set_valign(Gtk.Align.START)
+            capture_banner.set_margin_top(10)
+            capture_banner.set_can_target(False)
+            capture_banner.set_visible(False)
+            overlay.add_overlay(capture_banner)
+            card.append(overlay)
+        else:
+            card.append(scroll)
 
         if game_footer is not None:
             card.append(game_footer)
@@ -512,6 +522,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             current = {}
             fresh = []
             rows = []
+            any_new = False
             for e in entries:
                 txt = e.get("text", "")
                 last_seen = e.get("last_seen", "")
@@ -520,9 +531,12 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 listbox.append(row)
                 rows.append(row)
                 # New word, or an existing one just re-recorded (last_seen bumped)
-                # — both should animate in and (in game mode) scroll to the top.
+                # — both animate in and (game mode) scroll to the top. A word not
+                # seen before is "new" (pink Booster) vs. a re-capture (LEVEL UP).
                 if state["primed"] and state["seen"].get(txt) != last_seen:
                     fresh.append(row)
+                    if txt not in state["seen"]:
+                        any_new = True
             state["seen"] = current
             # In the game overlay, box the newest (top) entry so the latest
             # translation is unmistakable.
@@ -536,7 +550,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 for row in fresh:
                     (_pop_in if game_mode else _animate_in)(row)
                 if game_mode and fresh:
-                    _celebrate(len(fresh))
+                    _celebrate(len(fresh), any_new)
                     GLib.idle_add(lambda: (scroll.get_vadjustment().set_value(0),
                                            GLib.SOURCE_REMOVE)[1])
             if stats_label is not None:
@@ -611,52 +625,65 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
             GLib.timeout_add(1000, poll)
 
-        def _idle_quip():
-            return random.choice(GAME_QUIPS.get(ui_language, GAME_QUIPS["en"]))
+        def _set_idle_quip():
+            if quip_lbl is not None and state["quip_mode"] == "idle":
+                quip_lbl.set_text(random.choice(GAME_QUIPS))
 
         def update_busy():
-            # Drives the game overlay's status line: spinner + busy text while a
-            # translation/OCR runs, otherwise a celebration or idle quip.
+            # Status line: spinner + busy text while a translation/OCR runs,
+            # otherwise a (slowly rotating) idle quip. The capture celebration is
+            # the LEVEL UP / Booster banner, not this line.
             if quip_lbl is None:
                 return
             info = _read_busy(busy_path) if busy_path else None
             if info:
-                stage = info.get("stage")
+                state["quip_mode"] = "busy"
                 spinner.start()
-                quip_lbl.set_text(t("busy_translating") if stage == "translating"
-                                  else t("busy_reading"))
+                quip_lbl.set_text(t("busy_translating") if info.get("stage") ==
+                                  "translating" else t("busy_reading"))
             else:
                 spinner.stop()
-                if not state["celebrating"]:
-                    quip_lbl.set_text(_idle_quip())
+                if state["quip_mode"] != "idle":
+                    state["quip_mode"] = "idle"
+                    _set_idle_quip()           # set once on the busy->idle edge
 
-        def _celebrate(n):
-            # Bump the session combo, pulse it, and show a celebratory quip.
-            if combo_lbl is None:
+        def _celebrate(n, any_new):
+            # Bump + pulse the gold combo, and pop the JRPG capture banner:
+            # a pink "Booster" for a brand-new word, gold "LEVEL UP" otherwise.
+            if combo_lbl is not None:
+                state["session"] += n
+                combo_lbl.set_text(f"★ {state['session']}")
+                combo_lbl.set_opacity(0.35)
+                tgt = Adw.CallbackAnimationTarget.new(combo_lbl.set_opacity)
+                pulse = Adw.TimedAnimation.new(combo_lbl, 0.35, 1.0, 350, tgt)
+                pulse.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+                state["anims"].append(pulse)
+                pulse.play()
+            if capture_banner is None:
                 return
-            state["session"] += n
-            combo_lbl.set_text(f"★ {state['session']}")
-            combo_lbl.set_opacity(0.35)
-            tgt = Adw.CallbackAnimationTarget.new(combo_lbl.set_opacity)
-            anim = Adw.TimedAnimation.new(combo_lbl, 0.35, 1.0, 350, tgt)
-            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-            state["anims"].append(anim)
-            anim.play()
-            if quip_lbl is not None:
-                state["celebrating"] = True
-                quip_lbl.set_text(
-                    random.choice(GAME_CELEBRATIONS.get(ui_language,
-                                                         GAME_CELEBRATIONS["en"])))
-                state["celeb_token"] += 1
-                tok = state["celeb_token"]
+            capture_banner.remove_css_class("zenbuji-levelup-banner")
+            capture_banner.remove_css_class("zenbuji-booster-banner")
+            if any_new:
+                capture_banner.set_text(GAME_BANNER_NEW)
+                capture_banner.add_css_class("zenbuji-booster-banner")
+            else:
+                capture_banner.set_text(GAME_BANNER_LEVELUP)
+                capture_banner.add_css_class("zenbuji-levelup-banner")
+            capture_banner.set_opacity(1.0)
+            capture_banner.set_visible(True)
+            state["banner_token"] += 1
+            tok = state["banner_token"]
+            b_tgt = Adw.CallbackAnimationTarget.new(capture_banner.set_opacity)
+            fade = Adw.TimedAnimation.new(capture_banner, 1.0, 0.0, 1600, b_tgt)
+            fade.set_easing(Adw.Easing.EASE_IN_CUBIC)
 
-                def _end_celebration():
-                    if tok == state["celeb_token"]:
-                        state["celebrating"] = False
-                        update_busy()  # back to idle quip (or busy if still running)
-                    return GLib.SOURCE_REMOVE
+            def _hide(*_a):
+                if tok == state["banner_token"]:
+                    capture_banner.set_visible(False)
 
-                GLib.timeout_add(2800, _end_celebration)
+            fade.connect("done", _hide)
+            state["anims"].append(fade)
+            fade.play()
 
         def _pop_in(row):
             # Bouncy entrance: spring the top margin from a lifted offset to 0.
@@ -674,6 +701,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         def setup_busy_watch():
             if quip_lbl is None or not busy_path:
                 return
+            _set_idle_quip()   # initial line
             update_busy()
             try:
                 gfile = Gio.File.new_for_path(str(busy_path))
@@ -682,9 +710,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 state["monitors"].append(mon)
             except Exception:  # noqa: BLE001
                 pass
-            # Re-check periodically so a stale marker (crashed run) clears, and
-            # rotate the idle quip for a little life.
-            GLib.timeout_add_seconds(5, lambda: (update_busy(), True)[1])
+            # Re-check busy state every few seconds so a stale marker clears...
+            GLib.timeout_add_seconds(4, lambda: (update_busy(), True)[1])
+            # ...and rotate the idle quip slowly (only when idle).
+            GLib.timeout_add_seconds(18, lambda: (_set_idle_quip(), True)[1])
 
         def do_refresh(text):
             if refresh_fn is None:

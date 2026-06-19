@@ -205,12 +205,14 @@ activity graph build up from your daily reviews (logged to
 
 ### Game helper
 
-`zenbuji game` (**`Super+Shift+G`** or the top-bar menu) opens a playful, JRPG-flavoured
-**overlay** built for playing: a dramatic gradient banner with a **combo counter** of words
-banked this session, a cheeky ずんだもん **status line** (and a celebration when a word lands),
-your current **add shortcuts** (read live from your GNOME bindings), and the **live word
-list** — the newest word bounces in at the top with a glowing highlight box. Park it on a
-second monitor; the extension keeps zenbuji off your fullscreen game's monitor.
+`zenbuji game` (**`Super+Shift+G`** or the top-bar menu) opens **漢字キャプチャー** — a playful,
+JRPG-flavoured **overlay** built for playing: a dramatic gradient banner with a **combo
+counter** of words banked this session, a cheeky ずんだもん **status line**, your current **add
+shortcuts** (read live from your GNOME bindings), and the **live word list**. When you bank a
+word it **bounces in** at the top in a gold, level-up-style box, and a banner pops — a gold
+**レベルアップ！** for a word you already knew, a pink **新規ゲット！** Booster for a brand-new
+one. Park it on a second monitor; the extension keeps zenbuji off your fullscreen game's
+monitor.
 
 Two silent, no-popup ways to bank a word while playing (both speak it, neither steals focus):
 
