@@ -28,6 +28,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(zenbuji, "DICT_PATH", tmp_path / "dictionary.json")
     monkeypatch.setattr(zenbuji, "ACTIVITY_PATH", tmp_path / "activity.json")
     monkeypatch.setattr(zenbuji, "HISTORY_PATH", tmp_path / "history.json")
+    monkeypatch.setattr(zenbuji, "BUSY_PATH", tmp_path / "busy.json")
     return tmp_path
 
 

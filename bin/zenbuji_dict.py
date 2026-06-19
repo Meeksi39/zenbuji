@@ -10,9 +10,11 @@ the lookup popup. All dictionary data access is injected by the caller
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import gi
@@ -52,7 +54,29 @@ DICT_STRINGS = {
     "first":      {"en": "first",        "ja": "初回"},
     "last":       {"en": "last",         "ja": "最終"},
     "due":        {"en": "due",          "ja": "次回"},
+    "game_title": {"en": "Game helper",  "ja": "ゲームヘルパー"},
+    "shortcuts":  {"en": "Shortcuts",    "ja": "ショートカット"},
+    "busy_reading":     {"en": "Reading…",      "ja": "読み取り中…"},
+    "busy_translating": {"en": "Translating…",  "ja": "翻訳中…"},
 }
+
+
+def _read_busy(path, max_age=120.0):
+    """Current background-busy state ({stage,ts}), or None when idle/stale."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    ts = data.get("ts")
+    if ts:
+        try:
+            if (datetime.now() - datetime.fromisoformat(ts)).total_seconds() > max_age:
+                return None
+        except (ValueError, TypeError):
+            pass
+    return data
 
 # SRS level labels, mirrored from srs_status() / zenbuji_learn.py.
 STATUS_NAMES = {
@@ -102,7 +126,8 @@ def _spawn_stats():
 def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     load_fn, delete_fn, clear_fn, stats_fn,
                     refresh_fn=None, update_fn=None, set_exclude_fn=None,
-                    watch_path=None, quota_fn=None, speak_fn=None) -> int:
+                    watch_path=None, quota_fn=None, speak_fn=None,
+                    game_mode=False, shortcuts=None, busy_path=None) -> int:
     """Show the dictionary window. The *_fn callables provide the data layer.
 
     `update_fn(text, {lang: value})` corrects an entry's translations,
@@ -115,7 +140,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     status_names = STATUS_NAMES.get(ui_language, STATUS_NAMES["en"])
     # `editing` pauses auto-refresh so an external add can't wipe a half-typed
     # correction; the deferred refresh runs when the edit closes.
-    state = {"editing": False, "pending": False, "token": 0, "monitors": []}
+    state = {"editing": False, "pending": False, "token": 0, "monitors": [],
+             "seen": set(), "primed": False, "anims": []}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -123,38 +149,79 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
     def on_activate(application):
         win, card = make_glass_window(
-            application, title="zenbuji 辞書", default_size=(500, 640),
+            application,
+            title="zenbuji ゲーム" if game_mode else "zenbuji 辞書",
+            default_size=(420, 560) if game_mode else (500, 640),
             resizable=True, draggable=True, close_on_focus_loss=False)
 
-        # --- Header: title + stats + clear-all ---------------------------- //
-        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        title = Gtk.Label(label=t("title"), xalign=0)
-        title.add_css_class("zenbuji-title")
-        title.set_hexpand(True)
-        stats_btn = Gtk.Button(label=t("stats"))
-        stats_btn.add_css_class("zenbuji-secondary")
-        stats_btn.set_valign(Gtk.Align.CENTER)
-        stats_btn.set_tooltip_text(t("stats"))
-        stats_btn.connect("clicked", lambda _b: _spawn_stats())
-        clear_btn = Gtk.Button(label=t("clear_all"))
-        clear_btn.add_css_class("zenbuji-secondary")
-        clear_btn.add_css_class("zenbuji-icon-danger")  # destructive: red text
-        clear_btn.set_valign(Gtk.Align.CENTER)
-        header.append(title)
-        header.append(stats_btn)
-        header.append(clear_btn)
-        card.append(header)
+        stats_label = None
+        quota_label = None
+        spinner = busy_box = busy_lbl = None
 
-        stats_label = Gtk.Label(xalign=0, wrap=True)
-        stats_label.add_css_class("zenbuji-quota")
-        stats_label.set_max_width_chars(44)
-        card.append(stats_label)
+        if game_mode:
+            # --- Game overlay: title + shortcuts panel + status ----------- //
+            title = Gtk.Label(label=t("game_title"), xalign=0)
+            title.add_css_class("zenbuji-title")
+            card.append(title)
 
-        quota_label = Gtk.Label(xalign=0, wrap=True)
-        quota_label.add_css_class("zenbuji-quota")
-        quota_label.set_max_width_chars(44)
-        quota_label.set_visible(False)
-        card.append(quota_label)
+            if shortcuts:
+                panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+                panel.add_css_class("zenbuji-panel")
+                cap = Gtk.Label(label=t("shortcuts").upper(), xalign=0)
+                cap.add_css_class("zenbuji-lang-label")
+                panel.append(cap)
+                grid = Gtk.Grid(column_spacing=10, row_spacing=4)
+                for i, sc in enumerate(shortcuts):
+                    keys = Gtk.Label(label=sc.get("keys", ""), xalign=0,
+                                     halign=Gtk.Align.START)
+                    keys.add_css_class("zenbuji-kbd")
+                    lbl = Gtk.Label(label=sc.get("label", ""), xalign=0,
+                                    halign=Gtk.Align.START)
+                    lbl.add_css_class("zenbuji-translation")
+                    grid.attach(keys, 0, i, 1, 1)
+                    grid.attach(lbl, 1, i, 1, 1)
+                panel.append(grid)
+                card.append(panel)
+
+            busy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            busy_box.set_margin_top(2)
+            spinner = Gtk.Spinner()
+            busy_lbl = Gtk.Label(xalign=0)
+            busy_lbl.add_css_class("zenbuji-busy")
+            busy_box.append(spinner)
+            busy_box.append(busy_lbl)
+            busy_box.set_visible(False)
+            card.append(busy_box)
+        else:
+            # --- Header: title + stats + clear-all ------------------------ //
+            header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            title = Gtk.Label(label=t("title"), xalign=0)
+            title.add_css_class("zenbuji-title")
+            title.set_hexpand(True)
+            stats_btn = Gtk.Button(label=t("stats"))
+            stats_btn.add_css_class("zenbuji-secondary")
+            stats_btn.set_valign(Gtk.Align.CENTER)
+            stats_btn.set_tooltip_text(t("stats"))
+            stats_btn.connect("clicked", lambda _b: _spawn_stats())
+            clear_btn = Gtk.Button(label=t("clear_all"))
+            clear_btn.add_css_class("zenbuji-secondary")
+            clear_btn.add_css_class("zenbuji-icon-danger")  # destructive: red
+            clear_btn.set_valign(Gtk.Align.CENTER)
+            header.append(title)
+            header.append(stats_btn)
+            header.append(clear_btn)
+            card.append(header)
+
+            stats_label = Gtk.Label(xalign=0, wrap=True)
+            stats_label.add_css_class("zenbuji-quota")
+            stats_label.set_max_width_chars(44)
+            card.append(stats_label)
+
+            quota_label = Gtk.Label(xalign=0, wrap=True)
+            quota_label.add_css_class("zenbuji-quota")
+            quota_label.set_max_width_chars(44)
+            quota_label.set_visible(False)
+            card.append(quota_label)
 
         search = Gtk.SearchEntry(hexpand=True)
         search.set_placeholder_text(t("search"))
@@ -207,6 +274,41 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 b.set_tooltip_text(t(key))
                 b.connect("clicked", cb)
                 return b
+
+            if game_mode:
+                # Trimmed read-only card: word + reading + translations + speak.
+                outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                outer.set_margin_top(8)
+                outer.set_margin_bottom(8)
+                outer.set_margin_start(6)
+                outer.set_margin_end(6)
+                top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                jp = Gtk.Label(label=text, xalign=0, wrap=True, selectable=True)
+                jp.add_css_class("zenbuji-dict-jp")
+                jp.set_hexpand(True)
+                jp.set_max_width_chars(26)
+                top.append(jp)
+                if speak_fn is not None:
+                    top.append(_icon_btn("audio-volume-high-symbolic", "read_aloud",
+                                         lambda _b, r=(reading or text): speak_fn(r)))
+                outer.append(top)
+                if reading and reading != text:
+                    rl = Gtk.Label(label=reading, xalign=0, wrap=True)
+                    rl.add_css_class("zenbuji-reading")
+                    rl.set_max_width_chars(36)
+                    outer.append(rl)
+                for lang in _langs_in(trans):
+                    val = trans.get(lang)
+                    if not val:
+                        continue
+                    line = Gtk.Label(
+                        label=f"{lang_names.get(lang, lang.upper())}:  {val}",
+                        xalign=0, wrap=True, selectable=True)
+                    line.add_css_class("zenbuji-translation")
+                    line.set_max_width_chars(36)
+                    outer.append(line)
+                row.set_child(outer)
+                return row
 
             def build_view():
                 outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -360,14 +462,39 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             row.set_child(build_view())
             return row
 
+        def _animate_in(row):
+            row.set_opacity(0.0)
+            target = Adw.CallbackAnimationTarget.new(row.set_opacity)
+            anim = Adw.TimedAnimation.new(row, 0.0, 1.0, 450, target)
+            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+            state["anims"].append(anim)
+            anim.play()
+
         def rebuild():
             listbox.remove_all()
             data = load_fn()
             entries = sorted(data.values(),
                              key=lambda e: e.get("last_seen", ""), reverse=True)
+            current = set()
+            fresh = []
             for e in entries:
-                listbox.append(make_row(e))
-            stats_label.set_text(_stats_text(stats_fn(), ui_language))
+                txt = e.get("text", "")
+                current.add(txt)
+                row = make_row(e)
+                listbox.append(row)
+                if state["primed"] and txt not in state["seen"]:
+                    fresh.append(row)
+            state["seen"] = current
+            if not state["primed"]:
+                state["primed"] = True  # don't animate the initial load
+            else:
+                for row in fresh:
+                    _animate_in(row)
+                if game_mode and fresh:
+                    GLib.idle_add(lambda: (scroll.get_vadjustment().set_value(0),
+                                           GLib.SOURCE_REMOVE)[1])
+            if stats_label is not None:
+                stats_label.set_text(_stats_text(stats_fn(), ui_language))
             listbox.invalidate_filter()
 
         def do_delete(text):
@@ -434,6 +561,34 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
             GLib.timeout_add_seconds(2, poll)
 
+        def update_busy():
+            if busy_box is None:
+                return
+            info = _read_busy(busy_path) if busy_path else None
+            if info:
+                stage = info.get("stage")
+                busy_lbl.set_text(t("busy_translating") if stage == "translating"
+                                  else t("busy_reading"))
+                spinner.start()
+                busy_box.set_visible(True)
+            else:
+                spinner.stop()
+                busy_box.set_visible(False)
+
+        def setup_busy_watch():
+            if busy_box is None or not busy_path:
+                return
+            update_busy()
+            try:
+                gfile = Gio.File.new_for_path(str(busy_path))
+                mon = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
+                mon.connect("changed", lambda *_a: update_busy())
+                state["monitors"].append(mon)
+            except Exception:  # noqa: BLE001
+                pass
+            # Re-check periodically so a stale marker (crashed run) clears.
+            GLib.timeout_add_seconds(5, lambda: (update_busy(), True)[1])
+
         def do_refresh(text):
             if refresh_fn is None:
                 return
@@ -452,7 +607,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             clear_fn()
             rebuild()
 
-        clear_btn.connect("clicked", do_clear)
+        if not game_mode:
+            clear_btn.connect("clicked", do_clear)
 
         def refresh_quota():
             if quota_fn is None:
@@ -481,6 +637,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         win.present()
         refresh_quota()
         setup_watch()
+        setup_busy_watch()
 
     app.connect("activate", on_activate)
     return app.run([])

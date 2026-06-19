@@ -39,6 +39,7 @@ const UI_JA = {
     'Dictionary': '辞書',
     'Practice (SRS)': '練習（SRS）',
     'Statistics': '統計',
+    'Game helper': 'ゲームヘルパー',
     'Start VOICEVOX': 'VOICEVOX を起動',
     'Starting VOICEVOX…': 'VOICEVOX を起動中…',
     'Settings…': '設定…',
@@ -133,6 +134,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
         const statsItem = new PopupMenu.PopupMenuItem(_('Statistics'));
         statsItem.connect('activate', () => this._extension.openStatistics());
         this.menu.addMenuItem(statsItem);
+
+        const gameItem = new PopupMenu.PopupMenuItem(_('Game helper'));
+        gameItem.connect('activate', () => this._extension.openGame());
+        this.menu.addMenuItem(gameItem);
 
         if (this._extension.voicevoxAvailable()) {
             const vvItem = new PopupMenu.PopupMenuItem(_('Start VOICEVOX'));
@@ -421,6 +426,10 @@ export default class ZenbujiExtension extends Extension {
 
     openStatistics() {
         this._spawnPopup(['stats']);
+    }
+
+    openGame() {
+        this._spawnPopup(['game']);
     }
 
     _spawnPopup(args) {
