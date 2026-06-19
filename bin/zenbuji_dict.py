@@ -158,40 +158,45 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         quota_label = None
         spinner = busy_box = busy_lbl = None
 
+        game_footer = None
         if game_mode:
-            # --- Game overlay: title + shortcuts panel + status ----------- //
+            # --- Game overlay: just a title up top; chrome goes in the footer //
             title = Gtk.Label(label=t("game_title"), xalign=0)
             title.add_css_class("zenbuji-title")
             card.append(title)
 
-            if shortcuts:
-                panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-                panel.add_css_class("zenbuji-panel")
-                cap = Gtk.Label(label=t("shortcuts").upper(), xalign=0)
-                cap.add_css_class("zenbuji-lang-label")
-                panel.append(cap)
-                grid = Gtk.Grid(column_spacing=10, row_spacing=4)
-                for i, sc in enumerate(shortcuts):
-                    keys = Gtk.Label(label=sc.get("keys", ""), xalign=0,
-                                     halign=Gtk.Align.START)
-                    keys.add_css_class("zenbuji-kbd")
-                    lbl = Gtk.Label(label=sc.get("label", ""), xalign=0,
-                                    halign=Gtk.Align.START)
-                    lbl.add_css_class("zenbuji-translation")
-                    grid.attach(keys, 0, i, 1, 1)
-                    grid.attach(lbl, 1, i, 1, 1)
-                panel.append(grid)
-                card.append(panel)
+            # Compact footer: a small spinner+status on the left, the background-
+            # add shortcuts as small chips on the right. Built now, appended
+            # below the word list so it sits at the bottom of the window.
+            game_footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            fhair = Gtk.Box()
+            fhair.add_css_class("zenbuji-hairline")
+            game_footer.append(fhair)
+            frow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
 
-            busy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            busy_box.set_margin_top(2)
+            busy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             spinner = Gtk.Spinner()
             busy_lbl = Gtk.Label(xalign=0)
             busy_lbl.add_css_class("zenbuji-busy")
             busy_box.append(spinner)
             busy_box.append(busy_lbl)
             busy_box.set_visible(False)
-            card.append(busy_box)
+            frow.append(busy_box)
+
+            keys_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            keys_box.set_halign(Gtk.Align.END)
+            keys_box.set_hexpand(True)
+            for sc in (shortcuts or []):
+                pair = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                chip = Gtk.Label(label=sc.get("keys", ""))
+                chip.add_css_class("zenbuji-kbd-sm")
+                cap = Gtk.Label(label=sc.get("label", ""))
+                cap.add_css_class("zenbuji-meta")
+                pair.append(chip)
+                pair.append(cap)
+                keys_box.append(pair)
+            frow.append(keys_box)
+            game_footer.append(frow)
         else:
             # --- Header: title + stats + clear-all ------------------------ //
             header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -242,6 +247,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         scroll.set_child(listbox)
         card.append(scroll)
+
+        if game_footer is not None:
+            card.append(game_footer)
 
         empty_label = Gtk.Label(label=t("empty"), xalign=0)
         empty_label.add_css_class("zenbuji-note")
@@ -477,17 +485,25 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                              key=lambda e: e.get("last_seen", ""), reverse=True)
             current = {}
             fresh = []
+            rows = []
             for e in entries:
                 txt = e.get("text", "")
                 last_seen = e.get("last_seen", "")
                 current[txt] = last_seen
                 row = make_row(e)
                 listbox.append(row)
+                rows.append(row)
                 # New word, or an existing one just re-recorded (last_seen bumped)
                 # — both should animate in and (in game mode) scroll to the top.
                 if state["primed"] and state["seen"].get(txt) != last_seen:
                     fresh.append(row)
             state["seen"] = current
+            # In the game overlay, box the newest (top) entry so the latest
+            # translation is unmistakable.
+            if game_mode and rows:
+                child = rows[0].get_child()
+                if child is not None:
+                    child.add_css_class("zenbuji-latest")
             if not state["primed"]:
                 state["primed"] = True  # don't animate the initial load
             else:
@@ -538,14 +554,6 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         def setup_watch():
             if not watch_path:
                 return
-            try:
-                gfile = Gio.File.new_for_path(str(watch_path))
-                mon = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
-                mon.connect("changed", lambda *_a: schedule_rebuild())
-                state["monitors"].append(mon)  # keep a ref so it isn't GC'd
-                return
-            except Exception:  # noqa: BLE001  (fall back to polling)
-                pass
 
             def _mtime():
                 try:
@@ -553,6 +561,18 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 except OSError:
                     return 0
 
+            # FileMonitor for instant updates...
+            try:
+                gfile = Gio.File.new_for_path(str(watch_path))
+                mon = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
+                mon.connect("changed", lambda *_a: schedule_rebuild())
+                state["monitors"].append(mon)  # keep a ref so it isn't GC'd
+            except Exception:  # noqa: BLE001
+                pass
+
+            # ...plus an mtime poll as a reliable backstop (file monitors can
+            # silently miss writes on some setups). Cheap; coalesced by the
+            # debounce in schedule_rebuild().
             last = {"m": _mtime()}
 
             def poll():
@@ -562,7 +582,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     schedule_rebuild()
                 return True
 
-            GLib.timeout_add_seconds(2, poll)
+            GLib.timeout_add(1000, poll)
 
         def update_busy():
             if busy_box is None:

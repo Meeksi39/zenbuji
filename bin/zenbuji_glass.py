@@ -177,7 +177,20 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     background-color: alpha(currentColor, 0.10);
     border: 1px solid alpha(currentColor, 0.12);
 }
+/* Smaller chip for the compact footer. */
+.zenbuji-kbd-sm {
+    font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 6px;
+    background-color: alpha(currentColor, 0.10);
+    border: 1px solid alpha(currentColor, 0.12);
+}
 .zenbuji-busy { font-size: 12px; color: @accent_color; }
+/* Box around the newest entry in the game overlay (the latest translation). */
+.zenbuji-latest {
+    border: 1.5px solid @accent_color;
+    border-radius: 10px;
+    background-color: alpha(@accent_color, 0.10);
+}
 .zenbuji-dict-scroll { background: transparent; }
 
 /* --- learning / quiz window --- */
