@@ -1,0 +1,84 @@
+"""End-to-end CLI smoke tests.
+
+Each runs `zenbuji` as a subprocess in a fully isolated HOME/XDG environment (see
+the `cli` fixture), so the real user data is never touched. Commands needing the
+MeCab stack (`furigana`/`read`) skip when it isn't installed (e.g. in CI).
+"""
+
+import json
+
+import pytest
+
+
+def _seed(cli, name, obj):
+    (cli.data / name).write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+
+
+def test_dict_json_empty(cli):
+    r = cli("dict", "--json")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {}
+
+
+def test_dict_json_reads_seeded_data(cli):
+    _seed(cli, "dictionary.json", {
+        "水": {"text": "水", "reading": "みず", "translations": {"en": "water"},
+               "count": 3, "first_seen": "2026-01-01T00:00:00",
+               "last_seen": "2026-01-02T00:00:00"},
+    })
+    r = cli("dict", "--json")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["水"]["translations"]["en"] == "water"
+
+
+def test_stats_json_empty(cli):
+    r = cli("stats", "--json")
+    assert r.returncode == 0, r.stderr
+    s = json.loads(r.stdout)
+    assert s["total"] == 0 and len(s["recent"]) == 14
+
+
+def test_stats_json_aggregates_seeded_data(cli):
+    _seed(cli, "dictionary.json",
+          {"a": {"text": "a", "reading": "あ", "translations": {"en": "a"}}})
+    _seed(cli, "srs.json",
+          {"a": {"interval": 3, "reps": 1, "last_reviewed": "2026-01-01T00:00:00",
+                 "due": "2026-01-02T00:00:00", "correct": 2, "wrong": 1,
+                 "lapses": 1, "ease": 2.3}})
+    r = cli("stats", "--json")
+    assert r.returncode == 0, r.stderr
+    s = json.loads(r.stdout)
+    assert s["total"] == 1
+    assert s["reviews_total"] == 3
+    assert s["by_level"]["learning"] == 1
+
+
+def test_dict_clear_removes_file(cli):
+    _seed(cli, "dictionary.json", {"x": {"text": "x"}})
+    r = cli("dict", "--clear")
+    assert r.returncode == 0, r.stderr
+    assert not (cli.data / "dictionary.json").exists()
+
+
+def test_config_writes_only_to_isolated_path(cli):
+    # SAFETY proof: a config write lands in the temp config dir, not the real one.
+    r = cli("config", "--backend", "argos")
+    assert r.returncode == 0, r.stderr
+    written = json.loads((cli.config / "config.json").read_text(encoding="utf-8"))
+    assert written["backend"] == "argos"
+
+
+def test_furigana_json_offline(cli):
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    r = cli("furigana", "--json", "日本語")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout).get("reading")
+
+
+def test_read_json_offline_no_key(cli):
+    # No DeepL key in the isolated config + explicit argos backend => no network.
+    pytest.importorskip("fugashi")
+    r = cli("read", "--json", "--backend", "argos", "日本語")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout).get("reading")
