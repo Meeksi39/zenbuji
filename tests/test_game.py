@@ -27,11 +27,10 @@ def test_pretty_accel():
     assert zenbuji._pretty_accel("<Super>j") == "Super+J"
 
 
-def test_shortcuts_info_falls_back_to_defaults(monkeypatch):
+def test_shortcuts_info_shows_only_background_add_actions(monkeypatch):
     monkeypatch.setattr(zenbuji, "_read_keybinding", lambda slug: None)
     info = zenbuji.shortcuts_info("en")
-    keys = [s["keys"] for s in info]
-    assert keys == ["Super+Shift+K", "Super+Shift+J", "Super+J", "Super+Shift+L"]
+    assert [s["keys"] for s in info] == ["Super+Shift+K", "Super+K"]
     assert all(s["label"] for s in info)
 
 
