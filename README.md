@@ -361,8 +361,10 @@ journalctl -f -o cat /usr/bin/gnome-shell
 ```
 
 **Tests.** The engine logic (SRS scheduling, the activity log, answer grading,
-the dictionary cache, and the statistics aggregation) is covered by a pytest
-suite that needs no GTK or display:
+the dictionary cache + caching contract, the translation-backend dispatch, and
+the statistics aggregation), plus end-to-end CLI smoke tests, is covered by a
+pytest suite that needs no GTK or display. Network calls are mocked and every
+CLI test runs in an isolated temp `HOME`/XDG so it never touches real user data:
 
 ```sh
 pytest                       # run the suite
