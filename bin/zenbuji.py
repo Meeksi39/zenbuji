@@ -242,8 +242,17 @@ def dict_record(text: str, reading: str, deepl_translations: dict) -> dict:
     text = text.strip()
     if not text:
         return {}
-    now = datetime.now().isoformat(timespec="seconds")
     data = load_dict()
+    # Monotonic, microsecond-precision last_seen so the most-recently-recorded
+    # entry always sorts to the top — even when several are recorded within the
+    # same clock second (seconds precision used to tie and scramble the order).
+    now_dt = datetime.now()
+    latest = max((d for e in data.values()
+                  if (d := _due_date_dt(e.get("last_seen"))) is not None),
+                 default=None)
+    if latest is not None and now_dt <= latest:
+        now_dt = latest + timedelta(microseconds=1)
+    now = now_dt.isoformat()
     entry = data.get(text) or {
         "text": text,
         "reading": reading,
@@ -2084,18 +2093,15 @@ def launch_popup(text, languages: list[str], cfg: dict, ocr_image=None) -> int:
                       speak_fn=speak_fn, auto_speak=auto_speak)
 
 
-# Global hotkeys registered by install.sh (slug, default accel, label key).
+# Game-helper shortcut panel: only the silent background-add actions are useful
+# while gaming (lookups/practice steal focus). (slug, default accel, label key.)
 _SHORTCUT_SPEC = [
     ("zenbuji-ocr-add", "<Super><Shift>k", "ocr_add"),
-    ("zenbuji-ocr",     "<Super><Shift>j", "ocr_lookup"),
-    ("zenbuji",         "<Super>j",        "selection"),
-    ("zenbuji-learn",   "<Super><Shift>l", "practice"),
+    ("zenbuji-add",     "<Super>k",        "add_selection"),
 ]
 _SHORTCUT_LABELS = {
-    "ocr_add":    {"en": "Capture & add (OCR)",   "ja": "画面領域を追加（OCR）"},
-    "ocr_lookup": {"en": "Look up region (OCR)",  "ja": "画面領域を調べる（OCR）"},
-    "selection":  {"en": "Look up selection",     "ja": "選択を調べる"},
-    "practice":   {"en": "Practice",              "ja": "練習"},
+    "ocr_add":       {"en": "Capture & add (OCR)", "ja": "画面領域を追加（OCR）"},
+    "add_selection": {"en": "Add selection",       "ja": "選択を追加"},
 }
 
 

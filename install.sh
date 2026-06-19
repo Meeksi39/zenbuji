@@ -76,7 +76,7 @@ if [[ "$MODE" == uninstall ]]; then
     # Remove our custom keybindings from the list (leaves other customs intact).
     MK=org.gnome.settings-daemon.plugins.media-keys
     if command -v gsettings >/dev/null; then
-        for slug in zenbuji zenbuji-ocr zenbuji-ocr-add zenbuji-speak zenbuji-learn; do
+        for slug in zenbuji zenbuji-ocr zenbuji-ocr-add zenbuji-add zenbuji-speak zenbuji-learn zenbuji-game; do
             KBPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/$slug/"
             cur="$(gsettings get $MK custom-keybindings 2>/dev/null || echo "@as []")"
             if [[ "$cur" == *"$KBPATH"* ]]; then
@@ -231,10 +231,14 @@ if command -v gsettings >/dev/null; then
         "$BIN_DIR/zenbuji popup --ocr" '<Super><Shift>j' 'zenbuji popup --ocr'
     register_keybinding zenbuji-ocr-add 'zenbuji: OCR a region into the dictionary (silent + speak)' \
         "$BIN_DIR/zenbuji add --ocr --speak" '<Super><Shift>k' 'zenbuji add --ocr --speak (silent, reads aloud)'
+    register_keybinding zenbuji-add 'zenbuji: add selection to the dictionary (silent + speak)' \
+        "$BIN_DIR/zenbuji add --selection --speak" '<Super>k' 'zenbuji add --selection --speak (silent, reads aloud)'
     register_keybinding zenbuji-speak 'zenbuji: read selection aloud' \
         "$BIN_DIR/zenbuji speak --selection" '<Super><Shift>s' 'zenbuji speak --selection'
     register_keybinding zenbuji-learn 'zenbuji: practice (SRS)' \
         "$BIN_DIR/zenbuji learn" '<Super><Shift>l' 'zenbuji learn'
+    register_keybinding zenbuji-game 'zenbuji: game-helper overlay' \
+        "$BIN_DIR/zenbuji game" '<Super><Shift>g' 'zenbuji game'
 fi
 
 # --- Blur My Shell integration (frosted-glass popup) --------------------- #

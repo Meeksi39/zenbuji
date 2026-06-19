@@ -141,7 +141,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     # `editing` pauses auto-refresh so an external add can't wipe a half-typed
     # correction; the deferred refresh runs when the edit closes.
     state = {"editing": False, "pending": False, "token": 0, "monitors": [],
-             "seen": set(), "primed": False, "anims": []}
+             "seen": {}, "primed": False, "anims": []}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -475,14 +475,17 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             data = load_fn()
             entries = sorted(data.values(),
                              key=lambda e: e.get("last_seen", ""), reverse=True)
-            current = set()
+            current = {}
             fresh = []
             for e in entries:
                 txt = e.get("text", "")
-                current.add(txt)
+                last_seen = e.get("last_seen", "")
+                current[txt] = last_seen
                 row = make_row(e)
                 listbox.append(row)
-                if state["primed"] and txt not in state["seen"]:
+                # New word, or an existing one just re-recorded (last_seen bumped)
+                # — both should animate in and (in game mode) scroll to the top.
+                if state["primed"] and state["seen"].get(txt) != last_seen:
                     fresh.append(row)
             state["seen"] = current
             if not state["primed"]:

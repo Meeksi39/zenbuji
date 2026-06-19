@@ -61,6 +61,26 @@ def test_update_translations_unknown_entry_returns_none(store):
     assert zenbuji.dict_update_translations("nope", {"en": "x"}) is None
 
 
+def test_record_last_seen_is_strictly_monotonic(store):
+    # Several records in the same clock second must still get distinct, increasing
+    # last_seen, so the most recent always sorts to the top (regression).
+    for w in ["a", "b", "c", "d", "e"]:
+        zenbuji.dict_record(w, w, {"en": w})
+    data = zenbuji.load_dict()
+    stamps = [data[w]["last_seen"] for w in ["a", "b", "c", "d", "e"]]
+    assert stamps == sorted(stamps)          # increasing in record order
+    assert len(set(stamps)) == 5             # all distinct (no ties)
+
+
+def test_latest_recorded_sorts_to_top(store):
+    zenbuji.dict_record("a", "あ", {"en": "a"})
+    zenbuji.dict_record("b", "べ", {"en": "b"})
+    zenbuji.dict_record("a", "あ", {"en": "a"})   # re-add the known word -> newest
+    data = zenbuji.load_dict()
+    order = sorted(data.values(), key=lambda e: e["last_seen"], reverse=True)
+    assert order[0]["text"] == "a"            # latest on top, even though known
+
+
 def test_set_exclude_toggles_flag(store):
     zenbuji.dict_record("水", "みず", {"en": "water"})
     zenbuji.dict_set_exclude("水", True)
