@@ -190,14 +190,38 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-latest {
     border: 1.5px solid @accent_color;
     border-radius: 12px;
-    background-color: alpha(@accent_color, 0.10);
+    background-color: alpha(@accent_color, 0.12);
     padding: 10px 14px;
+    box-shadow: 0 0 14px alpha(@accent_color, 0.45);   /* dramatic glow */
 }
 .zenbuji-latest .zenbuji-dict-jp { font-size: 21px; }
 .zenbuji-latest .zenbuji-reading { font-size: 17px; }
 .zenbuji-latest .zenbuji-translation { font-size: 16px; }
 /* Reusable window footer (hairline + breathing room above the content). */
 .zenbuji-footer { margin-top: 8px; }
+
+/* --- game helper: playful, JRPG-flavoured drama (overlay only) --- */
+.zenbuji-game-banner {
+    border-radius: 14px;
+    padding: 12px 16px;
+    color: @accent_fg_color;
+    background-image: linear-gradient(to bottom right,
+        shade(@accent_bg_color, 1.18), shade(@accent_bg_color, 0.70));
+    box-shadow: 0 2px 12px alpha(@accent_bg_color, 0.45);
+}
+.zenbuji-game-title {
+    font-size: 20px; font-weight: 800; letter-spacing: 0.05em;
+    color: @accent_fg_color;
+    text-shadow: 0 1px 4px alpha(#000000, 0.45);
+}
+/* Gold "combo" chip: words banked this session. */
+.zenbuji-combo {
+    font-size: 15px; font-weight: 800; color: #2b1a00;
+    background-image: linear-gradient(to bottom, #ffd84a, #f5c211);
+    border-radius: 10px; padding: 2px 12px;
+    box-shadow: 0 1px 5px alpha(#000000, 0.35);
+}
+.zenbuji-quip { font-size: 13px; font-weight: 700; color: @accent_color; }
 .zenbuji-dict-scroll { background: transparent; }
 
 /* --- learning / quiz window --- */

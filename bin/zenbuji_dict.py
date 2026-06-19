@@ -11,6 +11,7 @@ the lookup popup. All dictionary data access is injected by the caller
 from __future__ import annotations
 
 import json
+import random
 import subprocess
 import sys
 import threading
@@ -55,9 +56,29 @@ DICT_STRINGS = {
     "last":       {"en": "last",         "ja": "最終"},
     "due":        {"en": "due",          "ja": "次回"},
     "game_title": {"en": "Game helper",  "ja": "ゲームヘルパー"},
+    "game_banner": {"en": "✦ Word Quest ✦", "ja": "✦ ことばクエスト ✦"},
     "shortcuts":  {"en": "Shortcuts",    "ja": "ショートカット"},
     "busy_reading":     {"en": "Reading…",      "ja": "読み取り中…"},
     "busy_translating": {"en": "Translating…",  "ja": "翻訳中…"},
+}
+
+# Playful, ずんだもん-spirited lines for the game overlay (idle vs. on-capture),
+# in the vein of the quiz greetings — a little overdramatic on purpose.
+GAME_QUIPS = {
+    "en": ["ずんだもん is watching… capture something!",
+           "Your quest log hungers for words.",
+           "Spot a word? Snatch it!",
+           "Adventure awaits — grab a phrase!",
+           "The hunt continues…"],
+    "ja": ["ずんだもん、見てるよ…ことばを集めよう！",
+           "クエストログが単語を求めている…！",
+           "気になることば、見つけた？ゲットだ！",
+           "ぼうけんはこれから！フレーズをつかめ！",
+           "狩りはつづく…"],
+}
+GAME_CELEBRATIONS = {
+    "en": ["Nice! +1 ✦", "Got it! Into the log!", "Critical hit! ✦", "Combo!", "Word acquired!"],
+    "ja": ["ナイス！+1 ✦", "ゲット！ログに追加！", "クリティカル！✦", "コンボ！", "ことばを かくとく！"],
 }
 
 
@@ -141,7 +162,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     # `editing` pauses auto-refresh so an external add can't wipe a half-typed
     # correction; the deferred refresh runs when the edit closes.
     state = {"editing": False, "pending": False, "token": 0, "monitors": [],
-             "seen": {}, "primed": False, "anims": []}
+             "seen": {}, "primed": False, "anims": [],
+             "session": 0, "celebrating": False, "celeb_token": 0}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -159,26 +181,35 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         spinner = busy_box = busy_lbl = None
 
         game_footer = None
+        combo_lbl = quip_lbl = None
         if game_mode:
-            # --- Game overlay: just a title up top; chrome goes in the footer //
-            title = Gtk.Label(label=t("game_title"), xalign=0)
-            title.add_css_class("zenbuji-title")
-            card.append(title)
+            # --- Game overlay: a dramatic gradient banner + combo + quip ---- //
+            banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            banner.add_css_class("zenbuji-game-banner")
+            gtitle = Gtk.Label(label=t("game_banner"), xalign=0, hexpand=True,
+                               halign=Gtk.Align.START)
+            gtitle.add_css_class("zenbuji-game-title")
+            banner.append(gtitle)
+            combo_lbl = Gtk.Label(label="★ 0")
+            combo_lbl.add_css_class("zenbuji-combo")
+            combo_lbl.set_valign(Gtk.Align.CENTER)
+            banner.append(combo_lbl)
+            card.append(banner)
 
-            # Compact footer (reusable component): a small spinner+status on the
-            # left, the background-add shortcuts as small chips on the right.
-            # Appended below the word list so it sits at the bottom.
-            game_footer, frow = make_footer()
-
-            busy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            # Status line: a small spinner (while busy) + a playful quip.
+            status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            status_row.set_margin_top(2)
             spinner = Gtk.Spinner()
-            busy_lbl = Gtk.Label(xalign=0)
-            busy_lbl.add_css_class("zenbuji-busy")
-            busy_box.append(spinner)
-            busy_box.append(busy_lbl)
-            busy_box.set_visible(False)
-            frow.append(busy_box)
+            quip_lbl = Gtk.Label(xalign=0, wrap=True)
+            quip_lbl.add_css_class("zenbuji-quip")
+            quip_lbl.set_max_width_chars(44)
+            status_row.append(spinner)
+            status_row.append(quip_lbl)
+            card.append(status_row)
+            busy_box = busy_lbl = None  # status is shown via the quip line here
 
+            # Footer (reusable component): the background-add shortcut chips.
+            game_footer, frow = make_footer()
             keys_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             keys_box.set_halign(Gtk.Align.END)
             keys_box.set_hexpand(True)
@@ -503,8 +534,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 state["primed"] = True  # don't animate the initial load
             else:
                 for row in fresh:
-                    _animate_in(row)
+                    (_pop_in if game_mode else _animate_in)(row)
                 if game_mode and fresh:
+                    _celebrate(len(fresh))
                     GLib.idle_add(lambda: (scroll.get_vadjustment().set_value(0),
                                            GLib.SOURCE_REMOVE)[1])
             if stats_label is not None:
@@ -579,22 +611,68 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
             GLib.timeout_add(1000, poll)
 
+        def _idle_quip():
+            return random.choice(GAME_QUIPS.get(ui_language, GAME_QUIPS["en"]))
+
         def update_busy():
-            if busy_box is None:
+            # Drives the game overlay's status line: spinner + busy text while a
+            # translation/OCR runs, otherwise a celebration or idle quip.
+            if quip_lbl is None:
                 return
             info = _read_busy(busy_path) if busy_path else None
             if info:
                 stage = info.get("stage")
-                busy_lbl.set_text(t("busy_translating") if stage == "translating"
-                                  else t("busy_reading"))
                 spinner.start()
-                busy_box.set_visible(True)
+                quip_lbl.set_text(t("busy_translating") if stage == "translating"
+                                  else t("busy_reading"))
             else:
                 spinner.stop()
-                busy_box.set_visible(False)
+                if not state["celebrating"]:
+                    quip_lbl.set_text(_idle_quip())
+
+        def _celebrate(n):
+            # Bump the session combo, pulse it, and show a celebratory quip.
+            if combo_lbl is None:
+                return
+            state["session"] += n
+            combo_lbl.set_text(f"★ {state['session']}")
+            combo_lbl.set_opacity(0.35)
+            tgt = Adw.CallbackAnimationTarget.new(combo_lbl.set_opacity)
+            anim = Adw.TimedAnimation.new(combo_lbl, 0.35, 1.0, 350, tgt)
+            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+            state["anims"].append(anim)
+            anim.play()
+            if quip_lbl is not None:
+                state["celebrating"] = True
+                quip_lbl.set_text(
+                    random.choice(GAME_CELEBRATIONS.get(ui_language,
+                                                         GAME_CELEBRATIONS["en"])))
+                state["celeb_token"] += 1
+                tok = state["celeb_token"]
+
+                def _end_celebration():
+                    if tok == state["celeb_token"]:
+                        state["celebrating"] = False
+                        update_busy()  # back to idle quip (or busy if still running)
+                    return GLib.SOURCE_REMOVE
+
+                GLib.timeout_add(2800, _end_celebration)
+
+        def _pop_in(row):
+            # Bouncy entrance: spring the top margin from a lifted offset to 0.
+            row.set_opacity(0.0)
+            o_tgt = Adw.CallbackAnimationTarget.new(row.set_opacity)
+            fade = Adw.TimedAnimation.new(row, 0.0, 1.0, 220, o_tgt)
+            m_tgt = Adw.CallbackAnimationTarget.new(
+                lambda v: row.set_margin_top(max(0, int(round(v)))))
+            spring = Adw.SpringAnimation.new(
+                row, 18, 0, Adw.SpringParams.new(0.6, 1, 220), m_tgt)
+            state["anims"].extend([fade, spring])
+            fade.play()
+            spring.play()
 
         def setup_busy_watch():
-            if busy_box is None or not busy_path:
+            if quip_lbl is None or not busy_path:
                 return
             update_busy()
             try:
@@ -604,7 +682,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 state["monitors"].append(mon)
             except Exception:  # noqa: BLE001
                 pass
-            # Re-check periodically so a stale marker (crashed run) clears.
+            # Re-check periodically so a stale marker (crashed run) clears, and
+            # rotate the idle quip for a little life.
             GLib.timeout_add_seconds(5, lambda: (update_busy(), True)[1])
 
         def do_refresh(text):
