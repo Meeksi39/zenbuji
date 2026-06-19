@@ -2,6 +2,12 @@
 __pycache__/
 *.pyc
 
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
 # Compiled GSettings schema (generated at install time)
 extension/**/gschemas.compiled
 
