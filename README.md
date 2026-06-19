@@ -360,6 +360,19 @@ on Wayland for extension changes). Tail the extension logs while you hack:
 journalctl -f -o cat /usr/bin/gnome-shell
 ```
 
+**Tests.** The engine logic (SRS scheduling, the activity log, answer grading,
+the dictionary cache, and the statistics aggregation) is covered by a pytest
+suite that needs no GTK or display:
+
+```sh
+pytest                       # run the suite
+python -m compileall bin     # syntax-check every module
+```
+
+GitHub Actions runs both on every push and pull request
+(`.github/workflows/ci.yml`); the compile step also guards against non-ASCII
+sneaking into the CSS string.
+
 The UI has a deliberate visual language (frosted-glass cards, the accent color,
 pill controls, cairo charts). Before adding or restyling a surface, read
 **[docs/STYLE.md](docs/STYLE.md)** — it documents the design system, the shared
