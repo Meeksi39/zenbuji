@@ -177,9 +177,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         combo_lbl = quip_lbl = None
         hero = hero_word = hero_reading = hero_trans = ribbon = None
         if game_mode:
-            # --- Game overlay: a dramatic gradient banner + combo + quip ---- //
+            # --- Game overlay: bare-glass title + metallic combo + quip ----- //
             banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            banner.add_css_class("zenbuji-game-banner")
+            banner.set_margin_top(2)
             gtitle = Gtk.Label(label=GAME_TITLE, xalign=0, hexpand=True,
                                halign=Gtk.Align.START)
             gtitle.add_css_class("zenbuji-game-title")
@@ -224,9 +224,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             hero.set_child(hero_frame)
             ribbon = Gtk.Label()
             ribbon.add_css_class("zenbuji-ribbon")
-            ribbon.set_halign(Gtk.Align.START)
+            ribbon.set_halign(Gtk.Align.END)
             ribbon.set_valign(Gtk.Align.START)
-            ribbon.set_margin_start(8)    # pinned near the top-left corner
+            ribbon.set_margin_end(8)      # pinned near the top-right corner
             ribbon.set_can_target(False)
             ribbon.set_visible(False)
             hero.add_overlay(ribbon)
@@ -684,7 +684,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             for lang in [*languages, *[l for l in trans if l not in languages]]:
                 if trans.get(lang):
                     parts.append(f"{lang_names.get(lang, lang.upper())}: {trans[lang]}")
-            hero_trans.set_text("   ".join(parts))
+            hero_trans.set_text("  ·  ".join(parts))
             hero.set_visible(True)
 
         def _celebrate(any_new):

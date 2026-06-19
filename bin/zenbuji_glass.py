@@ -203,25 +203,22 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-footer { margin-top: 8px; }
 
 /* --- game helper: playful, JRPG-flavoured drama (overlay only) --- */
-.zenbuji-game-banner {
-    border-radius: 14px;
-    padding: 12px 16px;
-    color: @accent_fg_color;
-    background-image: linear-gradient(to bottom right,
-        shade(@accent_bg_color, 1.18), shade(@accent_bg_color, 0.70));
-    box-shadow: 0 2px 12px alpha(@accent_bg_color, 0.45);
-}
+/* Energetic FFXIV-ish title, gold + italic serif, sitting on the bare glass. */
 .zenbuji-game-title {
-    font-size: 20px; font-weight: 800; letter-spacing: 0.05em;
-    color: @accent_fg_color;
-    text-shadow: 0 1px 4px alpha(#000000, 0.45);
+    font-family: serif;
+    font-size: 25px; font-weight: 900; font-style: italic;
+    letter-spacing: 0.04em;
+    color: #ffe27a;
+    text-shadow: 0 0 10px alpha(#f5c211, 0.85), 0 2px 3px alpha(#000000, 0.6);
 }
-/* Gold "combo" chip: words banked this session. */
+/* Metallic gold "combo" coin: words banked this session. */
 .zenbuji-combo {
-    font-size: 15px; font-weight: 800; color: #2b1a00;
-    background-image: linear-gradient(to bottom, #ffd84a, #f5c211);
-    border-radius: 10px; padding: 2px 12px;
-    box-shadow: 0 1px 5px alpha(#000000, 0.35);
+    font-size: 16px; font-weight: 900; color: #4a2e00;
+    background-image: linear-gradient(to bottom, #fff0b0, #ffd84a 45%, #e0a200);
+    border: 1px solid #b07d00;
+    border-radius: 9px; padding: 2px 12px;
+    box-shadow: 0 1px 4px alpha(#000000, 0.40), inset 0 1px 0 alpha(#ffffff, 0.70);
+    text-shadow: 0 1px 0 alpha(#ffffff, 0.40);
 }
 .zenbuji-quip { font-size: 13px; font-weight: 700; color: @accent_color; }
 
@@ -232,10 +229,16 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border: 2px solid #f5c211;
     border-radius: 6px;
     padding: 12px 16px 14px 16px;
-    background-image: linear-gradient(to bottom,
-        rgba(28, 22, 40, 0.72), rgba(14, 10, 22, 0.82));
-    box-shadow: 0 0 22px alpha(#f5c211, 0.55),
-                inset 0 0 0 1px alpha(#ffffff, 0.10);
+    /* Layered: a faint diagonal weave for texture, a top sheen, then a warm
+       neutral-dark base that harmonises with the gold rim. */
+    background-image:
+        repeating-linear-gradient(45deg,
+            alpha(#ffffff, 0.028) 0px, alpha(#ffffff, 0.028) 1px,
+            transparent 1px, transparent 7px),
+        radial-gradient(circle at 50% 0%, alpha(#ffd84a, 0.10), transparent 65%),
+        linear-gradient(to bottom, rgba(38, 30, 26, 0.82), rgba(18, 14, 16, 0.90));
+    box-shadow: 0 0 22px alpha(#f5c211, 0.50),
+                inset 0 0 0 1px alpha(#ffffff, 0.08);
 }
 .zenbuji-hero-word {
     font-size: 42px; font-weight: 900; color: #ffe27a;
@@ -246,21 +249,22 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-hero-reading { font-size: 17px; font-weight: 700; color: #ffd84a; }
 .zenbuji-hero-trans { font-size: 14px; color: #f3eecf; }
 
-/* A skewed, sharp-cornered, italic ribbon pinned to the hero and overhanging
-   its edge -- the "Booster!"/"LEVEL UP" style break. */
+/* A skewed, italic ribbon pinned to the hero's top-right, its colour bar fading
+   transparent -> colour -> transparent at the edges, FF "LEVEL UP" style. */
 .zenbuji-ribbon {
     font-size: 15px; font-weight: 800; font-style: italic;
-    color: #ffffff; padding: 3px 18px;
+    color: #ffffff; padding: 3px 22px;
     transform: skewX(-12deg);
-    box-shadow: 0 3px 10px alpha(#000000, 0.5);
-    text-shadow: 0 1px 2px alpha(#000000, 0.55);
+    text-shadow: 0 1px 3px alpha(#000000, 0.7);
 }
 .zenbuji-ribbon-new {
-    background-image: linear-gradient(to bottom right, #ff5fa2, #c0186a);
+    background-image: linear-gradient(to right,
+        alpha(#ff2e88, 0), #ff4d97 28%, #c0186a 72%, alpha(#c0186a, 0));
 }
 .zenbuji-ribbon-levelup {
-    color: #3a2600; text-shadow: 0 1px 1px alpha(#ffffff, 0.5);
-    background-image: linear-gradient(to bottom, #ffe27a, #e0a200);
+    color: #3a2600; text-shadow: 0 1px 1px alpha(#ffffff, 0.55);
+    background-image: linear-gradient(to right,
+        alpha(#f5c211, 0), #ffe27a 28%, #e0a200 72%, alpha(#e0a200, 0));
 }
 .zenbuji-dict-scroll { background: transparent; }
 
