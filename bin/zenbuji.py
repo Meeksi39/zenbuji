@@ -2162,6 +2162,7 @@ def launch_game(cfg: dict) -> int:
         game_mode=True,
         shortcuts=shortcuts_info(cfg.get("ui_language", "en")),
         busy_path=BUSY_PATH,
+        watch_path=DICT_PATH,   # live-refresh the overlay as words are added
     )
 
 

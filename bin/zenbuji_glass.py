@@ -177,7 +177,27 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     background-color: alpha(currentColor, 0.10);
     border: 1px solid alpha(currentColor, 0.12);
 }
+/* Smaller chip for the compact footer. */
+.zenbuji-kbd-sm {
+    font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 6px;
+    background-color: alpha(currentColor, 0.10);
+    border: 1px solid alpha(currentColor, 0.12);
+}
 .zenbuji-busy { font-size: 12px; color: @accent_color; }
+/* Box around the newest entry in the game overlay (the latest translation):
+   roomy padding + a larger, easier-to-read type scale. */
+.zenbuji-latest {
+    border: 1.5px solid @accent_color;
+    border-radius: 12px;
+    background-color: alpha(@accent_color, 0.10);
+    padding: 10px 14px;
+}
+.zenbuji-latest .zenbuji-dict-jp { font-size: 21px; }
+.zenbuji-latest .zenbuji-reading { font-size: 17px; }
+.zenbuji-latest .zenbuji-translation { font-size: 16px; }
+/* Reusable window footer (hairline + breathing room above the content). */
+.zenbuji-footer { margin-top: 8px; }
 .zenbuji-dict-scroll { background: transparent; }
 
 /* --- learning / quiz window --- */
@@ -400,3 +420,17 @@ def make_glass_window(application, *, title, default_size=(460, -1),
         _install_focus_loss_close(win)
 
     return win, card
+
+
+def make_footer():
+    """A reusable window footer: a top hairline + breathing room, then a
+    horizontal content row. Returns ``(footer, content)``: append the footer to
+    the card and put your widgets in ``content``."""
+    footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+    footer.add_css_class("zenbuji-footer")
+    hair = Gtk.Box()
+    hair.add_css_class("zenbuji-hairline")
+    footer.append(hair)
+    content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    footer.append(content)
+    return footer, content
