@@ -175,6 +175,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
         game_footer = None
         combo_lbl = quip_lbl = None
+        hero = hero_word = hero_reading = hero_trans = ribbon = None
         if game_mode:
             # --- Game overlay: a dramatic gradient banner + combo + quip ---- //
             banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -200,6 +201,36 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             status_row.append(quip_lbl)
             card.append(status_row)
             busy_box = busy_lbl = None  # status is shown via the quip line here
+
+            # Hero spotlight: the freshly-captured word, big and gold, with a
+            # skewed ribbon pinned to (and overhanging) the panel.
+            hero = Gtk.Overlay()
+            hero.set_margin_top(8)
+            hero.set_visible(False)
+            hero_frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            hero_frame.add_css_class("zenbuji-hero")
+            hero_frame.set_margin_top(8)  # room for the ribbon to straddle the rim
+            hero_word = Gtk.Label(xalign=0, wrap=True, selectable=True)
+            hero_word.add_css_class("zenbuji-hero-word")
+            hero_word.set_max_width_chars(14)
+            hero_reading = Gtk.Label(xalign=0, wrap=True)
+            hero_reading.add_css_class("zenbuji-hero-reading")
+            hero_trans = Gtk.Label(xalign=0, wrap=True)
+            hero_trans.add_css_class("zenbuji-hero-trans")
+            hero_trans.set_max_width_chars(40)
+            hero_frame.append(hero_word)
+            hero_frame.append(hero_reading)
+            hero_frame.append(hero_trans)
+            hero.set_child(hero_frame)
+            ribbon = Gtk.Label()
+            ribbon.add_css_class("zenbuji-ribbon")
+            ribbon.set_halign(Gtk.Align.START)
+            ribbon.set_valign(Gtk.Align.START)
+            ribbon.set_margin_start(8)    # pinned near the top-left corner
+            ribbon.set_can_target(False)
+            ribbon.set_visible(False)
+            hero.add_overlay(ribbon)
+            card.append(hero)
 
             # Footer (reusable component): the background-add shortcut chips.
             game_footer, frow = make_footer()
@@ -265,24 +296,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         listbox.add_css_class("zenbuji-dict-list")
         listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         scroll.set_child(listbox)
-
-        capture_banner = None
-        if game_mode:
-            # Overlay so the LEVEL UP / Booster banner can pop over the list.
-            overlay = Gtk.Overlay()
-            overlay.set_vexpand(True)
-            overlay.set_child(scroll)
-            capture_banner = Gtk.Label()
-            capture_banner.add_css_class("zenbuji-capture-banner")
-            capture_banner.set_halign(Gtk.Align.CENTER)
-            capture_banner.set_valign(Gtk.Align.START)
-            capture_banner.set_margin_top(10)
-            capture_banner.set_can_target(False)
-            capture_banner.set_visible(False)
-            overlay.add_overlay(capture_banner)
-            card.append(overlay)
-        else:
-            card.append(scroll)
+        card.append(scroll)
 
         if game_footer is not None:
             card.append(game_footer)
@@ -519,40 +533,41 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             data = load_fn()
             entries = sorted(data.values(),
                              key=lambda e: e.get("last_seen", ""), reverse=True)
-            current = {}
+            prev = state["seen"]
+            current = {e.get("text", ""): e.get("last_seen", "") for e in entries}
+
+            # Game overlay: the newest word is the hero spotlight; the list shows
+            # the rest. A captured word = the top entry's last_seen just changed.
+            captured = any_new = False
+            list_entries = entries
+            if game_mode:
+                if entries:
+                    top = entries[0]
+                    _show_hero(top)
+                    if state["primed"] and prev.get(top["text"]) != top.get("last_seen"):
+                        captured = True
+                        any_new = top["text"] not in prev
+                elif hero is not None:
+                    hero.set_visible(False)
+                list_entries = entries[1:]
+
             fresh = []
-            rows = []
-            any_new = False
-            for e in entries:
+            for e in list_entries:
                 txt = e.get("text", "")
-                last_seen = e.get("last_seen", "")
-                current[txt] = last_seen
                 row = make_row(e)
                 listbox.append(row)
-                rows.append(row)
-                # New word, or an existing one just re-recorded (last_seen bumped)
-                # — both animate in and (game mode) scroll to the top. A word not
-                # seen before is "new" (pink Booster) vs. a re-capture (LEVEL UP).
-                if state["primed"] and state["seen"].get(txt) != last_seen:
+                if state["primed"] and prev.get(txt) != e.get("last_seen", ""):
                     fresh.append(row)
-                    if txt not in state["seen"]:
-                        any_new = True
+
             state["seen"] = current
-            # In the game overlay, box the newest (top) entry so the latest
-            # translation is unmistakable.
-            if game_mode and rows:
-                child = rows[0].get_child()
-                if child is not None:
-                    child.add_css_class("zenbuji-latest")
             if not state["primed"]:
-                state["primed"] = True  # don't animate the initial load
+                state["primed"] = True   # don't animate the initial load
             else:
                 for row in fresh:
-                    (_pop_in if game_mode else _animate_in)(row)
-                if game_mode and fresh:
-                    _celebrate(len(fresh), any_new)
-                    GLib.idle_add(lambda: (scroll.get_vadjustment().set_value(0),
-                                           GLib.SOURCE_REMOVE)[1])
+                    _animate_in(row)     # calm fade for list rows
+                if captured:
+                    _celebrate(any_new)  # hero flash + ribbon + combo
+
             if stats_label is not None:
                 stats_label.set_text(_stats_text(stats_fn(), ui_language))
             listbox.invalidate_filter()
@@ -647,55 +662,55 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     state["quip_mode"] = "idle"
                     _set_idle_quip()           # set once on the busy->idle edge
 
-        def _celebrate(n, any_new):
-            # Bump + pulse the gold combo, and pop the JRPG capture banner:
-            # a pink "Booster" for a brand-new word, gold "LEVEL UP" otherwise.
-            if combo_lbl is not None:
-                state["session"] += n
-                combo_lbl.set_text(f"★ {state['session']}")
-                combo_lbl.set_opacity(0.35)
-                tgt = Adw.CallbackAnimationTarget.new(combo_lbl.set_opacity)
-                pulse = Adw.TimedAnimation.new(combo_lbl, 0.35, 1.0, 350, tgt)
-                pulse.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-                state["anims"].append(pulse)
-                pulse.play()
-            if capture_banner is None:
+        def _pulse(widget, lo=0.35):
+            widget.set_opacity(lo)
+            tgt = Adw.CallbackAnimationTarget.new(widget.set_opacity)
+            anim = Adw.TimedAnimation.new(widget, lo, 1.0, 350, tgt)
+            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+            state["anims"].append(anim)
+            anim.play()
+
+        def _show_hero(entry):
+            # Fill the hero spotlight from the newest entry.
+            if hero is None:
                 return
-            capture_banner.remove_css_class("zenbuji-levelup-banner")
-            capture_banner.remove_css_class("zenbuji-booster-banner")
-            if any_new:
-                capture_banner.set_text(GAME_BANNER_NEW)
-                capture_banner.add_css_class("zenbuji-booster-banner")
-            else:
-                capture_banner.set_text(GAME_BANNER_LEVELUP)
-                capture_banner.add_css_class("zenbuji-levelup-banner")
-            capture_banner.set_opacity(1.0)
-            capture_banner.set_visible(True)
-            state["banner_token"] += 1
-            tok = state["banner_token"]
-            b_tgt = Adw.CallbackAnimationTarget.new(capture_banner.set_opacity)
-            fade = Adw.TimedAnimation.new(capture_banner, 1.0, 0.0, 1600, b_tgt)
-            fade.set_easing(Adw.Easing.EASE_IN_CUBIC)
+            text = entry.get("text", "")
+            reading = entry.get("reading", "")
+            trans = entry.get("translations", {})
+            hero_word.set_text(text)
+            hero_reading.set_text(reading if reading and reading != text else "")
+            hero_reading.set_visible(bool(hero_reading.get_text()))
+            parts = []
+            for lang in [*languages, *[l for l in trans if l not in languages]]:
+                if trans.get(lang):
+                    parts.append(f"{lang_names.get(lang, lang.upper())}: {trans[lang]}")
+            hero_trans.set_text("   ".join(parts))
+            hero.set_visible(True)
 
-            def _hide(*_a):
-                if tok == state["banner_token"]:
-                    capture_banner.set_visible(False)
-
-            fade.connect("done", _hide)
-            state["anims"].append(fade)
-            fade.play()
-
-        def _pop_in(row):
-            # Bouncy entrance: spring the top margin from a lifted offset to 0.
-            row.set_opacity(0.0)
-            o_tgt = Adw.CallbackAnimationTarget.new(row.set_opacity)
-            fade = Adw.TimedAnimation.new(row, 0.0, 1.0, 220, o_tgt)
+        def _celebrate(any_new):
+            # Bump + pulse the gold combo, then flash the hero and snap in the
+            # skewed ribbon: pink "新規ゲット！" for a new word, gold "レベルアップ！"
+            # for a re-capture.
+            if combo_lbl is not None:
+                state["session"] += 1
+                combo_lbl.set_text(f"★ {state['session']}")
+                _pulse(combo_lbl)
+            if hero is None:
+                return
+            _pulse(hero_frame, lo=0.5)   # flash the panel
+            ribbon.remove_css_class("zenbuji-ribbon-new")
+            ribbon.remove_css_class("zenbuji-ribbon-levelup")
+            ribbon.set_text(GAME_BANNER_NEW if any_new else GAME_BANNER_LEVELUP)
+            ribbon.add_css_class("zenbuji-ribbon-new" if any_new
+                                 else "zenbuji-ribbon-levelup")
+            ribbon.set_visible(True)
+            # Snap the ribbon down into place with a little spring (clamped >=0;
+            # negative margins are invalid and would be clipped anyway).
             m_tgt = Adw.CallbackAnimationTarget.new(
-                lambda v: row.set_margin_top(max(0, int(round(v)))))
+                lambda v: ribbon.set_margin_top(max(0, int(round(v)))))
             spring = Adw.SpringAnimation.new(
-                row, 18, 0, Adw.SpringParams.new(0.6, 1, 220), m_tgt)
-            state["anims"].extend([fade, spring])
-            fade.play()
+                ribbon, 14, 0, Adw.SpringParams.new(0.55, 1, 240), m_tgt)
+            state["anims"].append(spring)
             spring.play()
 
         def setup_busy_watch():

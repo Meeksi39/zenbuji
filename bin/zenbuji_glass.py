@@ -224,23 +224,43 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     box-shadow: 0 1px 5px alpha(#000000, 0.35);
 }
 .zenbuji-quip { font-size: 13px; font-weight: 700; color: @accent_color; }
-/* Transient capture banner that pops over the list (JRPG flourish). */
-.zenbuji-capture-banner {
-    font-size: 22px; font-weight: 800;
-    padding: 6px 24px; border-radius: 10px;
-    text-shadow: 0 2px 6px alpha(#000000, 0.55);
-    box-shadow: 0 3px 16px alpha(#000000, 0.45);
+
+/* Hero spotlight for the freshly-captured word: a dark FF reward panel with a
+   thick gold rim + glow, holding a huge chunky glowing-gold word. Deliberately
+   breaks the calm glass look of the rest of the app. */
+.zenbuji-hero {
+    border: 2px solid #f5c211;
+    border-radius: 6px;
+    padding: 12px 16px 14px 16px;
+    background-image: linear-gradient(to bottom,
+        rgba(28, 22, 40, 0.72), rgba(14, 10, 22, 0.82));
+    box-shadow: 0 0 22px alpha(#f5c211, 0.55),
+                inset 0 0 0 1px alpha(#ffffff, 0.10);
 }
-/* Re-captured word -> gold LEVEL UP. */
-.zenbuji-levelup-banner {
-    color: #3a2600;
-    background-image: linear-gradient(to bottom, #ffe27a, #e0a200);
-    text-shadow: 0 1px 1px alpha(#ffffff, 0.5);
+.zenbuji-hero-word {
+    font-size: 42px; font-weight: 900; color: #ffe27a;
+    text-shadow: 0 0 14px alpha(#f5c211, 0.95),
+                 0 0 4px alpha(#ffd84a, 0.9),
+                 0 2px 3px alpha(#000000, 0.7);
 }
-/* Brand-new word -> pink Booster. */
-.zenbuji-booster-banner {
-    color: #ffffff; font-style: italic;
+.zenbuji-hero-reading { font-size: 17px; font-weight: 700; color: #ffd84a; }
+.zenbuji-hero-trans { font-size: 14px; color: #f3eecf; }
+
+/* A skewed, sharp-cornered, italic ribbon pinned to the hero and overhanging
+   its edge -- the "Booster!"/"LEVEL UP" style break. */
+.zenbuji-ribbon {
+    font-size: 15px; font-weight: 800; font-style: italic;
+    color: #ffffff; padding: 3px 18px;
+    transform: skewX(-12deg);
+    box-shadow: 0 3px 10px alpha(#000000, 0.5);
+    text-shadow: 0 1px 2px alpha(#000000, 0.55);
+}
+.zenbuji-ribbon-new {
     background-image: linear-gradient(to bottom right, #ff5fa2, #c0186a);
+}
+.zenbuji-ribbon-levelup {
+    color: #3a2600; text-shadow: 0 1px 1px alpha(#ffffff, 0.5);
+    background-image: linear-gradient(to bottom, #ffe27a, #e0a200);
 }
 .zenbuji-dict-scroll { background: transparent; }
 
