@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.png" alt="zenbuji 〜 全部字" width="460">
+
 # zenbuji 〜 全部字
 
 ### Read *any* Japanese on your screen — furigana + English & German — in one keypress

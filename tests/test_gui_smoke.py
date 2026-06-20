@@ -134,3 +134,7 @@ def test_popup_window(gui):
     # Needs the MeCab stack for analysis; skipped where it's absent (e.g. CI).
     pytest.importorskip("fugashi")
     _launch_ok(gui.env, ["popup", "日本語"], settle=6.0)
+
+
+def test_about_window(gui):
+    _launch_ok(gui.env, ["about"])
