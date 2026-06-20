@@ -1616,8 +1616,8 @@ def cmd_usage(args, cfg) -> int:
 # energised, announced (in its own punchy voice when VOICEVOX is on) before the
 # reading, which then follows in the normal voice.
 _CAPTURE_NEW_INTRO = "新規ゲット！！！"
-_CAPTURE_VOICE = 7       # ずんだもん ツンツン — punchy/energetic
-_CAPTURE_VOICE_ALT = 8   # fallback when ツンツン is already the selected voice
+_CAPTURE_VOICE = 82      # 青山龍星 不機嫌 — deep, heavy, low voice for the fanfare
+_CAPTURE_VOICE_ALT = 81  # 青山龍星 熱血 — fallback if 不機嫌 is the selected voice
 
 
 def _capture_voice(selected) -> int:
