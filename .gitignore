@@ -23,3 +23,6 @@ venv/
 *.swp
 *~
 .DS_Store
+
+# Local-only dev notes — kept on my machine, never in the repo
+COMMIT.md

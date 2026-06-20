@@ -25,8 +25,8 @@ version-resolver:
     labels: ['fix', 'bug', 'ui', 'documentation', 'chore', 'maintenance']
   default: patch
 
-# Label PRs automatically from their branch prefix (matches COMMIT.md:
-# feat/  fix/  docs/  chore/). The `ui` label stays manual.
+# Label PRs automatically from their branch prefix
+# (feat/  fix/  docs/  chore/). The `ui` label stays manual.
 autolabeler:
   - label: 'feature'
     branch:
