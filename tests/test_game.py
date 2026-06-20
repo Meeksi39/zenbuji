@@ -28,14 +28,14 @@ def test_pretty_accel():
 
 
 def test_shortcuts_info_shows_only_background_add_actions(monkeypatch):
-    monkeypatch.setattr(zenbuji, "_read_keybinding", lambda slug: None)
+    monkeypatch.setattr(zenbuji.cli, "_read_keybinding", lambda slug: None)
     info = zenbuji.shortcuts_info("en")
     assert [s["keys"] for s in info] == ["Super+Shift+K", "Super+K"]
     assert all(s["label"] for s in info)
 
 
 def test_shortcuts_info_uses_live_binding(monkeypatch):
-    monkeypatch.setattr(zenbuji, "_read_keybinding",
+    monkeypatch.setattr(zenbuji.cli, "_read_keybinding",
                         lambda slug: "<Super>b" if slug == "zenbuji-ocr-add" else None)
     info = zenbuji.shortcuts_info("en")
     assert info[0]["keys"] == "Super+B"             # the rebound OCR-add
@@ -55,12 +55,12 @@ def test_new_word_voice_order_reading_translation_then_fanfare(store, monkeypatc
     # `add --speak` speaks the reading, then the translation, then the energised
     # fanfare last (in its own punchy voice) for a brand-new word.
     spoken = []
-    monkeypatch.setattr(zenbuji, "speak",
+    monkeypatch.setattr(zenbuji.tts, "speak",
                         lambda text, cfg, block=False: spoken.append((text, cfg.get("voicevox_speaker"))))
-    monkeypatch.setattr(zenbuji, "analyze", lambda t: ("ひ", []))
+    monkeypatch.setattr(zenbuji.lang, "analyze", lambda t: ("ひ", []))
     # Mock the network layer so the real translate_cached/dict_record run and the
     # word is recorded (count == 1 => "new").
-    monkeypatch.setattr(zenbuji, "translate_deepl",
+    monkeypatch.setattr(zenbuji.translation, "translate_deepl",
                         lambda t, tg, k, l: {x: "fire" for x in tg})
     cfg = {"backend": "deepl", "deepl_api_key": "k", "dictionary": True,
            "languages": ["en"], "voicevox_speaker": 3, "tts_add_translation": True}

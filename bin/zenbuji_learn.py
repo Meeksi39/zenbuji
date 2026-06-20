@@ -7,7 +7,7 @@ graded, the correct reading/translation is revealed, the learner confirms the
 result (self-grade override), and that feeds the SRS schedule. A progress bar
 tracks the round and a summary lists each word's new learning status.
 
-All data/grading logic is injected by `launch_learning` in zenbuji.py:
+All data/grading logic is injected by `launch_learning` in zenbuji/cli.py:
 `grade_fn(card, reading, translation)` and `review_fn(text, correct)`.
 """
 
@@ -165,7 +165,7 @@ FAREWELLS = [
 
 
 def _spawn_learn():
-    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    cli = str(Path(__file__).resolve().parent / "zenbuji_main.py")
     try:
         subprocess.Popen([sys.executable, cli, "learn"], start_new_session=True)
     except OSError:
@@ -173,7 +173,7 @@ def _spawn_learn():
 
 
 def _spawn_stats():
-    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    cli = str(Path(__file__).resolve().parent / "zenbuji_main.py")
     try:
         subprocess.Popen([sys.executable, cli, "stats"], start_new_session=True)
     except OSError:

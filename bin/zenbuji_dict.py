@@ -5,7 +5,7 @@ Lists the DeepL translations zenbuji has cached, with per-entry usage count and
 first/last-seen timestamps (progress). Supports searching, deleting an entry,
 clearing all, re-translating (a fresh DeepL call), and opening an entry back in
 the lookup popup. All dictionary data access is injected by the caller
-(`launch_dictionary` in zenbuji.py), so this module stays storage-agnostic.
+(`launch_dictionary` in zenbuji/cli.py), so this module stays storage-agnostic.
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ def _short_dt(iso: str) -> str:
 
 
 def _spawn_popup(text: str):
-    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    cli = str(Path(__file__).resolve().parent / "zenbuji_main.py")
     try:
         subprocess.Popen([sys.executable, cli, "popup", text],
                          start_new_session=True)
@@ -130,7 +130,7 @@ def _spawn_popup(text: str):
 
 
 def _spawn_stats():
-    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    cli = str(Path(__file__).resolve().parent / "zenbuji_main.py")
     try:
         subprocess.Popen([sys.executable, cli, "stats"], start_new_session=True)
     except OSError:
