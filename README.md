@@ -216,6 +216,10 @@ word it **bounces in** at the top in a gold, level-up-style box, and a banner po
 one. Park it on a second monitor; the extension keeps zenbuji off your fullscreen game's
 monitor.
 
+<div align="center">
+<img src="docs/game-helper.png" alt="zenbuji game-helper overlay — 漢字キャプチャー with combo counter, a level-up banner, and the live word list" width="380">
+</div>
+
 Two silent, no-popup ways to bank a word while playing (both speak it, neither steals focus):
 
 - **`Super+Shift+K`** — capture a screen region and add it (OCR).
