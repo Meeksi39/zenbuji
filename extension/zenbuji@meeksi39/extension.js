@@ -149,6 +149,10 @@ class ZenbujiIndicator extends PanelMenu.Button {
         prefsItem.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(prefsItem);
 
+        const aboutItem = new PopupMenu.PopupMenuItem(_('About zenbuji'));
+        aboutItem.connect('activate', () => this._extension.openAbout());
+        this.menu.addMenuItem(aboutItem);
+
         // Focus the entry when the menu opens.
         this.menu.connect('open-state-changed', (_m, open) => {
             if (open) {
@@ -430,6 +434,10 @@ export default class ZenbujiExtension extends Extension {
 
     openGame() {
         this._spawnPopup(['game']);
+    }
+
+    openAbout() {
+        this._spawnPopup(['about']);
     }
 
     _spawnPopup(args) {

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.png" alt="zenbuji 〜 全部字" width="460">
+
 # zenbuji 〜 全部字
 
 ### Read *any* Japanese on your screen — furigana + English & German — in one keypress
@@ -416,6 +418,7 @@ CSS classes, and the GTK gotchas so new windows match the rest.
 
 zenbuji stands on a whole pile of other people's hard work — go show them some love:
 
+- **Logo & mascot art** by **[Aimy Gwen]** — she drew **Zenbu-chan**, the friendly 全部字 face that fronts the whole project. ♡
 - **[VOICEVOX]** — the local neural TTS engine, with **ずんだもん (Zundamon)** as the default voice. Per the VOICEVOX terms, synthesized speech is credited as **`VOICEVOX:ずんだもん`**; if you switch voices, credit that voice provider instead.
 - **[fugashi] + [unidic-lite]** — MeCab-powered morphological analysis, aka the reason the furigana is actually *correct* and not vibes-based.
 - **[Argos Translate]** — offline neural translation · **[DeepL]** — the optional online backend when you want it crisper.
@@ -429,6 +432,7 @@ mine to answer for though (´･ω･`)
 
 ---
 
+[Aimy Gwen]: https://aimygwen.art/
 [fugashi]: https://github.com/polm/fugashi
 [unidic-lite]: https://github.com/polm/unidic-lite
 [Argos Translate]: https://github.com/argosopentech/argos-translate

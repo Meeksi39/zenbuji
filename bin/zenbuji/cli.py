@@ -38,6 +38,7 @@ Usage:
   zenbuji learn               Practice cached words (spaced repetition quiz)
   zenbuji stats               Show learning statistics (--json for machines)
   zenbuji game                Game-helper overlay (shortcuts + live dictionary)
+  zenbuji about               Show the About window (logo, version, links)
   zenbuji speak [text]        Read text aloud (reads the selection if no text)
   zenbuji voices              List local VOICEVOX speakers (--json for machines)
   zenbuji voicevox [start|stop|restart|status]   Control the VOICEVOX engine
@@ -432,7 +433,7 @@ def main(argv=None) -> int:
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
         "config", "models", "usage", "ocr", "dict", "learn", "stats", "game",
-        "add", "speak", "voices", "voicevox",
+        "add", "speak", "voices", "voicevox", "about",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -600,6 +601,10 @@ def main(argv=None) -> int:
     if command == "game":
         argparse.ArgumentParser(prog="zenbuji game").parse_args(rest)
         return launch_game(cfg)
+
+    if command == "about":
+        argparse.ArgumentParser(prog="zenbuji about").parse_args(rest)
+        return launch_about(cfg)
 
     # Shared options for the text commands.
     p = argparse.ArgumentParser(prog=f"zenbuji {command}", add_help=False)
@@ -835,6 +840,36 @@ def launch_dictionary(cfg: dict) -> int:
         quota_fn=lambda: (translation.deepl_usage(cfg.get("deepl_api_key", ""))
                           if cfg.get("deepl_api_key") else None),
         speak_fn=lambda t: tts.speak(t, cfg),
+    )
+
+
+def _zenbuji_version() -> str | None:
+    """The release version stamped into the extension metadata, or None.
+
+    `version-name` is written by the packaging workflow at release time, so a
+    plain source checkout has no version — the About window then shows
+    "Development build".
+    """
+    meta = (Path(__file__).resolve().parent.parent.parent
+            / "extension" / "zenbuji@meeksi39" / "metadata.json")
+    try:
+        data = json.loads(meta.read_text(encoding="utf-8"))
+        return data.get("version-name") or None
+    except (OSError, ValueError):
+        return None
+
+
+def launch_about(cfg: dict) -> int:
+    """Show the About window (logo, version, project link)."""
+    try:
+        from zenbuji_about import show_about
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from zenbuji_about import show_about
+
+    return show_about(
+        ui_language=cfg.get("ui_language", "en"),
+        version=_zenbuji_version(),
     )
 
 
