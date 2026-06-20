@@ -701,18 +701,20 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             hero_trans.set_text("  ·  ".join(parts))
             hero.set_visible(True)
 
-        def _slide_in(widget, frm, to, dur=420, params=(0.62, 1, 150),
-                      apply=None):
-            # Fade in while springing a margin from `frm` to `to` (slide).
+        def _slide_in(widget, frm, to, dur=500, apply=None):
+            # Smooth eased slide: fade in (ease-out) while a margin glides from
+            # `frm` to `to` on an ease-in-out curve -- no spring bounce, no linear
+            # ramp, so it reads smooth rather than choppy/stiff.
             widget.set_opacity(0.0)
             o_tgt = Adw.CallbackAnimationTarget.new(widget.set_opacity)
-            fade = Adw.TimedAnimation.new(widget, 0.0, 1.0, dur, o_tgt)
+            fade = Adw.TimedAnimation.new(widget, 0.0, 1.0, min(dur, 320), o_tgt)
+            fade.set_easing(Adw.Easing.EASE_OUT_CUBIC)
             m_tgt = Adw.CallbackAnimationTarget.new(apply)
-            spring = Adw.SpringAnimation.new(
-                widget, frm, to, Adw.SpringParams.new(*params), m_tgt)
-            state["anims"].extend([fade, spring])
+            move = Adw.TimedAnimation.new(widget, frm, to, dur, m_tgt)
+            move.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
+            state["anims"].extend([fade, move])
             fade.play()
-            spring.play()
+            move.play()
 
         def _celebrate(any_new):
             if combo_lbl is not None:
@@ -723,7 +725,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 return
             # 1) The word flies in from the left (like the banner, but first).
             ribbon.set_visible(False)
-            _slide_in(hero_frame, 52, 0, dur=460, params=(0.6, 1, 140),
+            _slide_in(hero_frame, 48, 0, dur=520,
                       apply=lambda v: hero_frame.set_margin_start(max(0, int(round(v)))))
             # 2) Then the skewed ribbon slides in after it, with a JRPG offset.
             state["banner_token"] += 1
@@ -738,7 +740,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 ribbon.add_css_class("zenbuji-ribbon-new" if any_new
                                      else "zenbuji-ribbon-levelup")
                 ribbon.set_visible(True)
-                _slide_in(ribbon, 80, 0,
+                _slide_in(ribbon, 70, 0, dur=480,
                           apply=lambda v: ribbon.set_margin_end(max(0, int(round(v)))))
                 return GLib.SOURCE_REMOVE
 
