@@ -187,17 +187,87 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-busy { font-size: 12px; color: @accent_color; }
 /* Box around the newest entry in the game overlay (the latest translation):
    roomy padding + a larger, easier-to-read type scale. */
+/* The newest entry wears a gold, LEVEL-UP-style champion box. */
 .zenbuji-latest {
-    border: 1.5px solid @accent_color;
+    border: 2px solid #f5c211;
     border-radius: 12px;
-    background-color: alpha(@accent_color, 0.10);
+    background-image: linear-gradient(to bottom,
+        alpha(#ffd84a, 0.20), alpha(#f5c211, 0.08));
     padding: 10px 14px;
+    box-shadow: 0 0 18px alpha(#f5c211, 0.50);
 }
 .zenbuji-latest .zenbuji-dict-jp { font-size: 21px; }
 .zenbuji-latest .zenbuji-reading { font-size: 17px; }
 .zenbuji-latest .zenbuji-translation { font-size: 16px; }
 /* Reusable window footer (hairline + breathing room above the content). */
 .zenbuji-footer { margin-top: 8px; }
+
+/* --- game helper: playful, JRPG-flavoured drama (overlay only) --- */
+/* Energetic FFXIV-ish title, gold + italic serif, sitting on the bare glass. */
+.zenbuji-game-title {
+    font-family: serif;
+    font-size: 25px; font-weight: 900; font-style: italic;
+    letter-spacing: 0.04em;
+    color: #ffc83d;
+    /* soft dark-gold edge + warm glow (no heavy outline) */
+    text-shadow: 0 1px 1px alpha(#5c3d00, 0.8), 0 0 10px alpha(#f5a800, 0.75);
+}
+/* Metallic gold "combo" coin: words banked this session. */
+.zenbuji-combo {
+    font-size: 16px; font-weight: 900; color: #4a2e00;
+    background-image: linear-gradient(to bottom, #fff0b0, #ffd84a 45%, #e0a200);
+    border: 1px solid #b07d00;
+    border-radius: 9px; padding: 2px 12px;
+    box-shadow: 0 1px 4px alpha(#000000, 0.40), inset 0 1px 0 alpha(#ffffff, 0.70);
+    text-shadow: 0 1px 0 alpha(#ffffff, 0.40);
+}
+.zenbuji-quip { font-size: 13px; font-weight: 700; color: @accent_color; }
+
+/* Hero spotlight for the freshly-captured word: a dark FF reward panel with a
+   thick gold rim + glow, holding a huge chunky glowing-gold word. Deliberately
+   breaks the calm glass look of the rest of the app. */
+.zenbuji-hero {
+    border: 2px solid #f5c211;
+    border-radius: 6px;
+    padding: 12px 16px 14px 16px;
+    /* Layered: a faint diagonal weave for texture, a top sheen, then a warm
+       neutral-dark base that harmonises with the gold rim. */
+    background-image:
+        repeating-linear-gradient(45deg,
+            alpha(#ffffff, 0.028) 0px, alpha(#ffffff, 0.028) 1px,
+            transparent 1px, transparent 7px),
+        radial-gradient(circle at 50% 0%, alpha(#ffd84a, 0.10), transparent 65%),
+        linear-gradient(to bottom, rgba(38, 30, 26, 0.82), rgba(18, 14, 16, 0.90));
+    box-shadow: 0 0 22px alpha(#f5c211, 0.50),
+                inset 0 0 0 1px alpha(#ffffff, 0.08);
+}
+.zenbuji-hero-word {
+    font-size: 42px; font-weight: 900; color: #ffc83d;
+    /* a light dark-gold edge (not a heavy black border) + warm glow + drop */
+    text-shadow: 0 1px 1px alpha(#5c3d00, 0.85),
+                 0 0 16px alpha(#f5a800, 0.75),
+                 0 2px 4px alpha(#000000, 0.55);
+}
+.zenbuji-hero-reading { font-size: 17px; font-weight: 700; color: #f0b62a; }
+.zenbuji-hero-trans { font-size: 14px; color: #f3eecf; }
+
+/* A skewed, italic ribbon pinned to the hero's top-right, its colour bar fading
+   transparent -> colour -> transparent at the edges, FF "LEVEL UP" style. */
+.zenbuji-ribbon {
+    font-size: 15px; font-weight: 800; font-style: italic;
+    color: #ffffff; padding: 3px 22px;
+    transform: skewX(-12deg);
+    text-shadow: 0 1px 3px alpha(#000000, 0.7);
+}
+.zenbuji-ribbon-new {
+    background-image: linear-gradient(to right,
+        alpha(#ff2e88, 0), #ff4d97 28%, #c0186a 72%, alpha(#c0186a, 0));
+}
+.zenbuji-ribbon-levelup {
+    color: #3a2600; text-shadow: 0 1px 1px alpha(#ffffff, 0.55);
+    background-image: linear-gradient(to right,
+        alpha(#f5c211, 0), #ffe27a 28%, #e0a200 72%, alpha(#e0a200, 0));
+}
 .zenbuji-dict-scroll { background: transparent; }
 
 /* --- learning / quiz window --- */

@@ -11,6 +11,7 @@ the lookup popup. All dictionary data access is injected by the caller
 from __future__ import annotations
 
 import json
+import random
 import subprocess
 import sys
 import threading
@@ -55,10 +56,23 @@ DICT_STRINGS = {
     "last":       {"en": "last",         "ja": "最終"},
     "due":        {"en": "due",          "ja": "次回"},
     "game_title": {"en": "Game helper",  "ja": "ゲームヘルパー"},
+    "game_banner": {"en": "✦ Word Quest ✦", "ja": "✦ ことばクエスト ✦"},
     "shortcuts":  {"en": "Shortcuts",    "ja": "ショートカット"},
     "busy_reading":     {"en": "Reading…",      "ja": "読み取り中…"},
     "busy_translating": {"en": "Translating…",  "ja": "翻訳中…"},
 }
+
+# The game overlay is intentionally Japanese-only for flavour (immersion):
+GAME_TITLE = "✦ 漢字キャプチャー ✦"   # "KanjiCapture", JRPG-style
+# Playful, ずんだもん-spirited idle lines (in the vein of the quiz greetings).
+GAME_QUIPS = ["ずんだもん、見てるよ…ことばを集めよう！",
+              "クエストログが単語を求めている…！",
+              "気になることば、見つけた？ゲットだ！",
+              "ぼうけんはこれから！フレーズをつかめ！",
+              "狩りはつづく…"]
+# Transient capture banners (JRPG flourish): new word vs. re-captured word.
+GAME_BANNER_NEW = "✦ 新規ゲット！ ✦"    # brand-new word -> pink "Booster"
+GAME_BANNER_LEVELUP = "✦ レベルアップ！ ✦"  # re-captured -> gold "LEVEL UP"
 
 
 def _read_busy(path, max_age=120.0):
@@ -141,7 +155,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     # `editing` pauses auto-refresh so an external add can't wipe a half-typed
     # correction; the deferred refresh runs when the edit closes.
     state = {"editing": False, "pending": False, "token": 0, "monitors": [],
-             "seen": {}, "primed": False, "anims": []}
+             "seen": {}, "primed": False, "anims": [],
+             "session": 0, "quip_mode": "idle", "banner_token": 0,
+             "seq_token": 0}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -159,26 +175,80 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         spinner = busy_box = busy_lbl = None
 
         game_footer = None
+        combo_lbl = quip_lbl = None
+        hero = hero_word = hero_reading = hero_trans = ribbon = None
         if game_mode:
-            # --- Game overlay: just a title up top; chrome goes in the footer //
-            title = Gtk.Label(label=t("game_title"), xalign=0)
-            title.add_css_class("zenbuji-title")
-            card.append(title)
+            # --- Game overlay header: title + combo, with the quip as a tied
+            # subtitle, anchored by a hairline so it doesn't dangle ----------- //
+            header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+            banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            gtitle = Gtk.Label(label=GAME_TITLE, xalign=0, hexpand=True,
+                               halign=Gtk.Align.START)
+            gtitle.add_css_class("zenbuji-game-title")
+            banner.append(gtitle)
+            combo_lbl = Gtk.Label(label="★ 0")
+            combo_lbl.add_css_class("zenbuji-combo")
+            combo_lbl.set_valign(Gtk.Align.CENTER)
+            banner.append(combo_lbl)
+            header.append(banner)
 
-            # Compact footer (reusable component): a small spinner+status on the
-            # left, the background-add shortcuts as small chips on the right.
-            # Appended below the word list so it sits at the bottom.
-            game_footer, frow = make_footer()
-
-            busy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            # Status subtitle: a small spinner then the quip. The spinner keeps
+            # its slot whether or not it's spinning (start/stop, never hidden),
+            # so the idle quip and the busy "Reading…" share the same indent.
+            status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            status_row.set_margin_start(10)   # line the subtitle up under 漢字
+            status_row.set_margin_top(4)      # a little air below the title
             spinner = Gtk.Spinner()
-            busy_lbl = Gtk.Label(xalign=0)
-            busy_lbl.add_css_class("zenbuji-busy")
-            busy_box.append(spinner)
-            busy_box.append(busy_lbl)
-            busy_box.set_visible(False)
-            frow.append(busy_box)
+            spinner.set_valign(Gtk.Align.CENTER)
+            spinner.set_size_request(14, 14)
+            quip_lbl = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
+            quip_lbl.add_css_class("zenbuji-quip")
+            quip_lbl.set_valign(Gtk.Align.CENTER)
+            quip_lbl.set_max_width_chars(44)
+            status_row.append(spinner)
+            status_row.append(quip_lbl)
+            header.append(status_row)
+            card.append(header)
+            busy_box = busy_lbl = None  # status is shown via the quip line here
 
+            hheader = Gtk.Box()
+            hheader.add_css_class("zenbuji-hairline")
+            hheader.set_margin_top(6)
+            card.append(hheader)
+
+            # Hero spotlight: the freshly-captured word, big and gold, with a
+            # skewed ribbon pinned to (and overhanging) the panel.
+            hero = Gtk.Overlay()
+            hero.set_margin_top(8)
+            hero.set_visible(False)
+            hero_frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            hero_frame.add_css_class("zenbuji-hero")
+            hero_frame.set_margin_top(13)  # ribbon straddles higher on the rim
+            hero_frame.set_margin_end(8)   # leave room for the ribbon to overhang
+            hero_word = Gtk.Label(xalign=0, wrap=True, selectable=True)
+            hero_word.add_css_class("zenbuji-hero-word")
+            hero_word.set_max_width_chars(14)
+            hero_reading = Gtk.Label(xalign=0, wrap=True)
+            hero_reading.add_css_class("zenbuji-hero-reading")
+            hero_trans = Gtk.Label(xalign=0, wrap=True)
+            hero_trans.add_css_class("zenbuji-hero-trans")
+            hero_trans.set_max_width_chars(40)
+            hero_frame.append(hero_word)
+            hero_frame.append(hero_reading)
+            hero_frame.append(hero_trans)
+            hero.set_child(hero_frame)
+            ribbon = Gtk.Label()
+            ribbon.add_css_class("zenbuji-ribbon")
+            ribbon.set_halign(Gtk.Align.END)
+            ribbon.set_valign(Gtk.Align.START)
+            ribbon.set_margin_end(0)      # rests overhanging the top-right corner
+            ribbon.set_can_target(False)
+            ribbon.set_visible(False)
+            hero.add_overlay(ribbon)
+            card.append(hero)
+
+            # Footer (reusable component): the background-add shortcut chips.
+            game_footer, frow = make_footer()
             keys_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             keys_box.set_halign(Gtk.Align.END)
             keys_box.set_hexpand(True)
@@ -478,35 +548,43 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             data = load_fn()
             entries = sorted(data.values(),
                              key=lambda e: e.get("last_seen", ""), reverse=True)
-            current = {}
+            prev = state["seen"]
+            current = {e.get("text", ""): e.get("last_seen", "") for e in entries}
+
+            # Game overlay: the newest word is the hero spotlight; the list shows
+            # the rest. A captured word = the top entry's last_seen just changed.
+            captured = any_new = False
+            top = None
+            list_entries = entries
+            if game_mode:
+                if entries:
+                    top = entries[0]
+                    if state["primed"] and prev.get(top["text"]) != top.get("last_seen"):
+                        captured = True
+                        any_new = top["text"] not in prev
+                    if not captured:
+                        _show_hero(top)   # static set; captures animate below
+                elif hero is not None:
+                    hero.set_visible(False)
+                list_entries = entries[1:]
+
             fresh = []
-            rows = []
-            for e in entries:
+            for e in list_entries:
                 txt = e.get("text", "")
-                last_seen = e.get("last_seen", "")
-                current[txt] = last_seen
                 row = make_row(e)
                 listbox.append(row)
-                rows.append(row)
-                # New word, or an existing one just re-recorded (last_seen bumped)
-                # — both should animate in and (in game mode) scroll to the top.
-                if state["primed"] and state["seen"].get(txt) != last_seen:
+                if state["primed"] and prev.get(txt) != e.get("last_seen", ""):
                     fresh.append(row)
+
             state["seen"] = current
-            # In the game overlay, box the newest (top) entry so the latest
-            # translation is unmistakable.
-            if game_mode and rows:
-                child = rows[0].get_child()
-                if child is not None:
-                    child.add_css_class("zenbuji-latest")
             if not state["primed"]:
-                state["primed"] = True  # don't animate the initial load
+                state["primed"] = True   # don't animate the initial load
             else:
                 for row in fresh:
-                    _animate_in(row)
-                if game_mode and fresh:
-                    GLib.idle_add(lambda: (scroll.get_vadjustment().set_value(0),
-                                           GLib.SOURCE_REMOVE)[1])
+                    _animate_in(row)     # calm fade for list rows
+                if captured:
+                    _celebrate(top, any_new)  # OUT old -> swap -> IN new -> banner
+
             if stats_label is not None:
                 stats_label.set_text(_stats_text(stats_fn(), ui_language))
             listbox.invalidate_filter()
@@ -579,23 +657,151 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
             GLib.timeout_add(1000, poll)
 
+        def _set_idle_quip():
+            if quip_lbl is not None and state["quip_mode"] == "idle":
+                quip_lbl.set_text(random.choice(GAME_QUIPS))
+
         def update_busy():
-            if busy_box is None:
+            # Status line: spinner + busy text while a translation/OCR runs,
+            # otherwise a (slowly rotating) idle quip. The capture celebration is
+            # the LEVEL UP / Booster banner, not this line.
+            if quip_lbl is None:
                 return
             info = _read_busy(busy_path) if busy_path else None
             if info:
-                stage = info.get("stage")
-                busy_lbl.set_text(t("busy_translating") if stage == "translating"
-                                  else t("busy_reading"))
+                state["quip_mode"] = "busy"
                 spinner.start()
-                busy_box.set_visible(True)
+                quip_lbl.set_text(t("busy_translating") if info.get("stage") ==
+                                  "translating" else t("busy_reading"))
             else:
                 spinner.stop()
-                busy_box.set_visible(False)
+                if state["quip_mode"] != "idle":
+                    state["quip_mode"] = "idle"
+                    _set_idle_quip()           # set once on the busy->idle edge
+
+        def _pulse(widget, lo=0.35):
+            widget.set_opacity(lo)
+            tgt = Adw.CallbackAnimationTarget.new(widget.set_opacity)
+            anim = Adw.TimedAnimation.new(widget, lo, 1.0, 350, tgt)
+            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+            state["anims"].append(anim)
+            anim.play()
+
+        def _show_hero(entry):
+            # Fill the hero spotlight from an entry and reset it to its resting
+            # state (margins 0, fully opaque), so a static update after any
+            # interrupted animation looks right.
+            if hero is None:
+                return
+            text = entry.get("text", "")
+            reading = entry.get("reading", "")
+            trans = entry.get("translations", {})
+            hero_word.set_text(text)
+            hero_reading.set_text(reading if reading and reading != text else "")
+            hero_reading.set_visible(bool(hero_reading.get_text()))
+            parts = []
+            for lang in [*languages, *[l for l in trans if l not in languages]]:
+                if trans.get(lang):
+                    parts.append(f"{lang_names.get(lang, lang.upper())}: {trans[lang]}")
+            hero_trans.set_text("  ·  ".join(parts))
+            for w in (hero_word, hero_reading, hero_trans):
+                w.set_opacity(1.0)
+            hero_word.set_margin_start(0)
+            hero_reading.set_margin_start(0)
+            hero.set_visible(True)
+
+        # --- animation primitives (smooth eased; margins stay >= 0) --------- //
+        def _fade(widget, frm, to, dur=240, easing=None):
+            widget.set_opacity(frm)
+            tgt = Adw.CallbackAnimationTarget.new(widget.set_opacity)
+            anim = Adw.TimedAnimation.new(widget, frm, to, dur, tgt)
+            anim.set_easing(easing or Adw.Easing.EASE_OUT_CUBIC)
+            state["anims"].append(anim)
+            anim.play()
+
+        def _slide_margin(widget, frm, to, dur, set_margin,
+                          easing=Adw.Easing.EASE_IN_OUT_CUBIC):
+            set_margin(max(0, int(round(frm))))
+            tgt = Adw.CallbackAnimationTarget.new(
+                lambda v: set_margin(max(0, int(round(v)))))
+            anim = Adw.TimedAnimation.new(widget, frm, to, dur, tgt)
+            anim.set_easing(easing)
+            state["anims"].append(anim)
+            anim.play()
+
+        def _ribbon_slide_in(any_new):
+            ribbon.remove_css_class("zenbuji-ribbon-new")
+            ribbon.remove_css_class("zenbuji-ribbon-levelup")
+            ribbon.set_text(GAME_BANNER_NEW if any_new else GAME_BANNER_LEVELUP)
+            ribbon.add_css_class("zenbuji-ribbon-new" if any_new
+                                 else "zenbuji-ribbon-levelup")
+            ribbon.set_visible(True)
+            _fade(ribbon, 0.0, 1.0, dur=260)
+            _slide_margin(ribbon, 70, 0, 480, ribbon.set_margin_end)
+
+        # Slide the word + its reading together (the box stays static).
+        def _word_set_margin(v):
+            hero_word.set_margin_start(v)
+            hero_reading.set_margin_start(v)
+
+        def _celebrate(new_entry, any_new):
+            if combo_lbl is not None:
+                state["session"] += 1
+                combo_lbl.set_text(f"★ {state['session']}")
+                _pulse(combo_lbl)
+            if hero is None:
+                return
+            state["seq_token"] += 1
+            tok = state["seq_token"]
+            had_word = hero.get_visible() and bool(hero_word.get_text())
+
+            def alive():
+                return tok == state["seq_token"]
+
+            # PHASE OUT: clear the current word/translations/banner (skip if the
+            # hero was empty — nothing to fly out).
+            if had_word:
+                _fade(hero_word, 1.0, 0.0, dur=220)
+                _fade(hero_reading, 1.0, 0.0, dur=220)
+                _fade(hero_trans, 1.0, 0.0, dur=220)
+                _slide_margin(hero_word, 0, 26, 220, _word_set_margin)
+                _fade(ribbon, ribbon.get_opacity(), 0.0, dur=200,
+                      easing=Adw.Easing.EASE_IN_CUBIC)
+            out_delay = 260 if had_word else 0
+
+            def _word_in():
+                if not alive():
+                    return GLib.SOURCE_REMOVE
+                ribbon.set_visible(False)
+                _show_hero(new_entry)            # swap to the new content...
+                hero_word.set_opacity(0.0)       # ...then stage it for the fly-in
+                hero_reading.set_opacity(0.0)
+                hero_trans.set_opacity(0.0)
+                _word_set_margin(28)
+                _fade(hero_word, 0.0, 1.0, dur=320)
+                _fade(hero_reading, 0.0, 1.0, dur=320)
+                _slide_margin(hero_word, 28, 0, 380, _word_set_margin)
+                return GLib.SOURCE_REMOVE
+
+            def _trans_in():
+                if not alive():
+                    return GLib.SOURCE_REMOVE
+                _fade(hero_trans, 0.0, 1.0, dur=300)
+                return GLib.SOURCE_REMOVE
+
+            def _banner_in():
+                if alive():
+                    _ribbon_slide_in(any_new)
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(out_delay, _word_in)
+            GLib.timeout_add(out_delay + 380, _trans_in)
+            GLib.timeout_add(out_delay + 660, _banner_in)
 
         def setup_busy_watch():
-            if busy_box is None or not busy_path:
+            if quip_lbl is None or not busy_path:
                 return
+            _set_idle_quip()   # initial line
             update_busy()
             try:
                 gfile = Gio.File.new_for_path(str(busy_path))
@@ -604,8 +810,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 state["monitors"].append(mon)
             except Exception:  # noqa: BLE001
                 pass
-            # Re-check periodically so a stale marker (crashed run) clears.
-            GLib.timeout_add_seconds(5, lambda: (update_busy(), True)[1])
+            # Re-check busy state every few seconds so a stale marker clears...
+            GLib.timeout_add_seconds(4, lambda: (update_busy(), True)[1])
+            # ...and rotate the idle quip slowly (only when idle).
+            GLib.timeout_add_seconds(18, lambda: (_set_idle_quip(), True)[1])
 
         def do_refresh(text):
             if refresh_fn is None:

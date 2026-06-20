@@ -1612,6 +1612,24 @@ def cmd_usage(args, cfg) -> int:
     return 0 if info["ok"] else 1
 
 
+# Spoken when a brand-new word is captured — the game-helper "新規ゲット" banner,
+# energised, announced (in its own punchy voice when VOICEVOX is on) before the
+# reading, which then follows in the normal voice.
+_CAPTURE_NEW_INTRO = "新規ゲット！！！"
+_CAPTURE_VOICE = 82      # 青山龍星 不機嫌 — deep, heavy, low voice for the fanfare
+_CAPTURE_VOICE_ALT = 81  # 青山龍星 熱血 — fallback if 不機嫌 is the selected voice
+
+
+def _capture_voice(selected) -> int:
+    """An energetic VOICEVOX speaker for the fanfare, distinct from the selected
+    one (only matters when VOICEVOX is the engine; ignored by system voices)."""
+    try:
+        selected = int(selected)
+    except (TypeError, ValueError):
+        selected = -1
+    return _CAPTURE_VOICE_ALT if selected == _CAPTURE_VOICE else _CAPTURE_VOICE
+
+
 def cmd_add(args, cfg) -> int:
     """Translate words and store them in the local dictionary with no popup.
 
@@ -1702,15 +1720,28 @@ def cmd_add(args, cfg) -> int:
 
     if speak_on:
         speak_tr = bool(cfg.get("tts_add_translation", False))
-        chunks = []
+        # Speak in the same order the game overlay reveals things: the reading,
+        # then the translation, then (for a brand-new word) the energetic
+        # "新規ゲット" fanfare last, in its own VOICEVOX voice. Each call blocks so
+        # this short-lived process doesn't exit mid-audio.
+        sequence = []
+        any_new = False
         for r in results:
             jp = r.reading or r.text
-            if not jp:
-                continue
+            if jp:
+                sequence.append((jp, cfg))
             en = r.translations.get("en") if speak_tr else None
-            chunks.append(f"{jp}、英語で、{en}" if en else jp)
-        spoken = "、".join(chunks)
-        speak(spoken, cfg, block=True)  # wait, or this process exits mid-audio
+            if en:
+                sequence.append((f"英語で、{en}", cfg))
+            entry = dict_get(r.text)
+            if entry and entry.get("count") == 1:
+                any_new = True
+        if any_new:
+            sel = cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER)
+            intro_cfg = {**cfg, "voicevox_speaker": _capture_voice(sel)}
+            sequence.append((_CAPTURE_NEW_INTRO, intro_cfg))
+        for text, voice_cfg in sequence:
+            speak(text, voice_cfg, block=True)
 
     if args.json:
         print(json.dumps([r.to_dict() for r in results], ensure_ascii=False))
