@@ -51,9 +51,9 @@ def test_capture_voice_is_energetic_and_distinct():
     assert zenbuji._capture_voice(None) == zenbuji._CAPTURE_VOICE
 
 
-def test_new_word_fanfare_spoken_before_reading(store, monkeypatch):
-    # `add --speak` announces the energised intro (in a different voice) before
-    # the reading for a brand-new word; a known re-capture skips the intro.
+def test_new_word_voice_order_reading_translation_then_fanfare(store, monkeypatch):
+    # `add --speak` speaks the reading, then the translation, then the energised
+    # fanfare last (in its own punchy voice) for a brand-new word.
     spoken = []
     monkeypatch.setattr(zenbuji, "speak",
                         lambda text, cfg, block=False: spoken.append((text, cfg.get("voicevox_speaker"))))
@@ -63,7 +63,7 @@ def test_new_word_fanfare_spoken_before_reading(store, monkeypatch):
     monkeypatch.setattr(zenbuji, "translate_deepl",
                         lambda t, tg, k, l: {x: "fire" for x in tg})
     cfg = {"backend": "deepl", "deepl_api_key": "k", "dictionary": True,
-           "languages": ["en"], "voicevox_speaker": 3}
+           "languages": ["en"], "voicevox_speaker": 3, "tts_add_translation": True}
 
     class A:  # argparse-like namespace
         ocr = ocr_image = selection = no_speak = quiet = json = False
@@ -72,10 +72,10 @@ def test_new_word_fanfare_spoken_before_reading(store, monkeypatch):
         words = ["火"]
 
     zenbuji.cmd_add(A(), cfg)
-    assert spoken[0][0] == zenbuji._CAPTURE_NEW_INTRO          # intro first
-    assert spoken[0][1] == zenbuji._capture_voice(3)          # in the punchy voice
-    assert spoken[1][0] == "ひ"                                # then the reading (no intro)
-    assert spoken[1][1] == 3                                   # normal voice
+    assert spoken[0] == ("ひ", 3)                              # 1) reading, normal voice
+    assert spoken[1][0] == "英語で、fire" and spoken[1][1] == 3   # 2) translation
+    assert spoken[2][0] == zenbuji._CAPTURE_NEW_INTRO          # 3) fanfare last
+    assert spoken[2][1] == zenbuji._capture_voice(3)          # in the punchy voice
 
 
 def test_launch_game_wires_live_refresh(store, monkeypatch):

@@ -1720,27 +1720,28 @@ def cmd_add(args, cfg) -> int:
 
     if speak_on:
         speak_tr = bool(cfg.get("tts_add_translation", False))
-        chunks = []
+        # Speak in the same order the game overlay reveals things: the reading,
+        # then the translation, then (for a brand-new word) the energetic
+        # "新規ゲット" fanfare last, in its own VOICEVOX voice. Each call blocks so
+        # this short-lived process doesn't exit mid-audio.
+        sequence = []
         any_new = False
         for r in results:
             jp = r.reading or r.text
-            if not jp:
-                continue
+            if jp:
+                sequence.append((jp, cfg))
             en = r.translations.get("en") if speak_tr else None
-            chunks.append(f"{jp}、英語で、{en}" if en else jp)
+            if en:
+                sequence.append((f"英語で、{en}", cfg))
             entry = dict_get(r.text)
             if entry and entry.get("count") == 1:
                 any_new = True
-        # A fresh word gets an energetic fanfare in its own (different) VOICEVOX
-        # voice first; the reading then follows in the normal voice (block=True
-        # so this short-lived process doesn't exit mid-audio).
         if any_new:
             sel = cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER)
             intro_cfg = {**cfg, "voicevox_speaker": _capture_voice(sel)}
-            speak(_CAPTURE_NEW_INTRO, intro_cfg, block=True)
-        body = "、".join(chunks)
-        if body:
-            speak(body, cfg, block=True)
+            sequence.append((_CAPTURE_NEW_INTRO, intro_cfg))
+        for text, voice_cfg in sequence:
+            speak(text, voice_cfg, block=True)
 
     if args.json:
         print(json.dumps([r.to_dict() for r in results], ensure_ascii=False))

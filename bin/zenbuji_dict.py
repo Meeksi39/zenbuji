@@ -156,7 +156,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     # correction; the deferred refresh runs when the edit closes.
     state = {"editing": False, "pending": False, "token": 0, "monitors": [],
              "seen": {}, "primed": False, "anims": [],
-             "session": 0, "quip_mode": "idle", "banner_token": 0}
+             "session": 0, "quip_mode": "idle", "banner_token": 0,
+             "seq_token": 0}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -553,14 +554,16 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             # Game overlay: the newest word is the hero spotlight; the list shows
             # the rest. A captured word = the top entry's last_seen just changed.
             captured = any_new = False
+            top = None
             list_entries = entries
             if game_mode:
                 if entries:
                     top = entries[0]
-                    _show_hero(top)
                     if state["primed"] and prev.get(top["text"]) != top.get("last_seen"):
                         captured = True
                         any_new = top["text"] not in prev
+                    if not captured:
+                        _show_hero(top)   # static set; captures animate below
                 elif hero is not None:
                     hero.set_visible(False)
                 list_entries = entries[1:]
@@ -580,7 +583,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 for row in fresh:
                     _animate_in(row)     # calm fade for list rows
                 if captured:
-                    _celebrate(any_new)  # hero flash + ribbon + combo
+                    _celebrate(top, any_new)  # OUT old -> swap -> IN new -> banner
 
             if stats_label is not None:
                 stats_label.set_text(_stats_text(stats_fn(), ui_language))
@@ -685,7 +688,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             anim.play()
 
         def _show_hero(entry):
-            # Fill the hero spotlight from the newest entry.
+            # Fill the hero spotlight from an entry and reset it to its resting
+            # state (margins 0, fully opaque), so a static update after any
+            # interrupted animation looks right.
             if hero is None:
                 return
             text = entry.get("text", "")
@@ -699,52 +704,99 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 if trans.get(lang):
                     parts.append(f"{lang_names.get(lang, lang.upper())}: {trans[lang]}")
             hero_trans.set_text("  ·  ".join(parts))
+            for w in (hero_word, hero_reading, hero_trans):
+                w.set_opacity(1.0)
+            hero_word.set_margin_start(0)
+            hero_reading.set_margin_start(0)
             hero.set_visible(True)
 
-        def _slide_in(widget, frm, to, dur=500, apply=None):
-            # Smooth eased slide: fade in (ease-out) while a margin glides from
-            # `frm` to `to` on an ease-in-out curve -- no spring bounce, no linear
-            # ramp, so it reads smooth rather than choppy/stiff.
-            widget.set_opacity(0.0)
-            o_tgt = Adw.CallbackAnimationTarget.new(widget.set_opacity)
-            fade = Adw.TimedAnimation.new(widget, 0.0, 1.0, min(dur, 320), o_tgt)
-            fade.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-            m_tgt = Adw.CallbackAnimationTarget.new(apply)
-            move = Adw.TimedAnimation.new(widget, frm, to, dur, m_tgt)
-            move.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
-            state["anims"].extend([fade, move])
-            fade.play()
-            move.play()
+        # --- animation primitives (smooth eased; margins stay >= 0) --------- //
+        def _fade(widget, frm, to, dur=240, easing=None):
+            widget.set_opacity(frm)
+            tgt = Adw.CallbackAnimationTarget.new(widget.set_opacity)
+            anim = Adw.TimedAnimation.new(widget, frm, to, dur, tgt)
+            anim.set_easing(easing or Adw.Easing.EASE_OUT_CUBIC)
+            state["anims"].append(anim)
+            anim.play()
 
-        def _celebrate(any_new):
+        def _slide_margin(widget, frm, to, dur, set_margin,
+                          easing=Adw.Easing.EASE_IN_OUT_CUBIC):
+            set_margin(max(0, int(round(frm))))
+            tgt = Adw.CallbackAnimationTarget.new(
+                lambda v: set_margin(max(0, int(round(v)))))
+            anim = Adw.TimedAnimation.new(widget, frm, to, dur, tgt)
+            anim.set_easing(easing)
+            state["anims"].append(anim)
+            anim.play()
+
+        def _ribbon_slide_in(any_new):
+            ribbon.remove_css_class("zenbuji-ribbon-new")
+            ribbon.remove_css_class("zenbuji-ribbon-levelup")
+            ribbon.set_text(GAME_BANNER_NEW if any_new else GAME_BANNER_LEVELUP)
+            ribbon.add_css_class("zenbuji-ribbon-new" if any_new
+                                 else "zenbuji-ribbon-levelup")
+            ribbon.set_visible(True)
+            _fade(ribbon, 0.0, 1.0, dur=260)
+            _slide_margin(ribbon, 70, 0, 480, ribbon.set_margin_end)
+
+        # Slide the word + its reading together (the box stays static).
+        def _word_set_margin(v):
+            hero_word.set_margin_start(v)
+            hero_reading.set_margin_start(v)
+
+        def _celebrate(new_entry, any_new):
             if combo_lbl is not None:
                 state["session"] += 1
                 combo_lbl.set_text(f"★ {state['session']}")
                 _pulse(combo_lbl)
             if hero is None:
                 return
-            # 1) The word flies in from the left (like the banner, but first).
-            ribbon.set_visible(False)
-            _slide_in(hero_frame, 48, 0, dur=520,
-                      apply=lambda v: hero_frame.set_margin_start(max(0, int(round(v)))))
-            # 2) Then the skewed ribbon slides in after it, with a JRPG offset.
-            state["banner_token"] += 1
-            tok = state["banner_token"]
+            state["seq_token"] += 1
+            tok = state["seq_token"]
+            had_word = hero.get_visible() and bool(hero_word.get_text())
 
-            def _ribbon_in():
-                if tok != state["banner_token"]:
+            def alive():
+                return tok == state["seq_token"]
+
+            # PHASE OUT: clear the current word/translations/banner (skip if the
+            # hero was empty — nothing to fly out).
+            if had_word:
+                _fade(hero_word, 1.0, 0.0, dur=220)
+                _fade(hero_reading, 1.0, 0.0, dur=220)
+                _fade(hero_trans, 1.0, 0.0, dur=220)
+                _slide_margin(hero_word, 0, 26, 220, _word_set_margin)
+                _fade(ribbon, ribbon.get_opacity(), 0.0, dur=200,
+                      easing=Adw.Easing.EASE_IN_CUBIC)
+            out_delay = 260 if had_word else 0
+
+            def _word_in():
+                if not alive():
                     return GLib.SOURCE_REMOVE
-                ribbon.remove_css_class("zenbuji-ribbon-new")
-                ribbon.remove_css_class("zenbuji-ribbon-levelup")
-                ribbon.set_text(GAME_BANNER_NEW if any_new else GAME_BANNER_LEVELUP)
-                ribbon.add_css_class("zenbuji-ribbon-new" if any_new
-                                     else "zenbuji-ribbon-levelup")
-                ribbon.set_visible(True)
-                _slide_in(ribbon, 70, 0, dur=480,
-                          apply=lambda v: ribbon.set_margin_end(max(0, int(round(v)))))
+                ribbon.set_visible(False)
+                _show_hero(new_entry)            # swap to the new content...
+                hero_word.set_opacity(0.0)       # ...then stage it for the fly-in
+                hero_reading.set_opacity(0.0)
+                hero_trans.set_opacity(0.0)
+                _word_set_margin(28)
+                _fade(hero_word, 0.0, 1.0, dur=320)
+                _fade(hero_reading, 0.0, 1.0, dur=320)
+                _slide_margin(hero_word, 28, 0, 380, _word_set_margin)
                 return GLib.SOURCE_REMOVE
 
-            GLib.timeout_add(300, _ribbon_in)
+            def _trans_in():
+                if not alive():
+                    return GLib.SOURCE_REMOVE
+                _fade(hero_trans, 0.0, 1.0, dur=300)
+                return GLib.SOURCE_REMOVE
+
+            def _banner_in():
+                if alive():
+                    _ribbon_slide_in(any_new)
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(out_delay, _word_in)
+            GLib.timeout_add(out_delay + 380, _trans_in)
+            GLib.timeout_add(out_delay + 660, _banner_in)
 
         def setup_busy_watch():
             if quip_lbl is None or not busy_path:
