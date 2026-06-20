@@ -25,7 +25,7 @@ turn into review for later. ♪(´▽｀)
 
 ## See it in action
 
-Highlight Japanese in **any** app, hit the hotkey, read it. That's the whole loop — that's the magic:
+Highlight Japanese in any app, hit the hotkey, read it. That's the whole loop:
 
 ```text
 $ zenbuji 日本語を勉強しています
@@ -185,9 +185,8 @@ When the answer's revealed, the Got it / Missed default follows your reading —
 greeting from ずんだもん — cute, silly, or a little bit cursed — and waves you off with a
 matching goodbye at the end. Switch it off if it's not your thing.
 
-Each card shows its current level while you practice, and when a correct answer bumps a word
-up a level (New → Learning → Young → Mature) you get a little "Level up!" flourish — the
-summary tallies how many words graduated that round.
+Each card shows its current level as you go, and the end-of-round summary tells you how many
+words graduated to the next one.
 
 ### Statistics
 
@@ -203,17 +202,15 @@ graph build up from your daily reviews (logged to `~/.local/share/zenbuji/activi
 
 ### Game helper — 漢字キャプチャー
 
-`zenbuji game` (`Super+Shift+G`, or the top-bar menu) opens 漢字キャプチャー ("Kanji Capture") —
-a little JRPG-flavoured overlay I made for grabbing words mid-game without a popup stealing
-focus. It has a gradient banner with a combo counter of the words you've banked this session,
-a cheeky ずんだもん status line, your current add shortcuts (read live from your GNOME
-bindings), and the live word list. Bank a word and it bounces in at the top in a gold,
-level-up-style box, with a banner to match — a gold レベルアップ！ for a word you already knew,
-a pink 新規ゲット！ for a brand-new one. Park it on a second monitor and the extension keeps
-zenbuji off your fullscreen game's display.
+`zenbuji game` (`Super+Shift+G`, or the top-bar menu) opens 漢字キャプチャー ("Kanji Capture").
+It's the same dictionary, just as a calmer overlay you can leave on a second monitor while you
+play — so you can grab a word out of a game without a popup yanking focus away from it. I gave
+it a little game-inspired look (a combo count of the words you've picked up this session, a
+friendly ずんだもん line, your add shortcuts, the live word list) because studying mid-game
+should feel a bit fun. The extension also keeps zenbuji off your fullscreen game's display.
 
 <div align="center">
-<img src="docs/game-helper.png" alt="zenbuji game-helper overlay — 漢字キャプチャー with combo counter, a level-up banner, and the live word list" width="380">
+<img src="docs/game-helper.png" alt="漢字キャプチャー — zenbuji's game-helper overlay" width="380">
 </div>
 
 Two silent, no-popup ways to bank a word while you play (both read it aloud, neither steals focus):
