@@ -25,4 +25,5 @@ venv/
 .DS_Store
 
 # Local-only dev notes — kept on my machine, never in the repo
+CLAUDE.md
 COMMIT.md
