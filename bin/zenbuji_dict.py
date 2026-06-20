@@ -195,6 +195,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             # its slot whether or not it's spinning (start/stop, never hidden),
             # so the idle quip and the busy "Reading…" share the same indent.
             status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            status_row.set_margin_start(10)   # line the subtitle up under 漢字
             spinner = Gtk.Spinner()
             spinner.set_valign(Gtk.Align.CENTER)
             spinner.set_size_request(14, 14)
@@ -216,11 +217,11 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             # Hero spotlight: the freshly-captured word, big and gold, with a
             # skewed ribbon pinned to (and overhanging) the panel.
             hero = Gtk.Overlay()
-            hero.set_margin_top(10)
+            hero.set_margin_top(8)
             hero.set_visible(False)
             hero_frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             hero_frame.add_css_class("zenbuji-hero")
-            hero_frame.set_margin_top(8)  # room for the ribbon to straddle the rim
+            hero_frame.set_margin_top(13)  # ribbon straddles higher on the rim
             hero_word = Gtk.Label(xalign=0, wrap=True, selectable=True)
             hero_word.add_css_class("zenbuji-hero-word")
             hero_word.set_max_width_chars(14)
@@ -715,13 +716,17 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             ribbon.add_css_class("zenbuji-ribbon-new" if any_new
                                  else "zenbuji-ribbon-levelup")
             ribbon.set_visible(True)
-            # Snap the ribbon down into place with a little spring (clamped >=0;
-            # negative margins are invalid and would be clipped anyway).
+            # Slide in from the left: the right-aligned ribbon starts pushed left
+            # (large margin_end) and springs back to rest, while fading in.
+            ribbon.set_opacity(0.0)
+            o_tgt = Adw.CallbackAnimationTarget.new(ribbon.set_opacity)
+            fade = Adw.TimedAnimation.new(ribbon, 0.0, 1.0, 200, o_tgt)
             m_tgt = Adw.CallbackAnimationTarget.new(
-                lambda v: ribbon.set_margin_top(max(0, int(round(v)))))
+                lambda v: ribbon.set_margin_end(max(0, int(round(v)))))
             spring = Adw.SpringAnimation.new(
-                ribbon, 14, 0, Adw.SpringParams.new(0.55, 1, 240), m_tgt)
-            state["anims"].append(spring)
+                ribbon, 60, 8, Adw.SpringParams.new(0.7, 1, 260), m_tgt)
+            state["anims"].extend([fade, spring])
+            fade.play()
             spring.play()
 
         def setup_busy_watch():

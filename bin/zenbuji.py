@@ -1612,6 +1612,17 @@ def cmd_usage(args, cfg) -> int:
     return 0 if info["ok"] else 1
 
 
+# Spoken when a brand-new word is captured — the game-helper "新規ゲット" banner,
+# energised, announced before the reading (a short 。pause separates them).
+_CAPTURE_NEW_INTRO = "新規ゲット！！！。"
+
+
+def _capture_speech(reading: str, en: str | None, is_new: bool) -> str:
+    """The phrase spoken for one captured word; new words get the hyped intro."""
+    phrase = f"{reading}、英語で、{en}" if en else reading
+    return f"{_CAPTURE_NEW_INTRO}{phrase}" if is_new else phrase
+
+
 def cmd_add(args, cfg) -> int:
     """Translate words and store them in the local dictionary with no popup.
 
@@ -1708,7 +1719,9 @@ def cmd_add(args, cfg) -> int:
             if not jp:
                 continue
             en = r.translations.get("en") if speak_tr else None
-            chunks.append(f"{jp}、英語で、{en}" if en else jp)
+            entry = dict_get(r.text)
+            is_new = bool(entry and entry.get("count") == 1)
+            chunks.append(_capture_speech(jp, en, is_new))
         spoken = "、".join(chunks)
         speak(spoken, cfg, block=True)  # wait, or this process exits mid-audio
 

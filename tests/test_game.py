@@ -41,6 +41,17 @@ def test_shortcuts_info_uses_live_binding(monkeypatch):
     assert info[0]["keys"] == "Super+B"             # the rebound OCR-add
 
 
+def test_capture_speech_hypes_new_words():
+    # A brand-new word is announced with the energised banner before the reading.
+    new = zenbuji._capture_speech("ひ", None, is_new=True)
+    assert new.startswith("新規ゲット！！！")
+    assert new.endswith("ひ")
+    # A re-captured (known) word is just the reading, no intro.
+    assert zenbuji._capture_speech("ひ", None, is_new=False) == "ひ"
+    # The translation, when spoken, still follows the reading.
+    assert zenbuji._capture_speech("ひ", "fire", is_new=False) == "ひ、英語で、fire"
+
+
 def test_launch_game_wires_live_refresh(store, monkeypatch):
     # Regression: the game overlay must pass watch_path so it live-refreshes
     # (it previously didn't, so added words never showed up).
