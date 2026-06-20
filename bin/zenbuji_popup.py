@@ -63,7 +63,7 @@ def _make_tr(ui_language):
 
 def _spawn_dictionary():
     """Open the dictionary window in a separate process (self-reinvocation)."""
-    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    cli = str(Path(__file__).resolve().parent / "zenbuji_main.py")
     try:
         subprocess.Popen([sys.executable, cli, "dict"],
                          start_new_session=True)

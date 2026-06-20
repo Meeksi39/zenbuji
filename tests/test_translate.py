@@ -101,7 +101,7 @@ def test_dispatch_deepl_no_key_notes_and_empty():
 
 
 def test_dispatch_auto_uses_deepl_when_key(monkeypatch):
-    monkeypatch.setattr(zenbuji, "translate_deepl",
+    monkeypatch.setattr(zenbuji.translation, "translate_deepl",
                         lambda t, tg, k, l: {x: "X" for x in tg})
     out, _ = zenbuji.translate("こ", ["en", "de"],
                                card_cfg(backend="auto", deepl_api_key="k:fx"))
@@ -111,8 +111,8 @@ def test_dispatch_auto_uses_deepl_when_key(monkeypatch):
 def test_dispatch_deepl_falls_back_to_argos(monkeypatch):
     def boom(*_a):
         raise zenbuji.TranslationError("boom")
-    monkeypatch.setattr(zenbuji, "translate_deepl", boom)
-    monkeypatch.setattr(zenbuji, "translate_argos",
+    monkeypatch.setattr(zenbuji.translation, "translate_deepl", boom)
+    monkeypatch.setattr(zenbuji.translation, "translate_argos",
                         lambda t, tg, l: {x: "A" for x in tg})
     out, notes = zenbuji.translate("こ", ["en"], card_cfg(deepl_api_key="k"))
     assert out == {"en": "A"}
@@ -122,15 +122,15 @@ def test_dispatch_deepl_falls_back_to_argos(monkeypatch):
 def test_dispatch_both_fail_returns_empty(monkeypatch):
     def boom(*_a):
         raise zenbuji.TranslationError("x")
-    monkeypatch.setattr(zenbuji, "translate_deepl", boom)
-    monkeypatch.setattr(zenbuji, "translate_argos", boom)
+    monkeypatch.setattr(zenbuji.translation, "translate_deepl", boom)
+    monkeypatch.setattr(zenbuji.translation, "translate_argos", boom)
     out, _ = zenbuji.translate("こ", ["en"], card_cfg(deepl_api_key="k"))
     assert out == {}
 
 
 # --- translate_cached() caching contract (writes go to the temp store) ------ #
 def test_cache_records_deepl_output(store, monkeypatch):
-    monkeypatch.setattr(zenbuji, "translate_deepl",
+    monkeypatch.setattr(zenbuji.translation, "translate_deepl",
                         lambda t, tg, k, l: {x: "X" for x in tg})
     cfg = card_cfg(deepl_api_key="k", dictionary=True)
     out, _ = zenbuji.translate_cached("水", ["en", "de"], cfg, "みず")
@@ -146,7 +146,7 @@ def test_cache_serves_repeat_without_refetch(store, monkeypatch):
         calls.append(list(tg))
         return {x: "X" for x in tg}
 
-    monkeypatch.setattr(zenbuji, "translate_deepl", fake)
+    monkeypatch.setattr(zenbuji.translation, "translate_deepl", fake)
     cfg = card_cfg(deepl_api_key="k", dictionary=True)
     zenbuji.translate_cached("水", ["en", "de"], cfg, "みず")       # fetches both
     out, _ = zenbuji.translate_cached("水", ["en", "de"], cfg, "みず")  # all cached
@@ -156,7 +156,7 @@ def test_cache_serves_repeat_without_refetch(store, monkeypatch):
 
 
 def test_cache_skips_argos_unless_opted_in(store, monkeypatch):
-    monkeypatch.setattr(zenbuji, "translate_argos",
+    monkeypatch.setattr(zenbuji.translation, "translate_argos",
                         lambda t, tg, l: {x: "A" for x in tg})
     cfg = card_cfg(backend="argos", dictionary=True, cache_offline=False)
     out, _ = zenbuji.translate_cached("空", ["en"], cfg, "そら")
@@ -165,7 +165,7 @@ def test_cache_skips_argos_unless_opted_in(store, monkeypatch):
 
 
 def test_cache_stores_argos_when_opted_in(store, monkeypatch):
-    monkeypatch.setattr(zenbuji, "translate_argos",
+    monkeypatch.setattr(zenbuji.translation, "translate_argos",
                         lambda t, tg, l: {x: "A" for x in tg})
     cfg = card_cfg(backend="argos", dictionary=True, cache_offline=True)
     zenbuji.translate_cached("空", ["en"], cfg, "そら")

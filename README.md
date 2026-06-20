@@ -374,7 +374,7 @@ an EN/DE gloss one keypress away, anywhere in the OS. 勉強, but make it painle
 ## Development
 
 The repo is the source of truth; `install.sh` symlinks the extension and points the CLI
-launcher at `bin/zenbuji.py`, so edits take effect immediately (reload GNOME Shell / log out
+launcher at `bin/zenbuji_main.py`, so edits take effect immediately (reload GNOME Shell / log out
 on Wayland for extension changes). Tail the extension logs while you hack:
 
 ```sh

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-CLI = Path(__file__).resolve().parent.parent / "bin" / "zenbuji.py"
+CLI = Path(__file__).resolve().parent.parent / "bin" / "zenbuji_main.py"
 
 
 def _has_display():

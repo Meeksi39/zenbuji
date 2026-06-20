@@ -31,7 +31,7 @@ def test_ocr_missing_file_returns_note(tmp_path):
 def test_ocr_success(tmp_path, monkeypatch):
     img = tmp_path / "x.png"
     img.write_bytes(b"fake")
-    monkeypatch.setattr(zenbuji, "_manga_ocr", lambda: (lambda p: " 日本語 "))
+    monkeypatch.setattr(zenbuji.ocr, "_manga_ocr", lambda: (lambda p: " 日本語 "))
     text, notes = zenbuji.ocr_image_to_text(str(img), {})
     assert text == "日本語" and notes == []
 
@@ -43,7 +43,7 @@ def test_ocr_not_installed(tmp_path, monkeypatch):
     def raise_import():
         raise ImportError
 
-    monkeypatch.setattr(zenbuji, "_manga_ocr", raise_import)
+    monkeypatch.setattr(zenbuji.ocr, "_manga_ocr", raise_import)
     text, notes = zenbuji.ocr_image_to_text(str(img), {})
     assert text == "" and notes
 
@@ -51,7 +51,7 @@ def test_ocr_not_installed(tmp_path, monkeypatch):
 def test_ocr_unknown_backend_warns(tmp_path, monkeypatch):
     img = tmp_path / "x.png"
     img.write_bytes(b"x")
-    monkeypatch.setattr(zenbuji, "_manga_ocr", lambda: (lambda p: "text"))
+    monkeypatch.setattr(zenbuji.ocr, "_manga_ocr", lambda: (lambda p: "text"))
     text, notes = zenbuji.ocr_image_to_text(str(img), {"ocr_backend": "weird"})
     assert text == "text"
     assert any("weird" in n or "manga" in n.lower() for n in notes)
@@ -90,21 +90,21 @@ def test_voicevox_synthesize_applies_speed(monkeypatch):
 # --- speak() engine dispatch (all side effects mocked) ---------------------- #
 def test_speak_off_is_silent(monkeypatch):
     calls = []
-    monkeypatch.setattr(zenbuji.subprocess, "run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda *a, **k: calls.append(a))
     zenbuji.speak("こ", {"tts_engine": "off"}, block=True)
     assert calls == []
 
 
 def test_speak_empty_is_silent(monkeypatch):
     calls = []
-    monkeypatch.setattr(zenbuji.subprocess, "run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda *a, **k: calls.append(a))
     zenbuji.speak("   ", {"tts_engine": "auto"}, block=True)
     assert calls == []
 
 
 def test_speak_custom_command_with_placeholder(monkeypatch):
     calls = []
-    monkeypatch.setattr(zenbuji.subprocess, "run", lambda argv, **k: calls.append(argv))
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda argv, **k: calls.append(argv))
     zenbuji.speak("こ", {"tts_engine": "command", "tts_command": "mytts {text}"},
                   block=True)
     assert calls[0] == ["mytts", "こ"]
@@ -112,15 +112,15 @@ def test_speak_custom_command_with_placeholder(monkeypatch):
 
 def test_speak_custom_command_wins_and_appends_text(monkeypatch):
     calls = []
-    monkeypatch.setattr(zenbuji.subprocess, "run", lambda argv, **k: calls.append(argv))
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda argv, **k: calls.append(argv))
     zenbuji.speak("こ", {"tts_engine": "system", "tts_command": "mytts"}, block=True)
     assert calls[0] == ["mytts", "こ"]
 
 
 def test_speak_voicevox_plays_wav(monkeypatch):
     played = []
-    monkeypatch.setattr(zenbuji, "voicevox_synthesize", lambda *a, **k: b"WAV")
-    monkeypatch.setattr(zenbuji, "_play_wav", lambda wav: played.append(wav))
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize", lambda *a, **k: b"WAV")
+    monkeypatch.setattr(zenbuji.tts, "_play_wav", lambda wav: played.append(wav))
     zenbuji.speak("こ", {"tts_engine": "voicevox"}, block=True)
     assert played == [b"WAV"]
 
@@ -132,10 +132,10 @@ def test_speak_voicevox_engine_silent_when_unreachable(monkeypatch):
     def fail(*a, **k):
         raise AssertionError("should not reach the system voice")
 
-    monkeypatch.setattr(zenbuji, "voicevox_synthesize", boom)
-    monkeypatch.setattr(zenbuji, "_play_wav", fail)
-    monkeypatch.setattr(zenbuji.subprocess, "run", fail)
-    monkeypatch.setattr(zenbuji.shutil, "which", lambda p: None)
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize", boom)
+    monkeypatch.setattr(zenbuji.tts, "_play_wav", fail)
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", fail)
+    monkeypatch.setattr(zenbuji.tts.shutil, "which", lambda p: None)
     zenbuji.speak("こ", {"tts_engine": "voicevox"}, block=True)  # silent, no fallback
 
 
@@ -144,26 +144,26 @@ def test_speak_auto_falls_back_to_system_voice(monkeypatch):
         raise OSError("down")
 
     calls = []
-    monkeypatch.setattr(zenbuji, "voicevox_synthesize", boom)
-    monkeypatch.setattr(zenbuji.shutil, "which",
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize", boom)
+    monkeypatch.setattr(zenbuji.tts.shutil, "which",
                         lambda p: "/usr/bin/spd-say" if p == "spd-say" else None)
-    monkeypatch.setattr(zenbuji.subprocess, "run", lambda argv, **k: calls.append(argv))
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda argv, **k: calls.append(argv))
     zenbuji.speak("こ", {"tts_engine": "auto"}, block=True)
     assert calls and calls[0][0] == "spd-say"
 
 
 def test_play_wav_invokes_first_available_player(monkeypatch):
-    monkeypatch.setattr(zenbuji.shutil, "which",
+    monkeypatch.setattr(zenbuji.tts.shutil, "which",
                         lambda p: f"/usr/bin/{p}" if p == "pw-play" else None)
     calls = []
-    monkeypatch.setattr(zenbuji.subprocess, "run", lambda argv, **k: calls.append(argv))
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda argv, **k: calls.append(argv))
     zenbuji._play_wav(b"RIFFdata")
     assert calls and calls[0][0] == "pw-play"
 
 
 def test_play_wav_no_player_is_noop(monkeypatch):
-    monkeypatch.setattr(zenbuji.shutil, "which", lambda p: None)
+    monkeypatch.setattr(zenbuji.tts.shutil, "which", lambda p: None)
     calls = []
-    monkeypatch.setattr(zenbuji.subprocess, "run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda *a, **k: calls.append(a))
     zenbuji._play_wav(b"data")
     assert calls == []

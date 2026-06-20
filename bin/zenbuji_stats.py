@@ -5,7 +5,7 @@ Shows, over the cached dictionary + SRS schedule: a hero row (due today / day
 streak / accuracy), a segmented "maturity" bar of how many words sit at each
 learning level (new / learning / young / mature) with a dot legend, a 14-day
 activity chart, and the words you miss most. All data is injected by
-`launch_stats` in zenbuji.py via `stats_fn` (which returns `srs_stats()`), so this
+`launch_stats` in zenbuji/cli.py via `stats_fn` (which returns `srs_stats()`), so this
 module stays storage-agnostic.
 """
 
@@ -28,7 +28,7 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from zenbuji_glass import accent_hex, accent_rgba, make_glass_window
 
-# Learning levels, lowest→highest. Kept in sync with srs_status() in zenbuji.py.
+# Learning levels, lowest→highest. Kept in sync with srs_status() in zenbuji/srs.py.
 LEVEL_ORDER = ("new", "learning", "young", "mature")
 
 # Distinct, legible level colours (GNOME palette: grey / amber / blue / green).
@@ -70,7 +70,7 @@ def _make_tr(ui_language):
 
 
 def _spawn_learn():
-    cli = str(Path(__file__).resolve().parent / "zenbuji.py")
+    cli = str(Path(__file__).resolve().parent / "zenbuji_main.py")
     try:
         subprocess.Popen([sys.executable, cli, "learn"], start_new_session=True)
     except OSError:
