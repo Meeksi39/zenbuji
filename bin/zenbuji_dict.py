@@ -196,6 +196,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             # so the idle quip and the busy "Reading…" share the same indent.
             status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             status_row.set_margin_start(10)   # line the subtitle up under 漢字
+            status_row.set_margin_top(4)      # a little air below the title
             spinner = Gtk.Spinner()
             spinner.set_valign(Gtk.Align.CENTER)
             spinner.set_size_request(14, 14)
