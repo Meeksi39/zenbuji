@@ -209,10 +209,8 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     font-size: 25px; font-weight: 900; font-style: italic;
     letter-spacing: 0.04em;
     color: #ffc83d;
-    /* dark-gold outline (4 corners) + warm glow */
-    text-shadow: -1px -1px 0 #6b4500, 1px -1px 0 #6b4500,
-                 -1px 1px 0 #6b4500, 1px 1px 0 #6b4500,
-                 0 0 10px alpha(#f5a800, 0.80);
+    /* soft dark-gold edge + warm glow (no heavy outline) */
+    text-shadow: 0 1px 1px alpha(#5c3d00, 0.8), 0 0 10px alpha(#f5a800, 0.75);
 }
 /* Metallic gold "combo" coin: words banked this session. */
 .zenbuji-combo {
@@ -245,12 +243,10 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 }
 .zenbuji-hero-word {
     font-size: 42px; font-weight: 900; color: #ffc83d;
-    /* dark-gold outline (8 directions) + warm gold glow + drop shadow */
-    text-shadow: -1px -1px 0 #6b4500, 0 -1px 0 #6b4500, 1px -1px 0 #6b4500,
-                 -1px 0 0 #6b4500, 1px 0 0 #6b4500,
-                 -1px 1px 0 #6b4500, 0 1px 0 #6b4500, 1px 1px 0 #6b4500,
-                 0 0 16px alpha(#f5a800, 0.90),
-                 0 3px 4px alpha(#000000, 0.70);
+    /* a light dark-gold edge (not a heavy black border) + warm glow + drop */
+    text-shadow: 0 1px 1px alpha(#5c3d00, 0.85),
+                 0 0 16px alpha(#f5a800, 0.75),
+                 0 2px 4px alpha(#000000, 0.55);
 }
 .zenbuji-hero-reading { font-size: 17px; font-weight: 700; color: #f0b62a; }
 .zenbuji-hero-trans { font-size: 14px; color: #f3eecf; }

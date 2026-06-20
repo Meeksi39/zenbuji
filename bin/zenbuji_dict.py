@@ -177,9 +177,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         combo_lbl = quip_lbl = None
         hero = hero_word = hero_reading = hero_trans = ribbon = None
         if game_mode:
-            # --- Game overlay: bare-glass title + metallic combo + quip ----- //
+            # --- Game overlay header: title + combo, with the quip as a tied
+            # subtitle, anchored by a hairline so it doesn't dangle ----------- //
+            header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
             banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            banner.set_margin_top(2)
             gtitle = Gtk.Label(label=GAME_TITLE, xalign=0, hexpand=True,
                                halign=Gtk.Align.START)
             gtitle.add_css_class("zenbuji-game-title")
@@ -188,24 +189,29 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             combo_lbl.add_css_class("zenbuji-combo")
             combo_lbl.set_valign(Gtk.Align.CENTER)
             banner.append(combo_lbl)
-            card.append(banner)
+            header.append(banner)
 
-            # Status line: a small spinner (while busy) + a playful quip.
+            # Status subtitle: a small spinner (while busy) + the playful quip.
             status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            status_row.set_margin_top(2)
             spinner = Gtk.Spinner()
-            quip_lbl = Gtk.Label(xalign=0, wrap=True)
+            quip_lbl = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
             quip_lbl.add_css_class("zenbuji-quip")
             quip_lbl.set_max_width_chars(44)
             status_row.append(spinner)
             status_row.append(quip_lbl)
-            card.append(status_row)
+            header.append(status_row)
+            card.append(header)
             busy_box = busy_lbl = None  # status is shown via the quip line here
+
+            hheader = Gtk.Box()
+            hheader.add_css_class("zenbuji-hairline")
+            hheader.set_margin_top(6)
+            card.append(hheader)
 
             # Hero spotlight: the freshly-captured word, big and gold, with a
             # skewed ribbon pinned to (and overhanging) the panel.
             hero = Gtk.Overlay()
-            hero.set_margin_top(8)
+            hero.set_margin_top(10)
             hero.set_visible(False)
             hero_frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             hero_frame.add_css_class("zenbuji-hero")
