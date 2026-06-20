@@ -701,7 +701,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             hero_trans.set_text("  ·  ".join(parts))
             hero.set_visible(True)
 
-        def _slide_in(widget, frm, to, dur=200, params=(0.7, 1, 260),
+        def _slide_in(widget, frm, to, dur=420, params=(0.62, 1, 150),
                       apply=None):
             # Fade in while springing a margin from `frm` to `to` (slide).
             widget.set_opacity(0.0)
@@ -723,7 +723,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 return
             # 1) The word flies in from the left (like the banner, but first).
             ribbon.set_visible(False)
-            _slide_in(hero_frame, 34, 0, dur=240, params=(0.72, 1, 230),
+            _slide_in(hero_frame, 52, 0, dur=460, params=(0.6, 1, 140),
                       apply=lambda v: hero_frame.set_margin_start(max(0, int(round(v)))))
             # 2) Then the skewed ribbon slides in after it, with a JRPG offset.
             state["banner_token"] += 1
@@ -738,11 +738,11 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 ribbon.add_css_class("zenbuji-ribbon-new" if any_new
                                      else "zenbuji-ribbon-levelup")
                 ribbon.set_visible(True)
-                _slide_in(ribbon, 56, 0,
+                _slide_in(ribbon, 80, 0,
                           apply=lambda v: ribbon.set_margin_end(max(0, int(round(v)))))
                 return GLib.SOURCE_REMOVE
 
-            GLib.timeout_add(230, _ribbon_in)
+            GLib.timeout_add(300, _ribbon_in)
 
         def setup_busy_watch():
             if quip_lbl is None or not busy_path:
