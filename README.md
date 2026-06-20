@@ -6,14 +6,17 @@
 
 ### Read *any* Japanese on your screen — furigana + English & German — in one keypress
 
-Highlight some text, mash `Super+J`, and *boom* — readings and meaning pop up right over
-whatever you're doing. No alt-tabbing into a dictionary app, no breaking immersion in the
-middle of an episode. Works in your browser, your editor, a chat window — and even on text
-you *can't* select, because screen OCR has your back. (｡•̀ᴗ-)✧
+Hi~ I'm learning Japanese the immersion way (read and watch the stuff you love, look up what
+you don't), and pausing every few seconds to paste a line into some dictionary app was
+*killing* it for me. So I made zenbuji for myself: highlight any Japanese on screen, mash
+`Super+J`, and the reading + meaning float up right over whatever you're in. No alt-tabbing,
+no breaking immersion in the middle of an episode — and it reads text you *can't* even select,
+because OCR. (｡•̀ᴗ-)✧
 
-The whole idea is that a lookup shouldn't pull you out of what you're reading. You stay in
-the show (or the page, or the VN), the meaning shows up, and the words you look up quietly
-turn into review for later. ♪(´▽｀)
+That's really the whole point: a lookup shouldn't yank you out of your anime / manga / VN /
+whatever. You stay in it, the meaning shows up, and the words you looked up quietly become
+review for later. It's just me building this — a passion project to make immersion feel less
+like homework, for me and for anyone else grinding through their first 10k unknown words. ♪(´▽｀)
 
 <img src="docs/overview.png" alt="zenbuji in action — lookup popup, dictionary, practice quiz, statistics, and top-bar menu" width="900">
 
@@ -41,14 +44,16 @@ German: Ich lerne Japanisch.
 
 ## What it does
 
+basically the toolkit I kept wishing for while immersing:
+
 - Select text, hit `Super+J`, and a small popup floats over whatever app you're in — no tabbing out to a separate dictionary.
 - Furigana comes from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and irregular readings come out right instead of a character-by-character guess that trips on 今日.
 - Shows English and German side by side. Offline by default with [Argos Translate]; add a free [DeepL] key when you want the sharper output.
-- OCR for text you can't select — subtitles burned into a video, a game UI, manga raws. Draw a box and it reads that too.
+- OCR for text you can't select — subtitles burned into a video, a game UI, manga raws (a total lifesaver for VNs). Draw a box and it reads that too.
 - Caches every DeepL lookup into a searchable word list, so repeats cost no quota and your vocab piles up on its own.
 - A spaced-repetition quiz turns those saved words into recall practice, with levels as a word moves New → Learning → Young → Mature. No separate Anki deck to keep up.
 - A statistics window for the level breakdown, day streak, accuracy, and a 14-day activity strip; each dictionary entry shows its current level too.
-- Read-aloud on every reading, using [VOICEVOX] for natural neural Japanese (it falls back to the system voice if you skip the setup).
+- Read-aloud on every reading, with [VOICEVOX] so it's an actual voice (ずんだもん by default 💚), not cursed robo-TTS — falls back to the system voice if you skip the setup.
 - The popup is a frosted-glass card that follows your accent color and light/dark theme.
 - Everything runs locally — DeepL is the only optional network call — and it stays out of the way on immutable distros (Bazzite / Silverblue): no `rpm-ostree` layering.
 
@@ -56,7 +61,7 @@ German: Ich lerne Japanisch.
 
 ## Five ways to look something up
 
-Pick whichever fits where the text is:
+However you bump into Japanese, there's a way to grab it:
 
 | Surface | How | What you get |
 |---|---|---|
@@ -357,13 +362,18 @@ German if you've got a key.
 
 ---
 
-## Motivation
+## Why I made this
 
 Okay so — I'm learning Japanese, and I got *so* tired of pausing every five seconds to copy
 some text into a separate dictionary app just to read one kanji. I wanted readings + meaning
 for *anything* on screen, instantly, without ever breaking immersion — subtitles, a web page,
 a chat message, a visual novel, whatever. So I built the thing I wished existed: furigana and
 an EN/DE gloss one keypress away, anywhere in the OS. 勉強, but make it painless ‹3
+
+But it's bigger than me being impatient, honestly. So much of learning Japanese is stuck
+behind paid apps, fiddly setups, and walled gardens — and I think that's silly. Immersion
+should be something *anyone* can just do: free, offline, on your own machine, nobody
+gatekeeping it. That's the little dream zenbuji is chipping away at. 一緒にがんばろう〜 ✊
 
 > Built for my own Bazzite (Fedora Silverblue) / GNOME Wayland setup first. Free to use and
 > remix for your own rig — **just credit me** (Meeksi39) and we're good (｀・ω・´)ゞ
