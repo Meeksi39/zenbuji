@@ -191,18 +191,19 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             banner.append(combo_lbl)
             header.append(banner)
 
-            # Status subtitle: the playful quip text, left-aligned exactly like
-            # the idle lines, with a small spinner trailing it while busy (so the
-            # text never shifts position).
+            # Status subtitle: a small spinner then the quip. The spinner keeps
+            # its slot whether or not it's spinning (start/stop, never hidden),
+            # so the idle quip and the busy "Reading…" share the same indent.
             status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            quip_lbl = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
-            quip_lbl.add_css_class("zenbuji-quip")
-            quip_lbl.set_max_width_chars(44)
             spinner = Gtk.Spinner()
             spinner.set_valign(Gtk.Align.CENTER)
             spinner.set_size_request(14, 14)
-            status_row.append(quip_lbl)
+            quip_lbl = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
+            quip_lbl.add_css_class("zenbuji-quip")
+            quip_lbl.set_valign(Gtk.Align.CENTER)
+            quip_lbl.set_max_width_chars(44)
             status_row.append(spinner)
+            status_row.append(quip_lbl)
             header.append(status_row)
             card.append(header)
             busy_box = busy_lbl = None  # status is shown via the quip line here
