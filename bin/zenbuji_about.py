@@ -31,6 +31,10 @@ LOGO_PATH = Path(__file__).resolve().parent.parent / "docs" / "logo.png"
 
 DEFAULT_URL = "https://github.com/Meeksi39/zenbuji"
 
+# The logo + mascot were drawn for zenbuji by Aimy Gwen.
+ARTIST_NAME = "Aimy Gwen"
+ARTIST_URL = "https://aimygwen.art/"
+
 ABOUT_STRINGS = {
     "title":    {"en": "About",              "ja": "情報"},
     "tagline":  {"en": "Furigana + English & German translation for Japanese, "
@@ -47,6 +51,7 @@ ABOUT_STRINGS = {
     "close":    {"en": "Close",               "ja": "閉じる"},
     "madeby":   {"en": "Made for immersion learners.",
                  "ja": "イマージョン学習者のために。"},
+    "logo_by":  {"en": "Logo &amp; Zenbu-chan by",  "ja": "ロゴ・ぜんぶちゃん:"},
 }
 
 
@@ -126,6 +131,17 @@ def show_about(*, ui_language="en", version=None, url=DEFAULT_URL) -> int:
         made.set_margin_top(8)
         made.add_css_class("zenbuji-meta")
         card.append(made)
+
+        # Logo + mascot (Zenbu-chan) credit, linking to the artist.
+        credit = Gtk.Label(xalign=0.5)
+        credit.set_halign(Gtk.Align.CENTER)
+        credit.set_margin_top(2)
+        credit.add_css_class("zenbuji-meta")
+        credit.set_markup(
+            f'{t("logo_by")} '
+            f'<a href="{ARTIST_URL}">{GLib.markup_escape_text(ARTIST_NAME)}</a>')
+        credit.connect("activate-link", lambda _l, uri: (_open_url(uri), True)[1])
+        card.append(credit)
 
         # --- footer ------------------------------------------------------- //
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
