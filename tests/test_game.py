@@ -41,15 +41,41 @@ def test_shortcuts_info_uses_live_binding(monkeypatch):
     assert info[0]["keys"] == "Super+B"             # the rebound OCR-add
 
 
-def test_capture_speech_hypes_new_words():
-    # A brand-new word is announced with the energised banner before the reading.
-    new = zenbuji._capture_speech("ひ", None, is_new=True)
-    assert new.startswith("新規ゲット！！！")
-    assert new.endswith("ひ")
-    # A re-captured (known) word is just the reading, no intro.
-    assert zenbuji._capture_speech("ひ", None, is_new=False) == "ひ"
-    # The translation, when spoken, still follows the reading.
-    assert zenbuji._capture_speech("ひ", "fire", is_new=False) == "ひ、英語で、fire"
+def test_capture_voice_is_energetic_and_distinct():
+    # The new-word fanfare uses a fixed energetic VOICEVOX speaker...
+    assert zenbuji._capture_voice(3) == zenbuji._CAPTURE_VOICE
+    # ...but a different one when that speaker is already selected.
+    assert zenbuji._capture_voice(zenbuji._CAPTURE_VOICE) == zenbuji._CAPTURE_VOICE_ALT
+    assert zenbuji._CAPTURE_VOICE != zenbuji._CAPTURE_VOICE_ALT
+    # Robust to a non-int / unset speaker.
+    assert zenbuji._capture_voice(None) == zenbuji._CAPTURE_VOICE
+
+
+def test_new_word_fanfare_spoken_before_reading(store, monkeypatch):
+    # `add --speak` announces the energised intro (in a different voice) before
+    # the reading for a brand-new word; a known re-capture skips the intro.
+    spoken = []
+    monkeypatch.setattr(zenbuji, "speak",
+                        lambda text, cfg, block=False: spoken.append((text, cfg.get("voicevox_speaker"))))
+    monkeypatch.setattr(zenbuji, "analyze", lambda t: ("ひ", []))
+    # Mock the network layer so the real translate_cached/dict_record run and the
+    # word is recorded (count == 1 => "new").
+    monkeypatch.setattr(zenbuji, "translate_deepl",
+                        lambda t, tg, k, l: {x: "fire" for x in tg})
+    cfg = {"backend": "deepl", "deepl_api_key": "k", "dictionary": True,
+           "languages": ["en"], "voicevox_speaker": 3}
+
+    class A:  # argparse-like namespace
+        ocr = ocr_image = selection = no_speak = quiet = json = False
+        speak = True
+        backend = lang = None
+        words = ["火"]
+
+    zenbuji.cmd_add(A(), cfg)
+    assert spoken[0][0] == zenbuji._CAPTURE_NEW_INTRO          # intro first
+    assert spoken[0][1] == zenbuji._capture_voice(3)          # in the punchy voice
+    assert spoken[1][0] == "ひ"                                # then the reading (no intro)
+    assert spoken[1][1] == 3                                   # normal voice
 
 
 def test_launch_game_wires_live_refresh(store, monkeypatch):

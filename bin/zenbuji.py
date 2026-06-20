@@ -1613,14 +1613,21 @@ def cmd_usage(args, cfg) -> int:
 
 
 # Spoken when a brand-new word is captured — the game-helper "新規ゲット" banner,
-# energised, announced before the reading (a short 。pause separates them).
-_CAPTURE_NEW_INTRO = "新規ゲット！！！。"
+# energised, announced (in its own punchy voice when VOICEVOX is on) before the
+# reading, which then follows in the normal voice.
+_CAPTURE_NEW_INTRO = "新規ゲット！！！"
+_CAPTURE_VOICE = 7       # ずんだもん ツンツン — punchy/energetic
+_CAPTURE_VOICE_ALT = 8   # fallback when ツンツン is already the selected voice
 
 
-def _capture_speech(reading: str, en: str | None, is_new: bool) -> str:
-    """The phrase spoken for one captured word; new words get the hyped intro."""
-    phrase = f"{reading}、英語で、{en}" if en else reading
-    return f"{_CAPTURE_NEW_INTRO}{phrase}" if is_new else phrase
+def _capture_voice(selected) -> int:
+    """An energetic VOICEVOX speaker for the fanfare, distinct from the selected
+    one (only matters when VOICEVOX is the engine; ignored by system voices)."""
+    try:
+        selected = int(selected)
+    except (TypeError, ValueError):
+        selected = -1
+    return _CAPTURE_VOICE_ALT if selected == _CAPTURE_VOICE else _CAPTURE_VOICE
 
 
 def cmd_add(args, cfg) -> int:
@@ -1714,16 +1721,26 @@ def cmd_add(args, cfg) -> int:
     if speak_on:
         speak_tr = bool(cfg.get("tts_add_translation", False))
         chunks = []
+        any_new = False
         for r in results:
             jp = r.reading or r.text
             if not jp:
                 continue
             en = r.translations.get("en") if speak_tr else None
+            chunks.append(f"{jp}、英語で、{en}" if en else jp)
             entry = dict_get(r.text)
-            is_new = bool(entry and entry.get("count") == 1)
-            chunks.append(_capture_speech(jp, en, is_new))
-        spoken = "、".join(chunks)
-        speak(spoken, cfg, block=True)  # wait, or this process exits mid-audio
+            if entry and entry.get("count") == 1:
+                any_new = True
+        # A fresh word gets an energetic fanfare in its own (different) VOICEVOX
+        # voice first; the reading then follows in the normal voice (block=True
+        # so this short-lived process doesn't exit mid-audio).
+        if any_new:
+            sel = cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER)
+            intro_cfg = {**cfg, "voicevox_speaker": _capture_voice(sel)}
+            speak(_CAPTURE_NEW_INTRO, intro_cfg, block=True)
+        body = "、".join(chunks)
+        if body:
+            speak(body, cfg, block=True)
 
     if args.json:
         print(json.dumps([r.to_dict() for r in results], ensure_ascii=False))
