@@ -11,10 +11,9 @@ whatever you're doing. No alt-tabbing into a dictionary app, no breaking immersi
 middle of an episode. Works in your browser, your editor, a chat window — and even on text
 you *can't* select, because screen OCR has your back. (｡•̀ᴗ-)✧
 
-Built around one idea: **learning should get _out of your way_.** zenbuji is the
-lowest-resistance path from "…huh?" to "ohhh!" — so you keep *reading the thing you love*
-instead of stopping to study it. Immersion stays unbroken, and the reps quietly happen on
-the side. ♪(´▽｀)
+The whole idea is that a lookup shouldn't pull you out of what you're reading. You stay in
+the show (or the page, or the VN), the meaning shows up, and the words you look up quietly
+turn into review for later. ♪(´▽｀)
 
 <img src="docs/overview.png" alt="zenbuji in action — lookup popup, dictionary, practice quiz, statistics, and top-bar menu" width="900">
 
@@ -40,24 +39,24 @@ German: Ich lerne Japanisch.
 
 ---
 
-## Why you'll love it
+## What it does
 
-- **One keypress, anywhere.** A global GNOME shortcut grabs your selection and floats a popup over whatever app you're in. No context-switching, no killing the vibe.
-- **Furigana that's actually *right*.** Readings come from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and sneaky irregular readings come out correct — not a character-by-character guess that falls apart on 今日.
-- **English *and* German, side by side.** Offline-first with [Argos Translate]; drop in a free [DeepL] key when you want the sharper translations.
-- **OCR for text you can't select.** Subs burned into a video, a game UI, a screenshot, manga raws — draw a box and zenbuji reads it anyway.
-- **Builds your own little dictionary.** Every DeepL lookup gets cached into a searchable word list, so you stop burning quota and start watching your vocab pile up.
-- **Turns lookups into reps.** A built-in spaced-repetition quiz drills the words you've already met, complete with level-ups as a word graduates New → Learning → Young → Mature. Immersion → SRS → flex, no extra Anki deck required.
-- **See your progress.** A statistics window tracks your level breakdown, day streak, accuracy, and 14-day activity — and every dictionary entry wears its current SRS level. Watch the vocab pile up *and* stick.
-- **Hear every word.** A read-aloud button on every reading, with proper [VOICEVOX] support so it's natural neural Japanese instead of robot voice (falls back to the system voice if you skip it).
-- **Genuinely pretty.** A frosted-glass popup that picks up your accent color and light/dark theme. Cute *and* functional ‹3
-- **Yours, offline, private.** Everything's local — DeepL is the only optional network call. Runs happily on immutable distros (Bazzite / Silverblue) with zero `rpm-ostree` layering.
+- Select text, hit `Super+J`, and a small popup floats over whatever app you're in — no tabbing out to a separate dictionary.
+- Furigana comes from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and irregular readings come out right instead of a character-by-character guess that trips on 今日.
+- Shows English and German side by side. Offline by default with [Argos Translate]; add a free [DeepL] key when you want the sharper output.
+- OCR for text you can't select — subtitles burned into a video, a game UI, manga raws. Draw a box and it reads that too.
+- Caches every DeepL lookup into a searchable word list, so repeats cost no quota and your vocab piles up on its own.
+- A spaced-repetition quiz turns those saved words into recall practice, with levels as a word moves New → Learning → Young → Mature. No separate Anki deck to keep up.
+- A statistics window for the level breakdown, day streak, accuracy, and a 14-day activity strip; each dictionary entry shows its current level too.
+- Read-aloud on every reading, using [VOICEVOX] for natural neural Japanese (it falls back to the system voice if you skip the setup).
+- The popup is a frosted-glass card that follows your accent color and light/dark theme.
+- Everything runs locally — DeepL is the only optional network call — and it stays out of the way on immutable distros (Bazzite / Silverblue): no `rpm-ostree` layering.
 
 ---
 
 ## Five ways to look something up
 
-zenbuji meets you wherever the text is:
+Pick whichever fits where the text is:
 
 | Surface | How | What you get |
 |---|---|---|
@@ -67,8 +66,8 @@ zenbuji meets you wherever the text is:
 | **Files menu** | Right-click a text file ▸ *Scripts ▸ zenbuji* | Looks up a whole file |
 | **CLI** | `zenbuji <text>` / pipe / `--selection` | Scriptable output (incl. `--json`) |
 
-Under the hood all the language stuff lives in one `zenbuji` Python CLI — every surface just
-calls it and renders the result, so they never drift out of sync. (One brain, many faces.)
+All the language work lives in one `zenbuji` Python CLI; every surface calls it and renders
+the result, so nothing drifts out of sync between them.
 
 <div align="center">
 <img src="docs/topbar-menu.png" alt="zenbuji top-bar menu" width="340">
@@ -117,11 +116,11 @@ no layering, no reboots, no tears.
 
 ### Screen-region OCR
 
-So much Japanese on screen just *isn't* selectable — text baked into a UI, a game, a video
-frame, an image. Press **`Super+Shift+J`** (or top-bar ▸ *Look up screen region*), **draw a
-box**, and zenbuji OCRs it and serves up furigana + EN/DE. It shows the captured image for
-reference and drops the recognized text into an **editable field** — OCR isn't psychic, so
-if it grabs a stray character just fix it and hit Enter to look it up again.
+A lot of on-screen Japanese just isn't selectable — text baked into a UI, a game, a video
+frame, an image. Press `Super+Shift+J` (or top-bar ▸ *Look up screen region*), draw a box,
+and zenbuji OCRs it and gives you furigana + EN/DE. It shows the captured image for
+reference and drops the recognized text into an editable field — OCR isn't psychic, so if it
+grabs a stray character, fix it and press Enter to look it up again.
 
 <div align="center">
 <img src="docs/ocr-popup.png" alt="OCR popup with captured image and editable recognized text" width="440">
@@ -139,21 +138,20 @@ zenbuji ocr image.png        # or OCR a file you already have
 
 ### Personal dictionary
 
-With the **DeepL** backend active, every translation gets cached to
-`~/.local/share/zenbuji/dictionary.json`. Repeat lookups come straight from the cache —
-faster, and it protects your free-tier quota — all while quietly building a personal word
-list. Each entry tracks how many times you've looked it up and the first/last time you saw
-it, so you can literally watch yourself level up.
+With the DeepL backend active, every translation is cached to
+`~/.local/share/zenbuji/dictionary.json`. Repeat lookups come straight from the cache, which
+is faster and protects your free-tier quota, and over time it adds up to a personal word
+list. Each entry tracks how often you've looked it up and when you first and last saw it.
 
-Browse it in the **Dictionary window** (the dictionary button in the popup, the top-bar menu,
-or `zenbuji dict`): search, delete an entry, clear all, re-translate, or pop a word back open
-in the lookup popup. It also shows your remaining DeepL quota when a key is set. Once a word
-enters practice, its row shows its **SRS level** badge, next-due date, and correct/wrong
-tally — and a **Statistics** button opens the full learning overview.
+Browse it in the dictionary window (the dictionary button in the popup, the top-bar menu, or
+`zenbuji dict`): search, delete an entry, clear all, re-translate, or pop a word back open in
+the lookup popup. It shows your remaining DeepL quota when a key is set. Once a word enters
+practice, its row also shows its SRS level badge, next-due date, and correct/wrong tally, and
+a Statistics button opens the full learning overview.
 
-The window **refreshes live**, so words you grab with the background OCR-add shortcut
-(`Super+Shift+K`) pop in while it's open on a second monitor — handy mid-game. You can **fix a
-translation** in place (the edit button on a row) and **exclude a word from practice** (the
+The window refreshes live, so words you grab with the background OCR-add shortcut
+(`Super+Shift+K`) pop in while it's open on a second monitor — handy mid-game. You can fix a
+translation in place (the edit button on a row), and exclude a word from practice (the
 exclude toggle) when you don't want it in the quiz.
 
 <div align="center">
@@ -162,12 +160,11 @@ exclude toggle) when you don't want it in the quiz.
 
 ### Practice (spaced repetition)
 
-Take the words you've already met and turn them into actual recall. **Practice**
-(`zenbuji learn`, the **`Super+Shift+L`** hotkey, or the top-bar menu) shows a word as
-**big chunky kanji** with no furigana; you type the **reading** (and the **translation**,
-unless it's shown as a hint), then the answer is revealed and graded — the reading exactly,
-the translation fuzzily (EN or DE) with a self-grade override (✓/✗) for when your wording
-was *basically* right.
+Take the words you've already met and turn them into actual recall. Practice
+(`zenbuji learn`, the `Super+Shift+L` hotkey, or the top-bar menu) shows a word as big plain
+kanji with no furigana; you type the reading (and the translation, unless it's shown as a
+hint), then the answer is revealed and graded — the reading exactly, the translation fuzzily
+against EN or DE, with a self-grade override (✓/✗) for when your wording was basically right.
 
 <div align="center">
 
@@ -182,71 +179,68 @@ next review drifts further out (New → Learning → Young → Mature), whiff it
 comes right back to haunt you. Each round pulls the most-due/new words (10 by default) and
 ends with a little summary.
 
-When the answer's revealed, the **Got it / Missed** default follows your *reading* — match it
-and "Got it" is pre-selected, miss it and "Missed" is. The correct reading is read aloud too
+When the answer's revealed, the Got it / Missed default follows your reading — match it and
+"Got it" is pre-selected, miss it and "Missed" is. The correct reading is read aloud too
 (right or wrong) if you've got auto-read on. And every round opens with a random casual
 greeting from ずんだもん — cute, silly, or a little bit cursed — and waves you off with a
 matching goodbye at the end. Switch it off if it's not your thing.
 
-Each card shows its **current level** while you practice, and when a correct answer bumps a
-word up a level (New → Learning → Young → Mature) you get a **"Level up!"** flourish — the
+Each card shows its current level while you practice, and when a correct answer bumps a word
+up a level (New → Learning → Young → Mature) you get a little "Level up!" flourish — the
 summary tallies how many words graduated that round.
 
 ### Statistics
 
-See how the learning is actually going. **Statistics** (`zenbuji stats`, the top-bar menu,
-the 📊 button in the dictionary, or **View stats** on a finished round) opens a frosted-glass
+See how the learning is actually going. Statistics (`zenbuji stats`, the top-bar menu, the
+Statistics button in the dictionary, or View stats on a finished round) opens a frosted-glass
 overview: how many words sit at each level, how many are due today, your overall accuracy and
-**day streak** 🔥, a 14-day activity strip, and the words you miss the most. The streak and
-activity graph build up from your daily reviews (logged to
-`~/.local/share/zenbuji/activity.json`).
+day streak, a 14-day activity strip, and the words you miss the most. The streak and activity
+graph build up from your daily reviews (logged to `~/.local/share/zenbuji/activity.json`).
 
 - `--learn-show-translation on|off` — show the meaning as a hint (test only the reading) vs. hide it (test reading **and** translation)
 - `--learn-on-login on|off` — auto-open a round once a day on login (off by default — opt in if you want the daily nudge)
 - `--learn-greeting on|off` — the random opening greeting (on by default)
 
-### Game helper
+### Game helper — 漢字キャプチャー
 
-`zenbuji game` (**`Super+Shift+G`** or the top-bar menu) opens **漢字キャプチャー** — a playful,
-JRPG-flavoured **overlay** built for playing: a dramatic gradient banner with a **combo
-counter** of words banked this session, a cheeky ずんだもん **status line**, your current **add
-shortcuts** (read live from your GNOME bindings), and the **live word list**. When you bank a
-word it **bounces in** at the top in a gold, level-up-style box, and a banner pops — a gold
-**レベルアップ！** for a word you already knew, a pink **新規ゲット！** Booster for a brand-new
-one. Park it on a second monitor; the extension keeps zenbuji off your fullscreen game's
-monitor.
+`zenbuji game` (`Super+Shift+G`, or the top-bar menu) opens 漢字キャプチャー ("Kanji Capture") —
+a little JRPG-flavoured overlay I made for grabbing words mid-game without a popup stealing
+focus. It has a gradient banner with a combo counter of the words you've banked this session,
+a cheeky ずんだもん status line, your current add shortcuts (read live from your GNOME
+bindings), and the live word list. Bank a word and it bounces in at the top in a gold,
+level-up-style box, with a banner to match — a gold レベルアップ！ for a word you already knew,
+a pink 新規ゲット！ for a brand-new one. Park it on a second monitor and the extension keeps
+zenbuji off your fullscreen game's display.
 
 <div align="center">
 <img src="docs/game-helper.png" alt="zenbuji game-helper overlay — 漢字キャプチャー with combo counter, a level-up banner, and the live word list" width="380">
 </div>
 
-Two silent, no-popup ways to bank a word while playing (both speak it, neither steals focus):
+Two silent, no-popup ways to bank a word while you play (both read it aloud, neither steals focus):
 
-- **`Super+Shift+K`** — capture a screen region and add it (OCR).
-- **`Super+K`** — add the current text selection.
+- `Super+Shift+K` — capture a screen region and add it (OCR).
+- `Super+K` — add the current text selection.
 
 ### Hear it spoken
 
-Every reading gets a **read-aloud button** — in the popup, next to each dictionary entry,
-and on the quiz answer screen — so you actually *hear* the pronunciation instead of just
-squinting at kana.
+Every reading gets a read-aloud button — in the popup, next to each dictionary entry, and on
+the quiz answer screen — so you actually hear the pronunciation instead of squinting at kana.
 
-For natural Japanese (and not the cursed robotic system voice), zenbuji has first-class
-support for **[VOICEVOX]**, a free local neural TTS engine. One step to set it up:
+For natural Japanese (instead of the cursed robotic system voice), zenbuji leans on
+[VOICEVOX], a free local neural TTS engine. One step to set it up:
 
 ```sh
 ./install.sh --voicevox   # pulls the engine (rootless podman) and runs it as a user service
 ```
 
-Then pick a voice in **Settings ▸ Speech** (default: my beloved ずんだもん / Zundamon —
-100+ voices to choose from) and smash **Test**. No VOICEVOX? zenbuji quietly falls back to
-`spd-say`/`espeak-ng`. Engine and voice are configurable:
+Then pick a voice in Settings ▸ Speech (default: my beloved ずんだもん / Zundamon — 100+ to
+choose from) and hit Test. No VOICEVOX? zenbuji quietly falls back to `spd-say`/`espeak-ng`.
+Engine and voice are configurable:
 `zenbuji config --tts-engine voicevox --voicevox-speaker 3`, list voices with
 `zenbuji voices`, or wire up any command you like with `--tts-command '… {text}'`.
 
-The extension makes sure the engine is running when you log in, and there's a **Start
-VOICEVOX** item in the top-bar menu (plus `zenbuji voicevox start`) for when you need to kick
-it manually.
+The extension makes sure the engine is running when you log in, and there's a Start VOICEVOX
+item in the top-bar menu (plus `zenbuji voicevox start`) for when you need to kick it manually.
 
 <div align="center">
 
@@ -256,21 +250,21 @@ it manually.
 
 </div>
 
-Press **`Super+Shift+S`** to read the current selection aloud with no popup at all. Flip on
-**Read aloud after a lookup** (Settings ▸ Speech, or `zenbuji config --tts-on-lookup on`) and
-`Super+J` will speak the reading automatically every single time — perfect for shadowing.
+Press `Super+Shift+S` to read the current selection aloud with no popup at all. Turn on
+"Read aloud after a lookup" (Settings ▸ Speech, or `zenbuji config --tts-on-lookup on`) and
+`Super+J` speaks the reading automatically every time — handy for shadowing.
 
 ### Frosted-glass popup
 
 The popup is a headerless, translucent floating card that follows your light/dark theme and
-**system accent color**, can be **dragged** from any empty spot, and dismisses on **Escape**
-(and optionally when it loses focus). Every reading and translation has a **copy button**.
+system accent color, can be dragged from any empty spot, and dismisses on Escape (and
+optionally when it loses focus). Every reading and translation has a copy button.
 
 GNOME/Mutter can't blur behind an app's own window, so the real blur comes from
-[Blur My Shell] — `install.sh` adds `com.meeksi39.zenbuji` to its **Applications ▸ whitelist**
-automatically (idempotent, removed on uninstall). For peak prettiness: Applications blur
-**on**, static blur **off**, hacks level **1+**. Without Blur My Shell it degrades gracefully
-to a clean translucent panel, no drama.
+[Blur My Shell] — `install.sh` adds `com.meeksi39.zenbuji` to its Applications whitelist
+automatically (idempotent, removed on uninstall). It looks best with Applications blur on,
+static blur off, hacks level 1+. Without Blur My Shell it degrades gracefully to a clean
+translucent panel.
 
 ---
 
