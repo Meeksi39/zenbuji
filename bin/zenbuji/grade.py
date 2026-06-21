@@ -17,6 +17,14 @@ def _norm_reading(s: str) -> str:
     return s
 
 
+def reading_matches(typed: str, correct: str) -> bool:
+    """True if a typed reading matches the canonical one (kana-normalised).
+
+    Same comparison the quiz verdict uses, so the practice drill and the grade
+    agree exactly on what counts as the right reading."""
+    return _norm_reading(typed) == _norm_reading(correct)
+
+
 def _norm_text(s: str) -> str:
     s = (s or "").strip().casefold()
     s = _PUNCT_RE.sub("", s)

@@ -141,3 +141,60 @@ def speak(text: str, cfg: dict, block: bool = False) -> None:
         run()
     else:
         threading.Thread(target=run, daemon=True).start()
+
+
+def phrase_speaker(text: str, cfg: dict):
+    """Build a ``play()`` that reads one fixed phrase aloud, over and over, cheap.
+
+    The practice drill reads the same reading several times in a row. Calling
+    ``speak`` each time would re-run VOICEVOX neural synthesis (heavy on the CPU)
+    and let playbacks stack into a thread/audio pile-up. This renders the phrase
+    **once**, caches the WAV, and just replays it after that; a call that arrives
+    while audio is still playing is dropped, so nothing overlaps. The system
+    voice / custom-command paths (cheap already) just defer to ``speak``.
+
+    Returns a ``play(block=False)`` callable; ``block=True`` runs inline (tests).
+    """
+    text = (text or "").strip()
+    state = {"wav": None, "rendered": False, "busy": False}
+    lock = threading.Lock()
+
+    def run():
+        try:
+            command = cfg.get("tts_command")
+            engine = cfg.get("tts_engine", "auto")
+            if not command and engine in ("voicevox", "auto"):
+                if not state["rendered"]:
+                    state["rendered"] = True
+                    try:
+                        speed = float(cfg.get("tts_speed", 1.0) or 1.0)
+                        state["wav"] = voicevox_synthesize(
+                            text, cfg.get("voicevox_host", VOICEVOX_DEFAULT_HOST),
+                            cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER),
+                            speed)
+                    except Exception:  # noqa: BLE001 — engine unreachable
+                        state["wav"] = None
+                if state["wav"] is not None:
+                    _play_wav(state["wav"])
+                    return
+                if engine == "voicevox":
+                    return  # explicit choice — don't surprise with a robot
+            # System voice / custom command, or a failed "auto" render: cheap,
+            # and block so the busy flag spans the whole playback.
+            speak(text, cfg, block=True)
+        finally:
+            state["busy"] = False
+
+    def play(block: bool = False):
+        if not text or cfg.get("tts_engine", "auto") == "off":
+            return
+        with lock:
+            if state["busy"]:
+                return  # one at a time — drop overlapping requests
+            state["busy"] = True
+        if block:
+            run()
+        else:
+            threading.Thread(target=run, daemon=True).start()
+
+    return play

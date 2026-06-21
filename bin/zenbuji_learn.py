@@ -56,6 +56,11 @@ LEARN_STRINGS = {
     "view_stats":   {"en": "View stats",      "ja": "統計を見る"},
     "level_up":     {"en": "Level up!",       "ja": "レベルアップ！"},
     "leveled_up":   {"en": "{n} leveled up!", "ja": "{n} 個レベルアップ！"},
+    "drill_prompt":     {"en": "Type the reading to lock it in",
+                         "ja": "読みを入力して覚えよう"},
+    "drill_progress":   {"en": "{n} / {total}", "ja": "{n} / {total}"},
+    "drill_placeholder": {"en": "Type the reading…", "ja": "読みを入力…"},
+    "drill_override":   {"en": "I was right", "ja": "実は正解"},
     "empty":        {"en": "No words to practise yet — look up some Japanese first.",
                      "ja": "練習する単語がありません。まず日本語を調べてください。"},
 }
@@ -301,10 +306,16 @@ def _ime_switcher():
 
 def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                   ui_language="en", grade_fn, review_fn, speak_fn=None,
-                  auto_speak=False, greeting=True) -> int:
+                  auto_speak=False, greeting=True, drill_repeats=5,
+                  match_reading_fn=None, speak_phrase_fn=None) -> int:
     def t(key):
         e = LEARN_STRINGS.get(key, {})
         return e.get(ui_language) or e.get("en") or key
+
+    # How the drill decides a retype is correct — injected so it stays in sync
+    # with the quiz's grading; a plain trimmed compare if nothing is passed.
+    match_reading = match_reading_fn or (
+        lambda a, b: (a or "").strip() == (b or "").strip())
 
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
     status_names = STATUS_NAMES.get(ui_language, STATUS_NAMES["en"])
@@ -523,10 +534,34 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             # The reading (furigana) decides the default: "Got it" only when it
             # actually matched, otherwise "Missed" is the primary/default button.
             reading_ok = bool(res["reading_ok"])
+            correct_reading = res["correct_reading"]
             clear_phase()
 
-            col = _answer_col(width=320, spacing=10)
-            phase.append(col)
+            # A missed reading with the drill on splits into two columns — the
+            # review on the left, the retype drill on the right — so the card
+            # stays wide-and-short instead of one very tall stack. Otherwise it's
+            # a single centered column.
+            do_drill = (not reading_ok and drill_repeats > 0
+                        and bool(correct_reading))
+            if do_drill:
+                cols = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
+                cols.set_halign(Gtk.Align.CENTER)
+                cols.set_margin_top(4)
+                phase.append(cols)
+                col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+                col.set_size_request(250, -1)
+                col.set_valign(Gtk.Align.CENTER)
+                vrule = Gtk.Box()
+                vrule.add_css_class("zenbuji-vrule")
+                drill_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+                drill_col.set_size_request(250, -1)
+                drill_col.set_valign(Gtk.Align.CENTER)
+                cols.append(col)
+                cols.append(vrule)
+                cols.append(drill_col)
+            else:
+                col = _answer_col(width=320, spacing=10)
+                phase.append(col)
 
             def you_row(answer):
                 row = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
@@ -546,7 +581,6 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             col.append(verdict)
 
             # 2. The correct reading, large and in accent, with the speak button.
-            correct_reading = res["correct_reading"]
             if correct_reading:
                 reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                       spacing=6, halign=Gtk.Align.CENTER)
@@ -588,7 +622,15 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             if res["translation_ok"] is not None:
                 col.append(you_row(translation_in))
 
-            # 5. Self-grade buttons, centered.
+            # 5a. Missed reading + drill on → retype the correct reading a few
+            # times to burn it in, reading it aloud each time. Still recorded as
+            # a miss; the "I was right" escape covers an over-strict grade. The
+            # drill lives in its own right-hand column (built above).
+            if do_drill:
+                build_drill(drill_col, cur, correct_reading)
+                return
+
+            # 5b. Self-grade buttons, centered.
             btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                            homogeneous=True)
             btns.set_margin_top(8)
@@ -606,6 +648,82 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             default_btn.grab_focus()
             try:
                 win.set_default_widget(default_btn)
+            except Exception:  # noqa: BLE001 — focus alone is enough
+                pass
+
+        def build_drill(col, cur, target):
+            """The copy-the-correction drill: retype `target` (the correct
+            reading) `drill_repeats` times, each correct retype spoken aloud."""
+            progress = {"n": 0}
+            # One cached speaker for this reading: synthesise once, replay on
+            # every retype (no per-retype synthesis storm / overlapping audio).
+            player = speak_phrase_fn(target) if speak_phrase_fn else None
+
+            prompt = Gtk.Label(label=t("drill_prompt"), wrap=True,
+                               justify=Gtk.Justification.CENTER,
+                               halign=Gtk.Align.CENTER)
+            prompt.add_css_class("zenbuji-hint")
+            prompt.set_max_width_chars(40)
+            prompt.set_margin_top(6)
+            col.append(prompt)
+
+            counter = Gtk.Label(halign=Gtk.Align.CENTER)
+            counter.add_css_class("zenbuji-score")
+            counter.set_text(t("drill_progress").format(n=0, total=drill_repeats))
+            col.append(counter)
+
+            # Same fused entry+arrow pill as the question phase, kana IME on focus.
+            entry = Gtk.Entry(placeholder_text=t("drill_placeholder"), hexpand=True)
+            entry.add_css_class("zenbuji-quiz-input")
+            entry.add_css_class("zenbuji-combo")
+            entry.set_alignment(0.5)
+            fctl = Gtk.EventControllerFocus()
+            fctl.connect("enter", lambda *_a: to_kana())
+            entry.add_controller(fctl)
+
+            go = Gtk.Button(icon_name="go-next-symbolic")
+            go.add_css_class("zenbuji-action")
+            go.add_css_class("zenbuji-quiz-go")
+            go.set_valign(Gtk.Align.FILL)
+
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            row.append(entry)
+            row.append(go)
+            col.append(row)
+
+            # Escape hatch for an over-strict grade — count it correct, skip on.
+            override = Gtk.Button(label=t("drill_override"))
+            override.add_css_class("zenbuji-secondary")
+            override.set_margin_top(6)
+            override.connect("clicked", lambda _b: finalize(cur, True))
+            col.append(override)
+
+            def attempt(*_a):
+                if match_reading(entry.get_text(), target):
+                    # Stays red (from a previous miss) until they get one right.
+                    counter.remove_css_class("zenbuji-wrong")
+                    if player is not None:
+                        player()
+                    elif speak_fn is not None:
+                        speak_fn(target)
+                    progress["n"] += 1
+                    counter.set_text(t("drill_progress").format(
+                        n=progress["n"], total=drill_repeats))
+                    entry.set_text("")
+                    if progress["n"] >= drill_repeats:
+                        finalize(cur, False)
+                        return
+                    entry.grab_focus()
+                else:
+                    # No increment; flash the counter and keep their text + focus.
+                    counter.add_css_class("zenbuji-wrong")
+                    entry.grab_focus()
+
+            entry.connect("activate", attempt)
+            go.connect("clicked", attempt)
+            entry.grab_focus()
+            try:
+                win.set_default_widget(go)
             except Exception:  # noqa: BLE001 — focus alone is enough
                 pass
 
