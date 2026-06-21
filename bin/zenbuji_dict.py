@@ -389,6 +389,11 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 btns.append(cancel_b)
                 btns.append(create_b)
                 add_form.append(btns)
+                # Set the form off from the stats/search/list below it.
+                rule = Gtk.Box()
+                rule.add_css_class("zenbuji-hairline")
+                rule.set_margin_top(6)
+                add_form.append(rule)
                 add_form.set_visible(True)
                 word.grab_focus()
 
