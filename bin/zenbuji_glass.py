@@ -294,6 +294,10 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-verdict-no { background-color: #c0182a; }
 /* The revealed correct reading - the learning payload, large and in accent. */
 .zenbuji-reveal-reading { font-size: 27px; font-weight: 700; color: @accent_color; }
+/* Graded reveal (whole word missed): base is the default text colour, which the
+   markup dims (alpha) for the missed kana while the right ones are spanned in
+   accent. Defined before -blur so blur still wins when both are set. */
+.zenbuji-reveal-reading.zenbuji-graded { color: inherit; }
 /* Obscured (drill recall): keeps the same glyph box so the row holds its size
    and the layout never jumps, but the text is an unreadable blur. */
 .zenbuji-reveal-reading.zenbuji-blur {
