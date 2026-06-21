@@ -353,6 +353,21 @@ def log_activity(correct: bool) -> None:
     save_activity(data)
 
 
+def add_study_time(ms: int) -> None:
+    """Add `ms` of practice time to today's tally (cumulative learning time).
+
+    The activity log keeps every day, so the lifetime total is just the sum of
+    each day's `time_ms`."""
+    if ms <= 0:
+        return
+    data = load_activity()
+    today = datetime.now().date().isoformat()
+    day = data.get(today) or {"reviews": 0, "correct": 0}
+    day["time_ms"] = int(day.get("time_ms", 0)) + int(ms)
+    data[today] = day
+    save_activity(data)
+
+
 def activity_streak(data: dict | None = None) -> int:
     """Consecutive days with at least one review, counting back from today.
 

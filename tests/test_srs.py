@@ -106,3 +106,19 @@ def test_srs_rename_carries_the_card(store):
 def test_srs_rename_noop_when_no_card(store):
     zenbuji.srs_rename("ghost", "x")                 # no card -> nothing created
     assert zenbuji.srs_get("x") is None
+
+
+def test_srs_review_accumulates_recall_time(store):
+    zenbuji.srs_review("X", True, 2000)
+    zenbuji.srs_review("X", True, 4000)
+    s = zenbuji.srs_get("X")
+    assert s["time_n"] == 2 and s["time_ms"] == 6000
+    assert zenbuji.srs_summary("X")["avg_ms"] == 3000
+
+
+def test_srs_review_time_optional_and_clamped(store):
+    zenbuji.srs_review("X", True)                    # no elapsed -> not timed
+    assert zenbuji.srs_get("X")["time_n"] == 0
+    assert zenbuji.srs_summary("X")["avg_ms"] is None
+    zenbuji.srs_review("X", True, 999999)            # afk -> clamped to 60s
+    assert zenbuji.srs_get("X")["time_ms"] == 60000

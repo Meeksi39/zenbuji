@@ -100,7 +100,13 @@ def srs_rename(old: str, new: str) -> None:
 
 def _new_srs() -> dict:
     return {"ease": SRS_DEFAULT_EASE, "interval": 0, "reps": 0, "lapses": 0,
-            "due": None, "last_reviewed": None, "correct": 0, "wrong": 0}
+            "due": None, "last_reviewed": None, "correct": 0, "wrong": 0,
+            "time_ms": 0, "time_n": 0}
+
+
+# Clamp a single answer's recorded recall time, so an afk pause can't wreck a
+# word's average.
+_ANSWER_CAP_MS = 60000
 
 
 def srs_status(state: dict | None) -> str:
@@ -115,8 +121,12 @@ def srs_status(state: dict | None) -> str:
     return "mature"
 
 
-def srs_review(text: str, correct: bool) -> dict:
-    """Apply one SM-2-lite review and persist. Returns the updated state."""
+def srs_review(text: str, correct: bool, elapsed_ms: int | None = None) -> dict:
+    """Apply one SM-2-lite review and persist. Returns the updated state.
+
+    `elapsed_ms` (when given) is the recall time for this answer — accumulated
+    (clamped) into the card's running total so we can show a per-word average.
+    """
     text = text.strip()
     data = load_srs()
     s = data.get(text) or _new_srs()
@@ -144,6 +154,10 @@ def srs_review(text: str, correct: bool) -> dict:
     s["reps"] = reps
     s["last_reviewed"] = now.isoformat(timespec="seconds")
     s["due"] = (now + timedelta(days=interval)).isoformat(timespec="seconds")
+    if elapsed_ms is not None:
+        s["time_ms"] = int(s.get("time_ms", 0)) + min(max(0, int(elapsed_ms)),
+                                                       _ANSWER_CAP_MS)
+        s["time_n"] = int(s.get("time_n", 0)) + 1
     data[text] = s
     save_srs(data)
     store.log_activity(correct)
@@ -187,11 +201,13 @@ def srs_summary(text: str, srs: dict | None = None) -> dict | None:
     st = (srs if srs is not None else load_srs()).get(text.strip())
     if not st:
         return None
+    n = int(st.get("time_n", 0))
     return {
         "level": srs_status(st),
         "due": st.get("due"),
         "correct": int(st.get("correct", 0)),
         "wrong": int(st.get("wrong", 0)),
+        "avg_ms": round(int(st.get("time_ms", 0)) / n) if n else None,
     }
 
 
@@ -237,7 +253,9 @@ def srs_stats() -> dict:
                 due_now += 1
 
     reviews_total = correct_total = wrong_total = lapses_total = 0
+    answer_ms_total = answer_n_total = 0
     hardest = []
+    slowest = []
     for text, st in srs.items():
         if text not in d or text in excluded:
             continue                 # ignore cards whose word is gone (orphans)
@@ -246,12 +264,20 @@ def srs_stats() -> dict:
         wrong_total += w
         reviews_total += c + w
         lapses_total += int(st.get("lapses", 0))
+        e = d.get(text, {})
         if w or int(st.get("lapses", 0)):
-            e = d.get(text, {})
             hardest.append({"text": text, "reading": e.get("reading", ""),
                             "lapses": int(st.get("lapses", 0)),
                             "wrong": w, "correct": c})
+        tn = int(st.get("time_n", 0))
+        if tn:
+            tm = int(st.get("time_ms", 0))
+            answer_ms_total += tm
+            answer_n_total += tn
+            slowest.append({"text": text, "reading": e.get("reading", ""),
+                            "avg_ms": round(tm / tn)})
     hardest.sort(key=lambda h: (h["lapses"], h["wrong"]), reverse=True)
+    slowest.sort(key=lambda s: s["avg_ms"], reverse=True)
 
     activity = store.load_activity()
     today_day = activity.get(today.isoformat(), {})
@@ -268,6 +294,12 @@ def srs_stats() -> dict:
         "accuracy": accuracy,
         "lapses_total": lapses_total,
         "hardest": hardest[:5],
+        "slowest": slowest[:5],
+        "avg_answer_ms": round(answer_ms_total / answer_n_total)
+                         if answer_n_total else None,
+        "total_study_ms": sum(int(day.get("time_ms", 0))
+                              for day in activity.values()),
+        "today_study_ms": int(today_day.get("time_ms", 0)),
         "streak": store.activity_streak(activity),
         "today_reviews": int(today_day.get("reviews", 0)),
         "today_correct": int(today_day.get("correct", 0)),

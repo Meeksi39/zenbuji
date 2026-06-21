@@ -90,6 +90,28 @@ def test_orphaned_srs_card_ignored_in_stats(store):
     assert all(h["text"] != "雪" for h in s["hardest"])
 
 
+def test_answer_time_average_slowest_and_total(store):
+    today = dt.datetime.now().date().isoformat()
+    dict_data = {
+        "fast": {"text": "fast", "reading": "は", "translations": {"en": "f"}},
+        "slow": {"text": "slow", "reading": "の", "translations": {"en": "s"}},
+    }
+    srs_data = {
+        "fast": {"last_reviewed": "2026-01-01T00:00:00", "correct": 2, "wrong": 0,
+                 "time_ms": 4000, "time_n": 2},      # avg 2000
+        "slow": {"last_reviewed": "2026-01-01T00:00:00", "correct": 1, "wrong": 0,
+                 "time_ms": 8000, "time_n": 1},      # avg 8000
+    }
+    activity_data = {today: {"reviews": 3, "correct": 3, "time_ms": 30000},
+                     "2026-01-01": {"reviews": 0, "correct": 0, "time_ms": 5000}}
+    _seed(store, dict_data, srs_data, activity_data)
+    s = zenbuji.srs_stats()
+    assert s["avg_answer_ms"] == 4000               # (4000+8000)/(2+1)
+    assert s["slowest"][0]["text"] == "slow"        # highest per-card avg first
+    assert s["total_study_ms"] == 35000             # 30000 + 5000
+    assert s["today_study_ms"] == 30000
+
+
 def test_streak_and_today_from_activity(store):
     today = dt.datetime.now().date()
     activity = {(today - dt.timedelta(days=i)).isoformat(): {"reviews": 3, "correct": 2}

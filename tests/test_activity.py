@@ -53,3 +53,15 @@ def test_recent_length_order_and_zero_fill(store):
     assert rec[-1]["date"] == _today().isoformat()        # newest last
     assert rec[0]["date"] == (_today() - dt.timedelta(days=13)).isoformat()
     assert all(r["reviews"] == 0 for r in rec)            # empty store -> all zero
+
+
+def test_add_study_time_accumulates_today(store):
+    zenbuji.store.add_study_time(1500)
+    zenbuji.store.add_study_time(1500)
+    today = zenbuji.store.load_activity()[_today().isoformat()]
+    assert today["time_ms"] == 3000
+
+
+def test_add_study_time_zero_is_noop(store):
+    zenbuji.store.add_study_time(0)
+    assert zenbuji.store.load_activity() == {}
