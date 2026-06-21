@@ -5,14 +5,40 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import unicodedata
 
 from . import lang, store, translation
 from .lang import Result
 from .util import LANG_NAMES
 
 
-def process(text: str, languages: list[str], cfg: dict, do_translate: bool = True) -> Result:
+def clean_capture(text: str) -> str:
+    """Trim capture noise from the edges of selected/OCR'd/typed text.
+
+    Removes leading and trailing whitespace plus any Unicode punctuation (P*) or
+    symbol (S*) characters, so quotes/brackets/dashes/dots/the degree sign/etc.
+    picked up around a word don't reach DeepL or become a separate cache key
+    (「水」。 and 水 should be one entry). Category-based, so it covers
+    -?,.^° 。、！？「」（）・… and anything else without a hand-kept list.
+    Punctuation *inside* a phrase is kept (水、お茶 stays whole), and the
+    long-vowel mark ー and repetition mark 々 survive — they're letters (Lm),
+    not punctuation. Letters and digits are never stripped.
+    """
     text = text.strip()
+
+    def strippable(ch: str) -> bool:
+        return ch.isspace() or unicodedata.category(ch)[0] in ("P", "S")
+
+    start, end = 0, len(text)
+    while start < end and strippable(text[start]):
+        start += 1
+    while end > start and strippable(text[end - 1]):
+        end -= 1
+    return text[start:end]
+
+
+def process(text: str, languages: list[str], cfg: dict, do_translate: bool = True) -> Result:
+    text = clean_capture(text)
     reading, tokens = lang.analyze(text)
     translations: dict = {}
     notes: list[str] = []
