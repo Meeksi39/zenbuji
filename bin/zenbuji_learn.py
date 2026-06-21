@@ -581,6 +581,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             col.append(verdict)
 
             # 2. The correct reading, large and in accent, with the speak button.
+            reading_row = None
             if correct_reading:
                 reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                       spacing=6, halign=Gtk.Align.CENTER)
@@ -627,7 +628,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             # a miss; the "I was right" escape covers an over-strict grade. The
             # drill lives in its own right-hand column (built above).
             if do_drill:
-                build_drill(drill_col, cur, correct_reading)
+                build_drill(drill_col, cur, correct_reading, reading_row)
                 return
 
             # 5b. Self-grade buttons, centered.
@@ -651,9 +652,13 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             except Exception:  # noqa: BLE001 — focus alone is enough
                 pass
 
-        def build_drill(col, cur, target):
+        def build_drill(col, cur, target, reveal_reading=None):
             """The copy-the-correction drill: retype `target` (the correct
-            reading) `drill_repeats` times, each correct retype spoken aloud."""
+            reading) `drill_repeats` times, each correct retype spoken aloud.
+
+            `reveal_reading` is the furigana shown in the review column: visible
+            for the first rep (copy it), hidden after each correct retype (recall
+            it), shown again whenever a retype is wrong."""
             progress = {"n": 0}
             # One cached speaker for this reading: synthesise once, replay on
             # every retype (no per-retype synthesis storm / overlapping audio).
@@ -702,6 +707,10 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 if match_reading(entry.get_text(), target):
                     # Stays red (from a previous miss) until they get one right.
                     counter.remove_css_class("zenbuji-wrong")
+                    # Hide the furigana now they've reproduced it — the remaining
+                    # reps are from memory (shown again only on a wrong try).
+                    if reveal_reading is not None:
+                        reveal_reading.set_visible(False)
                     if player is not None:
                         player()
                     elif speak_fn is not None:
@@ -715,8 +724,11 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                         return
                     entry.grab_focus()
                 else:
-                    # No increment; flash the counter and keep their text + focus.
+                    # No increment; flash the counter, show the reading again to
+                    # remind them, and keep their text + focus.
                     counter.add_css_class("zenbuji-wrong")
+                    if reveal_reading is not None:
+                        reveal_reading.set_visible(True)
                     entry.grab_focus()
 
             entry.connect("activate", attempt)
