@@ -23,10 +23,12 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
-    from zenbuji_glass import accent_hex, accent_rgba, make_glass_window
+    from zenbuji_glass import (accent_hex, accent_rgba, fmt_duration, fmt_ms,
+                               make_glass_window)
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import accent_hex, accent_rgba, make_glass_window
+    from zenbuji_glass import (accent_hex, accent_rgba, fmt_duration, fmt_ms,
+                               make_glass_window)
 
 # Learning levels, lowest→highest. Kept in sync with srs_status() in zenbuji/srs.py.
 LEVEL_ORDER = ("new", "learning", "young", "mature")
@@ -53,6 +55,10 @@ STATS_STRINGS = {
     "levels":     {"en": "Levels",            "ja": "レベル"},
     "activity":   {"en": "Last 14 days",      "ja": "直近14日"},
     "hardest":    {"en": "Needs review",      "ja": "苦手な単語"},
+    "slowest":    {"en": "Slowest",           "ja": "時間がかかる"},
+    "avg_time":   {"en": "Avg answer",        "ja": "平均回答"},
+    "total_time": {"en": "Total time",        "ja": "総学習時間"},
+    "per_day":    {"en": "Per day",           "ja": "1日平均"},
     "practice":   {"en": "Practice now",      "ja": "練習する"},
     "close":      {"en": "Close",             "ja": "閉じる"},
     "empty":      {"en": "No words to learn yet — look up some Japanese first.",
@@ -107,7 +113,7 @@ def show_statistics(*, ui_language="en", languages=("en", "de"), stats_fn) -> in
 
     def on_activate(application):
         win, card = make_glass_window(
-            application, title="zenbuji 統計", default_size=(480, -1),
+            application, title="zenbuji 統計", default_size=(600, -1),
             resizable=False, draggable=True, close_on_focus_loss=False)
 
         title = Gtk.Label(label=t("title"), xalign=0)
@@ -127,28 +133,45 @@ def show_statistics(*, ui_language="en", languages=("en", "de"), stats_fn) -> in
 
         card.append(_hero_row(stats, t))
 
-        # --- levels ------------------------------------------------------- //
-        card.append(_section_header(t("levels"),
+        # --- learning time ------------------------------------------------ //
+        if stats.get("total_study_ms") or stats.get("avg_answer_ms"):
+            card.append(_time_row(stats, t))
+
+        # Two columns below the stat panels so the window stays compact: the
+        # charts (levels + activity) on the left, the word lists on the right.
+        columns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20,
+                          homogeneous=True)
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        left.set_valign(Gtk.Align.START)
+        right.set_valign(Gtk.Align.START)
+        columns.append(left)
+        columns.append(right)
+        card.append(columns)
+
+        # --- left: levels + activity -------------------------------------- //
+        left.append(_section_header(t("levels"),
                                     f"{stats['total']} {t('words')}"))
         bar = _maturity_bar(stats)
         redraws.append(bar)
-        card.append(bar)
-        card.append(_legend(stats, status_names))
-
-        # --- activity ----------------------------------------------------- //
+        left.append(bar)
+        left.append(_legend(stats, status_names))
         recent = stats.get("recent", [])
         if any(d["reviews"] for d in recent):
             total_14 = sum(d["reviews"] for d in recent)
-            card.append(_section_header(t("activity"),
+            left.append(_section_header(t("activity"),
                                         t("reviews_n", n=total_14)))
             chart = _activity_chart(recent)
             redraws.append(chart)
-            card.append(chart)
+            left.append(chart)
 
-        # --- needs review ------------------------------------------------- //
+        # --- right: needs review + slowest -------------------------------- //
         if stats.get("hardest"):
-            card.append(_section_header(t("hardest")))
-            card.append(_hardest_list(stats))
+            right.append(_section_header(t("hardest")))
+            right.append(_hardest_list(stats))
+        if stats.get("slowest"):
+            right.append(_section_header(t("slowest")))
+            right.append(_slowest_list(stats))
 
         # --- footer ------------------------------------------------------- //
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
@@ -223,6 +246,22 @@ def _hero_row(stats, t):
     row.append(_stat(str(stats.get("streak", 0)), t("streak")))
     row.append(_vrule())
     row.append(_stat(acc_str, t("accuracy")))
+    return row
+
+
+def _time_row(stats, t):
+    """Cumulative total study time + average answer speed."""
+    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+    row.add_css_class("zenbuji-panel")
+    row.set_margin_top(8)
+    row.append(_stat(fmt_duration(stats.get("total_study_ms", 0)),
+                     t("total_time"), accent=True))
+    row.append(_vrule())
+    per_day = stats.get("avg_day_ms")
+    row.append(_stat(fmt_duration(per_day) if per_day else "—", t("per_day")))
+    row.append(_vrule())
+    avg = stats.get("avg_answer_ms")
+    row.append(_stat(fmt_ms(avg) if avg else "—", t("avg_time")))
     return row
 
 
@@ -331,5 +370,34 @@ def _hardest_list(stats):
         miss.add_css_class("zenbuji-meta")
         miss.set_valign(Gtk.Align.CENTER)
         line.append(miss)
+        box.append(line)
+    return box
+
+
+def _slowest_list(stats):
+    """Same row style as the hardest list, but trailing the avg answer time."""
+    accent = accent_hex(Adw.StyleManager.get_default().get_dark())
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    box.set_margin_top(4)
+    for h in stats.get("slowest", [])[:3]:
+        line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        text, reading = h.get("text", ""), h.get("reading", "")
+        jp = Gtk.Label(xalign=0, wrap=True, halign=Gtk.Align.START)
+        jp.add_css_class("zenbuji-dict-jp")
+        jp.set_hexpand(True)
+        jp.set_max_width_chars(28)
+        if reading and reading != text:
+            colour = f' foreground="{accent}"' if accent else ""
+            jp.set_markup(
+                f'{GLib.markup_escape_text(text)}  '
+                f'<span{colour} size="78%" weight="normal">'
+                f'{GLib.markup_escape_text(reading)}</span>')
+        else:
+            jp.set_text(text)
+        line.append(jp)
+        tm = Gtk.Label(label=fmt_ms(h.get("avg_ms", 0)), xalign=1)
+        tm.add_css_class("zenbuji-meta")
+        tm.set_valign(Gtk.Align.CENTER)
+        line.append(tm)
         box.append(line)
     return box

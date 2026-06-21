@@ -449,6 +449,24 @@ def _install_focus_loss_close(win: Gtk.Window) -> None:
     win.add_controller(watcher)
 
 
+def fmt_ms(ms) -> str:
+    """A single answer time: '850ms' under a second, else seconds to 1 dp."""
+    ms = int(ms or 0)
+    return f"{ms}ms" if ms < 1000 else f"{ms / 1000:.1f}s"
+
+
+def fmt_duration(ms) -> str:
+    """A cumulative duration: '45s' / '37m' / '2h 14m'."""
+    s = int(ms or 0) // 1000
+    if s < 60:
+        return f"{s}s"
+    m, _sec = divmod(s, 60)
+    if m < 60:
+        return f"{m}m"
+    h, m = divmod(m, 60)
+    return f"{h}h {m}m" if m else f"{h}h"
+
+
 def make_glass_window(application, *, title, default_size=(460, -1),
                       resizable=False, draggable=True,
                       close_on_focus_loss=False):
