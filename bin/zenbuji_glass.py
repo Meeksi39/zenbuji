@@ -51,6 +51,7 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 }
 
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
+.zenbuji-add-form { padding: 6px 2px 10px 2px; }
 
 /* --- buttons: Apple-style glass --- */
 /* Soft, padded pills so the controls feel friendly across every window. */
