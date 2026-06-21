@@ -67,6 +67,20 @@ def srs_get(text: str) -> dict | None:
     return load_srs().get(text.strip())
 
 
+def srs_rename(old: str, new: str) -> None:
+    """Carry a card's schedule over when its dictionary key is renamed, so the
+    learning progress isn't lost. No-op if there's no card for `old`."""
+    old, new = old.strip(), new.strip()
+    if not old or not new or old == new:
+        return
+    data = load_srs()
+    st = data.pop(old, None)
+    if st is None:
+        return
+    data.setdefault(new, st)        # keep an existing card under `new`, if any
+    save_srs(data)
+
+
 def _new_srs() -> dict:
     return {"ease": SRS_DEFAULT_EASE, "interval": 0, "reps": 0, "lapses": 0,
             "due": None, "last_reviewed": None, "correct": 0, "wrong": 0}

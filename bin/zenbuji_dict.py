@@ -151,9 +151,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     game_mode=False, shortcuts=None, busy_path=None) -> int:
     """Show the dictionary window. The *_fn callables provide the data layer.
 
-    `save_fn(text, reading, {lang: value})` creates or edits an entry by hand
-    (no lookup) — it backs both the "Add word" form and the inline editor (which
-    can also fix the reading); `analyze_fn(text)->reading` optionally fills the
+    `save_fn(text, reading, {lang: value}, original=None)` creates or edits an
+    entry by hand (no lookup) — it backs both the "Add word" form and the inline
+    editor (which can also fix the reading and rename the surface word; pass the
+    old key as `original`). `analyze_fn(text)->reading` optionally fills the
     reading offline. `update_fn(text, {lang: value})` is the older
     translations-only edit, used when no `save_fn` is given (e.g. game mode).
     `set_exclude_fn(text, bool)` toggles a word out of the practice quiz, and
@@ -615,19 +616,27 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 outer.set_margin_bottom(8)
                 outer.set_margin_start(6)
                 outer.set_margin_end(6)
-                # Surface is the dictionary key — shown read-only. With save_fn
-                # the reading is editable and every configured language gets a
-                # field (so you can add a missing meaning); the older update_fn
-                # path stays translations-only.
-                head = Gtk.Label(label=text, xalign=0, wrap=True)
-                head.add_css_class("zenbuji-dict-jp")
-                head.set_max_width_chars(40)
-                outer.append(head)
+                # With save_fn the whole entry is editable — including the
+                # surface word itself (a rename) and the reading — and every
+                # configured language gets a field. The older update_fn path
+                # keeps the surface read-only and edits translations only.
+                surface_entry = None
+                if save_fn is not None:
+                    surface_entry = Gtk.Entry(text=text, hexpand=True)
+                    surface_entry.set_placeholder_text(t("word"))
+                    outer.append(surface_entry)
+                else:
+                    head = Gtk.Label(label=text, xalign=0, wrap=True)
+                    head.add_css_class("zenbuji-dict-jp")
+                    head.set_max_width_chars(40)
+                    outer.append(head)
 
                 reading_entry = None
                 if save_fn is not None:
                     reading_row, reading_entry = make_reading_field(
-                        lambda: text, value=reading)
+                        lambda: (surface_entry.get_text() if surface_entry
+                                 else text),
+                        value=reading)
                     outer.append(reading_row)
 
                 fields = {}
@@ -639,9 +648,12 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     outer.append(e)
 
                 def on_save(*_a):
-                    do_save(text, {l: w.get_text() for l, w in fields.items()},
+                    new_text = (surface_entry.get_text() if surface_entry
+                                is not None else text)
+                    do_save(new_text, {l: w.get_text() for l, w in fields.items()},
                             reading=(reading_entry.get_text()
-                                     if reading_entry is not None else None))
+                                     if reading_entry is not None else None),
+                            original=text)
 
                 btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                                homogeneous=True)
@@ -654,6 +666,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 inputs = list(fields.values())
                 if reading_entry is not None:
                     inputs = [reading_entry] + inputs
+                if surface_entry is not None:
+                    inputs = [surface_entry] + inputs
                 for w in inputs:
                     w.connect("activate", on_save)
                 btns.append(cancel_b)
@@ -734,11 +748,11 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             delete_fn(text)
             rebuild()
 
-        def do_save(text, translations, reading=None):
+        def do_save(text, translations, reading=None, original=None):
             state["editing"] = False
             try:
                 if save_fn is not None:
-                    save_fn(text, reading or "", translations)
+                    save_fn(text, reading or "", translations, original=original)
                 elif update_fn is not None:
                     update_fn(text, translations)
             except Exception:  # noqa: BLE001

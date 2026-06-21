@@ -186,3 +186,32 @@ def test_set_exclude_toggles_flag(store):
     assert zenbuji.dict_get("水")["exclude"] is True
     zenbuji.dict_set_exclude("水", False)
     assert "exclude" not in zenbuji.dict_get("水")
+
+
+# --- dict_rename: change the surface word, keep the entry's history --------- #
+def test_dict_rename_moves_key_and_keeps_history(store):
+    zenbuji.dict_record("食ベる", "たべる", {"en": "eat"})   # typo'd katakana ベ
+    zenbuji.dict_record("食ベる", "たべる", {"en": "eat"})   # count -> 2
+    e0 = zenbuji.dict_get("食ベる")
+    count0, first0 = e0["count"], e0["first_seen"]
+    e = zenbuji.dict_rename("食ベる", "食べる")
+    assert zenbuji.dict_get("食ベる") is None
+    assert e["text"] == "食べる"
+    assert e["count"] == count0 and e["first_seen"] == first0   # preserved
+
+
+def test_dict_rename_can_edit_in_the_same_step(store):
+    zenbuji.dict_record("X", "えくす", {"en": "old"})
+    e = zenbuji.dict_rename("X", "新", reading="しん",
+                            translations={"en": "new", "de": "neu"})
+    assert e["reading"] == "しん"
+    assert e["translations"] == {"en": "new", "de": "neu"}
+
+
+def test_dict_rename_guards(store):
+    assert zenbuji.dict_rename("nope", "x") is None        # no such entry
+    zenbuji.dict_record("a", "あ", {"en": "a"})
+    assert zenbuji.dict_rename("a", "   ") is None          # blank new key
+    zenbuji.dict_record("b", "べ", {"en": "b"})
+    assert zenbuji.dict_rename("a", "b") is None            # won't clobber b
+    assert zenbuji.dict_get("a") is not None                # a left untouched

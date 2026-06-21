@@ -260,6 +260,41 @@ def dict_set(text: str, reading: str, translations: dict) -> dict | None:
     return entry
 
 
+def dict_rename(old: str, new: str, *, reading=None, translations=None) -> dict | None:
+    """Rename an entry's key (the surface word), keeping its count, timestamps
+    and exclude flag, and optionally applying reading/translation edits in the
+    same step. Returns the entry, or None if `old` is missing, `new` is blank,
+    or `new` already names a *different* entry (we won't clobber it). Move the
+    SRS card separately via ``srs.srs_rename``.
+    """
+    old, new = old.strip(), new.strip()
+    if not old or not new:
+        return None
+    data = load_dict()
+    entry = data.get(old)
+    if entry is None:
+        return None
+    if new != old and new in data:
+        return None                          # don't overwrite a different word
+    if new != old:
+        data.pop(old, None)
+        entry["text"] = new
+        data[new] = entry
+    if reading is not None:
+        entry["reading"] = reading.strip()
+    if translations is not None:
+        merged = dict(entry.get("translations", {}))
+        for lang, val in translations.items():
+            val = (val or "").strip()
+            if val:
+                merged[lang] = val
+            else:
+                merged.pop(lang, None)
+        entry["translations"] = merged
+    save_dict(data)
+    return entry
+
+
 def dict_set_exclude(text: str, excluded: bool) -> None:
     """Flag (or unflag) an entry as excluded from the practice quiz/SRS."""
     text = text.strip()

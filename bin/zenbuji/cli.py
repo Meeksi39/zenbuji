@@ -916,6 +916,18 @@ def launch_dictionary(cfg: dict) -> int:
         fresh = translation.translate_deepl(text, targets, key, lang_ui)
         return store.dict_record(text, reading, fresh)
 
+    def save_entry(text, reading, translations, original=None):
+        """Manual create/edit (no lookup). When `original` differs, it's a
+        rename: move the key — keeping count/timestamps — and carry the SRS
+        card across; otherwise create-or-edit in place."""
+        if original and original.strip() and original.strip() != text.strip():
+            entry = store.dict_rename(original, text, reading=reading,
+                                      translations=translations)
+            if entry is not None:
+                srs.srs_rename(original, text)
+            return entry
+        return store.dict_set(text, reading, translations)
+
     return show_dictionary(
         ui_language=cfg.get("ui_language", "en"),
         languages=cfg.get("languages", ["en", "de"]),
@@ -924,7 +936,7 @@ def launch_dictionary(cfg: dict) -> int:
         clear_fn=store.clear_dict,
         stats_fn=store.dict_stats,
         refresh_fn=refresh_fn,
-        save_fn=store.dict_set,
+        save_fn=save_entry,
         analyze_fn=lambda t: lang.analyze(t)[0],
         set_exclude_fn=store.dict_set_exclude,
         watch_path=paths.DICT_PATH,
