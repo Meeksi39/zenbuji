@@ -307,7 +307,7 @@ def _ime_switcher():
 def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                   ui_language="en", grade_fn, review_fn, speak_fn=None,
                   auto_speak=False, greeting=True, drill_repeats=5,
-                  match_reading_fn=None) -> int:
+                  match_reading_fn=None, speak_phrase_fn=None) -> int:
     def t(key):
         e = LEARN_STRINGS.get(key, {})
         return e.get(ui_language) or e.get("en") or key
@@ -631,6 +631,9 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             """The copy-the-correction drill: retype `target` (the correct
             reading) `drill_repeats` times, each correct retype spoken aloud."""
             progress = {"n": 0}
+            # One cached speaker for this reading: synthesise once, replay on
+            # every retype (no per-retype synthesis storm / overlapping audio).
+            player = speak_phrase_fn(target) if speak_phrase_fn else None
 
             prompt = Gtk.Label(label=t("drill_prompt"), wrap=True,
                                justify=Gtk.Justification.CENTER,
@@ -675,7 +678,9 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 if match_reading(entry.get_text(), target):
                     # Stays red (from a previous miss) until they get one right.
                     counter.remove_css_class("zenbuji-wrong")
-                    if speak_fn is not None:
+                    if player is not None:
+                        player()
+                    elif speak_fn is not None:
                         speak_fn(target)
                     progress["n"] += 1
                     counter.set_text(t("drill_progress").format(

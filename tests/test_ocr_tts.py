@@ -167,3 +167,26 @@ def test_play_wav_no_player_is_noop(monkeypatch):
     monkeypatch.setattr(zenbuji.tts.subprocess, "run", lambda *a, **k: calls.append(a))
     zenbuji._play_wav(b"data")
     assert calls == []
+
+
+# --- phrase_speaker: render once, replay many (the practice drill) ---------- #
+def test_phrase_speaker_synthesizes_once_then_replays(monkeypatch):
+    synth, played = [], []
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize",
+                        lambda *a, **k: (synth.append(a), b"WAV")[1])
+    monkeypatch.setattr(zenbuji.tts, "_play_wav", lambda wav: played.append(wav))
+    play = zenbuji.tts.phrase_speaker("てすと", {"tts_engine": "voicevox"})
+    play(block=True)
+    play(block=True)
+    play(block=True)
+    assert len(synth) == 1            # neural synthesis happened exactly once
+    assert played == [b"WAV"] * 3     # but the cached WAV replayed each retype
+
+
+def test_phrase_speaker_off_is_silent(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("should not synthesize when TTS is off")
+
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize", boom)
+    monkeypatch.setattr(zenbuji.tts, "_play_wav", boom)
+    zenbuji.tts.phrase_speaker("てすと", {"tts_engine": "off"})(block=True)

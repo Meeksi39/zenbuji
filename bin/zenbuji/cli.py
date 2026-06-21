@@ -930,4 +930,5 @@ def launch_learning(cfg: dict) -> int:
         greeting=bool(cfg.get("learn_greeting", True)),
         drill_repeats=drill,
         match_reading_fn=grade.reading_matches,
+        speak_phrase_fn=lambda t: tts.phrase_speaker(t, cfg),
     )
