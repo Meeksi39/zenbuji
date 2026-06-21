@@ -534,10 +534,34 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             # The reading (furigana) decides the default: "Got it" only when it
             # actually matched, otherwise "Missed" is the primary/default button.
             reading_ok = bool(res["reading_ok"])
+            correct_reading = res["correct_reading"]
             clear_phase()
 
-            col = _answer_col(width=320, spacing=10)
-            phase.append(col)
+            # A missed reading with the drill on splits into two columns — the
+            # review on the left, the retype drill on the right — so the card
+            # stays wide-and-short instead of one very tall stack. Otherwise it's
+            # a single centered column.
+            do_drill = (not reading_ok and drill_repeats > 0
+                        and bool(correct_reading))
+            if do_drill:
+                cols = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
+                cols.set_halign(Gtk.Align.CENTER)
+                cols.set_margin_top(4)
+                phase.append(cols)
+                col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+                col.set_size_request(250, -1)
+                col.set_valign(Gtk.Align.CENTER)
+                vrule = Gtk.Box()
+                vrule.add_css_class("zenbuji-vrule")
+                drill_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+                drill_col.set_size_request(250, -1)
+                drill_col.set_valign(Gtk.Align.CENTER)
+                cols.append(col)
+                cols.append(vrule)
+                cols.append(drill_col)
+            else:
+                col = _answer_col(width=320, spacing=10)
+                phase.append(col)
 
             def you_row(answer):
                 row = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
@@ -557,7 +581,6 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             col.append(verdict)
 
             # 2. The correct reading, large and in accent, with the speak button.
-            correct_reading = res["correct_reading"]
             if correct_reading:
                 reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                       spacing=6, halign=Gtk.Align.CENTER)
@@ -601,9 +624,10 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
 
             # 5a. Missed reading + drill on → retype the correct reading a few
             # times to burn it in, reading it aloud each time. Still recorded as
-            # a miss; the "I was right" escape covers an over-strict grade.
-            if not reading_ok and drill_repeats > 0 and correct_reading:
-                build_drill(col, cur, correct_reading)
+            # a miss; the "I was right" escape covers an over-strict grade. The
+            # drill lives in its own right-hand column (built above).
+            if do_drill:
+                build_drill(drill_col, cur, correct_reading)
                 return
 
             # 5b. Self-grade buttons, centered.
