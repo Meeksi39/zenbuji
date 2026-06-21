@@ -811,17 +811,22 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             row.append(again)
             phase.append(row)
 
-            # Every summary button closes the window, and the summary is built
-            # right where the just-confirmed "Got it" button stood. clear_phase()
-            # already dropped the stale default/focus (so a held Enter is a
-            # no-op); also briefly disable the buttons so the same click that
-            # confirmed the last card can't carry straight into one of them.
+            # The summary is built right where the just-confirmed "Got it" button
+            # stood, and clear_phase() dropped the stale default/focus. Briefly
+            # disable the buttons so the keypress that confirmed the last card
+            # can't carry straight into one of them; once armed, make "Practice
+            # again" the default so Enter starts a fresh round.
             for b in (close, stats, again):
                 b.set_sensitive(False)
 
             def _arm_buttons():
                 for b in (close, stats, again):
                     b.set_sensitive(True)
+                again.grab_focus()
+                try:
+                    win.set_default_widget(again)   # Enter -> start a new round
+                except Exception:  # noqa: BLE001 — focus alone is enough
+                    pass
                 return GLib.SOURCE_REMOVE
 
             GLib.timeout_add(350, _arm_buttons)
