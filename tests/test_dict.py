@@ -116,6 +116,50 @@ def test_update_translations_unknown_entry_returns_none(store):
     assert zenbuji.dict_update_translations("nope", {"en": "x"}) is None
 
 
+# --- dict_set: manual create / edit (no lookup, no count bump) -------------- #
+def test_dict_set_creates_with_zero_count(store):
+    e = zenbuji.dict_set("食べる", "たべる", {"en": "to eat", "de": "essen"})
+    assert e["count"] == 0                       # no lookup happened
+    assert e["reading"] == "たべる"
+    assert e["translations"] == {"en": "to eat", "de": "essen"}
+    assert e["first_seen"] and e["last_seen"]    # stamped so it sorts/export
+
+
+def test_dict_set_blank_text_returns_none(store):
+    assert zenbuji.dict_set("  ", "x", {"en": "y"}) is None
+
+
+def test_dict_set_edits_reading_and_merges(store):
+    zenbuji.dict_set("水", "みづ", {"en": "watr"})        # typo'd reading + meaning
+    before = zenbuji.dict_get("水")
+    e = zenbuji.dict_set("水", "みず", {"en": "water", "de": "Wasser"})
+    assert e["reading"] == "みず"                          # reading corrected
+    assert e["translations"] == {"en": "water", "de": "Wasser"}   # merged
+    assert e["count"] == 0                                 # still no lookup
+    assert e["first_seen"] == before["first_seen"]         # timestamps stable
+
+
+def test_dict_set_blank_value_drops_language(store):
+    zenbuji.dict_set("水", "みず", {"en": "water", "de": "Wasser"})
+    e = zenbuji.dict_set("水", "みず", {"de": "   "})
+    assert "de" not in e["translations"] and e["translations"]["en"] == "water"
+
+
+def test_dict_set_then_record_bumps_from_zero(store):
+    # A manual entry that's later looked up starts counting from its real first
+    # lookup, not pre-inflated.
+    zenbuji.dict_set("水", "みず", {"en": "water"})
+    e = zenbuji.dict_record("水", "みず", {"en": "water"})
+    assert e["count"] == 1
+
+
+def test_dict_set_monotonic_last_seen(store):
+    for w in ["a", "b", "c"]:
+        zenbuji.dict_set(w, w, {"en": w})
+    stamps = [zenbuji.dict_get(w)["last_seen"] for w in ["a", "b", "c"]]
+    assert stamps == sorted(stamps) and len(set(stamps)) == 3
+
+
 def test_record_last_seen_is_strictly_monotonic(store):
     # Several records in the same clock second must still get distinct, increasing
     # last_seen, so the most recent always sorts to the top (regression).

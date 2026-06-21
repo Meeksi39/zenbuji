@@ -150,6 +150,21 @@ def dict_stats() -> dict:
     }
 
 
+def _stamp(data: dict) -> str:
+    """A monotonic, microsecond-precision ISO timestamp for the newest entry.
+
+    So the most-recently-touched entry always sorts to the top, even when
+    several land within the same clock second (seconds precision used to tie and
+    scramble the order)."""
+    now_dt = datetime.now()
+    latest = max((d for e in data.values()
+                  if (d := _due_date_dt(e.get("last_seen"))) is not None),
+                 default=None)
+    if latest is not None and now_dt <= latest:
+        now_dt = latest + timedelta(microseconds=1)
+    return now_dt.isoformat()
+
+
 def dict_record(text: str, reading: str, deepl_translations: dict) -> dict:
     """Create or update a dictionary entry from DeepL output.
 
@@ -161,16 +176,7 @@ def dict_record(text: str, reading: str, deepl_translations: dict) -> dict:
     if not text:
         return {}
     data = load_dict()
-    # Monotonic, microsecond-precision last_seen so the most-recently-recorded
-    # entry always sorts to the top — even when several are recorded within the
-    # same clock second (seconds precision used to tie and scramble the order).
-    now_dt = datetime.now()
-    latest = max((d for e in data.values()
-                  if (d := _due_date_dt(e.get("last_seen"))) is not None),
-                 default=None)
-    if latest is not None and now_dt <= latest:
-        now_dt = latest + timedelta(microseconds=1)
-    now = now_dt.isoformat()
+    now = _stamp(data)
     entry = data.get(text) or {
         "text": text,
         "reading": reading,
@@ -203,6 +209,44 @@ def dict_update_translations(text: str, translations: dict) -> dict | None:
     entry = data.get(text)
     if entry is None:
         return None
+    merged = dict(entry.get("translations", {}))
+    for lang, val in translations.items():
+        val = (val or "").strip()
+        if val:
+            merged[lang] = val
+        else:
+            merged.pop(lang, None)
+    entry["translations"] = merged
+    data[text] = entry
+    save_dict(data)
+    return entry
+
+
+def dict_set(text: str, reading: str, translations: dict) -> dict | None:
+    """Manually create or edit an entry from hand-typed values — no lookup.
+
+    A brand-new entry is created with ``count=0`` (no lookup happened) and fresh
+    first/last seen, so it sorts to the top like a fresh capture. An existing
+    entry has its reading replaced and the given translations merged (a blank
+    value drops that language), while its count and timestamps stay put — it's a
+    correction, not a lookup. Returns the entry, or None if `text` is blank.
+    """
+    text = text.strip()
+    if not text:
+        return None
+    data = load_dict()
+    if text not in data:
+        now = _stamp(data)
+        data[text] = {
+            "text": text,
+            "reading": "",
+            "translations": {},
+            "count": 0,
+            "first_seen": now,
+            "last_seen": now,
+        }
+    entry = data[text]
+    entry["reading"] = (reading or "").strip()
     merged = dict(entry.get("translations", {}))
     for lang, val in translations.items():
         val = (val or "").strip()
