@@ -10,11 +10,36 @@ from . import paths, store
 SRS_DEFAULT_EASE = 2.5
 
 
+# In-memory cache of the parsed SRS state, keyed on (path, st_mtime_ns) — same
+# scheme as the dictionary cache in store.py (see the note there). A practice
+# session and srs_select/srs_stats re-read this growing file repeatedly; this
+# serves the parsed data until the file's mtime changes (our own save, or
+# another process) or the path is redirected (tests).
+_SRS_CACHE = None
+
+
+def _clear_caches() -> None:
+    """Drop the in-memory SRS cache (used by tests to stay hermetic)."""
+    global _SRS_CACHE
+    _SRS_CACHE = None
+
+
 def load_srs() -> dict:
+    global _SRS_CACHE
+    path = paths.SRS_PATH
+    key = str(path)
     try:
-        if paths.SRS_PATH.exists():
-            data = json.loads(paths.SRS_PATH.read_text(encoding="utf-8"))
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        mtime = None
+    if (mtime is not None and _SRS_CACHE is not None
+            and _SRS_CACHE[0] == key and _SRS_CACHE[1] == mtime):
+        return _SRS_CACHE[2]
+    try:
+        if mtime is not None:
+            data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
+                _SRS_CACHE = (key, mtime, data)
                 return data
     except (OSError, ValueError):
         pass
@@ -22,12 +47,18 @@ def load_srs() -> dict:
 
 
 def save_srs(data: dict) -> None:
+    global _SRS_CACHE
     try:
         paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
         paths.SRS_PATH.write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        try:
+            _SRS_CACHE = (str(paths.SRS_PATH),
+                          paths.SRS_PATH.stat().st_mtime_ns, data)
+        except OSError:
+            _SRS_CACHE = None
     except OSError:
         pass
 

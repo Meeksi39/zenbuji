@@ -21,6 +21,20 @@ sys.path.insert(0, str(BIN))
 import zenbuji  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _isolate_caches(tmp_path, monkeypatch):
+    """Keep the new in-memory/on-disk caches hermetic per test.
+
+    Redirects the TTS WAV cache into a throwaway dir (so tests never read or
+    write the real ~/.cache/zenbuji) and clears the dict/SRS/analyze memos before
+    each test so state never leaks between them.
+    """
+    monkeypatch.setattr(zenbuji.paths, "TTS_CACHE_DIR", tmp_path / "tts-cache")
+    zenbuji.store._clear_caches()
+    zenbuji.srs._clear_caches()
+    zenbuji.lang._tokenize.cache_clear()
+
+
 @pytest.fixture
 def store(tmp_path, monkeypatch):
     """Point all of zenbuji's state files at an isolated temp dir."""
