@@ -64,6 +64,9 @@ DEFAULT_CONFIG = {
     # Cache DeepL translations locally and reuse them (builds a personal
     # dictionary, saves quota). Only affects the DeepL backend.
     "dictionary": True,
+    # Fold a lone inflected word to its dictionary form before lookup/storage
+    # (食べた -> 食べる), so one verb is one entry. Off by default.
+    "normalize": False,
     # Max characters accepted in the popup's translation input.
     "translation_char_limit": 200,
     # Learning quiz: show the translation as a hint (test reading only) vs hide

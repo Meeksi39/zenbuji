@@ -154,6 +154,9 @@ def cmd_config(args, cfg) -> int:
     if args.cache_offline:
         cfg["cache_offline"] = args.cache_offline == "on"
         changed = True
+    if args.normalize:
+        cfg["normalize"] = args.normalize == "on"
+        changed = True
     if args.tts:
         cfg["tts"] = args.tts == "on"
         changed = True
@@ -483,6 +486,9 @@ def main(argv=None) -> int:
         p.add_argument("--cache-offline", dest="cache_offline",
                        choices=["on", "off"],
                        help="also store Argos (offline) translations in the dictionary")
+        p.add_argument("--normalize", choices=["on", "off"],
+                       help="fold inflected words to their dictionary form "
+                            "(食べた -> 食べる) for lookup/storage")
         p.add_argument("--tts", choices=["on", "off"],
                        help="read words aloud after an OCR/silent add by default")
         p.add_argument("--tts-on-lookup", dest="tts_on_lookup",
@@ -658,6 +664,11 @@ def main(argv=None) -> int:
                    help="capture a screen region and OCR it")
     p.add_argument("--ocr-image", dest="ocr_image",
                    help="OCR an existing image file")
+    p.add_argument("--normalize", dest="normalize", action="store_true",
+                   default=None,
+                   help="fold an inflected word to its dictionary form")
+    p.add_argument("--no-normalize", dest="normalize", action="store_false",
+                   help="don't normalize, even if it's on in config")
     p.add_argument("words", nargs="*")
     opts = p.parse_args(rest)
 
@@ -668,6 +679,8 @@ def main(argv=None) -> int:
 
     if opts.backend:
         cfg["backend"] = opts.backend
+    if opts.normalize is not None:
+        cfg["normalize"] = opts.normalize
     languages = (
         [s.strip() for s in opts.lang.split(",") if s.strip()]
         if opts.lang

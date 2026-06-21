@@ -49,3 +49,31 @@ def test_analyze_returns_fresh_tokens():
     assert t1 is not t2 and t1[0] is not t2[0]
     t1[0].surface = "X"
     assert t2[0].surface != "X"
+
+
+@pytest.mark.parametrize("inflected, base", [
+    ("食べた", "食べる"),
+    ("高かった", "高い"),
+    ("来た", "来る"),
+    ("きれいな", "きれい"),     # orthBase keeps kana (not the 奇麗 lemma)
+    ("静かだった", "静か"),
+])
+def test_dict_form_normalizes_lone_inflected_word(inflected, base):
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    assert zenbuji.lang.dict_form(inflected) == base
+
+
+@pytest.mark.parametrize("text", [
+    "食べる",      # already the dictionary form → no-op
+    "日本語",      # noun, doesn't inflect
+    "走って",      # te-form (conjunctive 助詞) → leave it
+    "読んでいる",   # progressive (two verbs) → leave it
+    "勉強します",   # noun + する → leave it
+    "本を読む",    # phrase with a case particle → leave it
+    "",            # blank
+])
+def test_dict_form_leaves_non_lone_words(text):
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    assert zenbuji.lang.dict_form(text) is None

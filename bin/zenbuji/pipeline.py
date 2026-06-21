@@ -9,7 +9,7 @@ import unicodedata
 
 from . import lang, store, translation
 from .lang import Result
-from .util import LANG_NAMES
+from .util import LANG_NAMES, _note
 
 
 def clean_capture(text: str) -> str:
@@ -39,11 +39,21 @@ def clean_capture(text: str) -> str:
 
 def process(text: str, languages: list[str], cfg: dict, do_translate: bool = True) -> Result:
     text = clean_capture(text)
+    notes: list[str] = []
+    # Optional: fold a lone inflected word to its dictionary form (食べた→食べる)
+    # before we read/translate/store it, so one verb is one entry. Only on a
+    # real lookup (do_translate), never pure furigana.
+    if do_translate and text and cfg.get("normalize"):
+        base = lang.dict_form(text)
+        if base:
+            notes.append(_note("normalized", cfg.get("ui_language", "en"),
+                               src=text, dst=base))
+            text = base
     reading, tokens = lang.analyze(text)
     translations: dict = {}
-    notes: list[str] = []
     if do_translate and text:
-        translations, notes = translation.translate_cached(text, languages, cfg, reading)
+        translations, tnotes = translation.translate_cached(text, languages, cfg, reading)
+        notes.extend(tnotes)
     result = Result(
         text=text,
         reading=reading,
