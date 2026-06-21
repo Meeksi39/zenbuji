@@ -128,6 +128,11 @@ def dict_delete(text: str) -> None:
     data = load_dict()
     if data.pop(text.strip(), None) is not None:
         save_dict(data)
+        # Drop the SRS card too, so deleting a word doesn't leave an orphan
+        # behind in practice/stats. Imported here (not at module top) to avoid
+        # the store<->srs import cycle.
+        from . import srs
+        srs.srs_delete(text)
 
 
 def clear_dict() -> None:
@@ -136,6 +141,8 @@ def clear_dict() -> None:
         paths.DICT_PATH.unlink()
     except (FileNotFoundError, OSError):
         pass
+    from . import srs        # see dict_delete: cascade, no orphaned cards
+    srs.srs_clear()
 
 
 def dict_stats() -> dict:

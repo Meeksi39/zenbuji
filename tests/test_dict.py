@@ -99,6 +99,24 @@ def test_delete_and_clear(store):
     assert zenbuji.load_dict() == {}
 
 
+def test_delete_also_removes_srs_card(store):
+    # Regression: deleting 雪 left its SRS card behind, so it kept showing up.
+    zenbuji.dict_record("雪", "ゆき", {"en": "snow"})
+    zenbuji.srs_review("雪", True)                 # give it a schedule
+    assert zenbuji.srs_get("雪") is not None
+    zenbuji.dict_delete("雪")
+    assert zenbuji.dict_get("雪") is None
+    assert zenbuji.srs_get("雪") is None            # no orphaned card
+
+
+def test_clear_dict_also_clears_srs(store):
+    zenbuji.dict_record("雪", "ゆき", {"en": "snow"})
+    zenbuji.srs_review("雪", True)
+    zenbuji.clear_dict()
+    assert zenbuji.load_dict() == {}
+    assert zenbuji.srs_get("雪") is None
+
+
 def test_update_translations_replaces_value(store):
     zenbuji.dict_record("水", "みず", {"en": "watr", "de": "Wasser"})
     e = zenbuji.dict_update_translations("水", {"en": "water"})
