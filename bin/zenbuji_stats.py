@@ -113,7 +113,7 @@ def show_statistics(*, ui_language="en", languages=("en", "de"), stats_fn) -> in
 
     def on_activate(application):
         win, card = make_glass_window(
-            application, title="zenbuji 統計", default_size=(480, -1),
+            application, title="zenbuji 統計", default_size=(600, -1),
             resizable=False, draggable=True, close_on_focus_loss=False)
 
         title = Gtk.Label(label=t("title"), xalign=0)
@@ -137,33 +137,41 @@ def show_statistics(*, ui_language="en", languages=("en", "de"), stats_fn) -> in
         if stats.get("total_study_ms") or stats.get("avg_answer_ms"):
             card.append(_time_row(stats, t))
 
-        # --- levels ------------------------------------------------------- //
-        card.append(_section_header(t("levels"),
+        # Two columns below the stat panels so the window stays compact: the
+        # charts (levels + activity) on the left, the word lists on the right.
+        columns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20,
+                          homogeneous=True)
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        left.set_valign(Gtk.Align.START)
+        right.set_valign(Gtk.Align.START)
+        columns.append(left)
+        columns.append(right)
+        card.append(columns)
+
+        # --- left: levels + activity -------------------------------------- //
+        left.append(_section_header(t("levels"),
                                     f"{stats['total']} {t('words')}"))
         bar = _maturity_bar(stats)
         redraws.append(bar)
-        card.append(bar)
-        card.append(_legend(stats, status_names))
-
-        # --- activity ----------------------------------------------------- //
+        left.append(bar)
+        left.append(_legend(stats, status_names))
         recent = stats.get("recent", [])
         if any(d["reviews"] for d in recent):
             total_14 = sum(d["reviews"] for d in recent)
-            card.append(_section_header(t("activity"),
+            left.append(_section_header(t("activity"),
                                         t("reviews_n", n=total_14)))
             chart = _activity_chart(recent)
             redraws.append(chart)
-            card.append(chart)
+            left.append(chart)
 
-        # --- needs review ------------------------------------------------- //
+        # --- right: needs review + slowest -------------------------------- //
         if stats.get("hardest"):
-            card.append(_section_header(t("hardest")))
-            card.append(_hardest_list(stats))
-
-        # --- slowest ------------------------------------------------------ //
+            right.append(_section_header(t("hardest")))
+            right.append(_hardest_list(stats))
         if stats.get("slowest"):
-            card.append(_section_header(t("slowest")))
-            card.append(_slowest_list(stats))
+            right.append(_section_header(t("slowest")))
+            right.append(_slowest_list(stats))
 
         # --- footer ------------------------------------------------------- //
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
