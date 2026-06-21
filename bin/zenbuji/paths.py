@@ -31,6 +31,12 @@ ACTIVITY_PATH = DATA_DIR / "activity.json"
 BUSY_PATH = DATA_DIR / "busy.json"
 # Date-stamp so the "open on login" autostart fires at most once per day.
 LAST_LEARN_PATH = DATA_DIR / "last_learn.txt"
+# Regenerable caches live under the XDG cache dir, not DATA_DIR. TTS_CACHE_DIR
+# holds synthesized VOICEVOX WAVs keyed by text+voice+speed (see tts.py).
+CACHE_DIR = Path(
+    os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+) / "zenbuji"
+TTS_CACHE_DIR = CACHE_DIR / "tts"
 AUTOSTART_PATH = Path(
     os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
 ) / "autostart" / "zenbuji-learn.desktop"
