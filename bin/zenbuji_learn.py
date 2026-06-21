@@ -581,6 +581,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             col.append(verdict)
 
             # 2. The correct reading, large and in accent, with the speak button.
+            reading_label = None
             if correct_reading:
                 reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                       spacing=6, halign=Gtk.Align.CENTER)
@@ -588,6 +589,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                                justify=Gtk.Justification.CENTER)
                 rl.add_css_class("zenbuji-reveal-reading")
                 rl.set_max_width_chars(20)
+                reading_label = rl       # toggled blurry/clear during the drill
                 reading_row.append(rl)
                 if speak_fn is not None:
                     speak_btn = Gtk.Button(icon_name="audio-volume-high-symbolic")
@@ -627,7 +629,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             # a miss; the "I was right" escape covers an over-strict grade. The
             # drill lives in its own right-hand column (built above).
             if do_drill:
-                build_drill(drill_col, cur, correct_reading)
+                build_drill(drill_col, cur, correct_reading, reading_label)
                 return
 
             # 5b. Self-grade buttons, centered.
@@ -651,9 +653,14 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             except Exception:  # noqa: BLE001 — focus alone is enough
                 pass
 
-        def build_drill(col, cur, target):
+        def build_drill(col, cur, target, reveal_reading=None):
             """The copy-the-correction drill: retype `target` (the correct
-            reading) `drill_repeats` times, each correct retype spoken aloud."""
+            reading) `drill_repeats` times, each correct retype spoken aloud.
+
+            `reveal_reading` is the furigana label in the review column: clear
+            for the first rep (copy it), blurred (in place, so the layout doesn't
+            jump) after each correct retype so the rest are from recall, and
+            shown clearly again whenever a retype is wrong."""
             progress = {"n": 0}
             # One cached speaker for this reading: synthesise once, replay on
             # every retype (no per-retype synthesis storm / overlapping audio).
@@ -702,6 +709,10 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 if match_reading(entry.get_text(), target):
                     # Stays red (from a previous miss) until they get one right.
                     counter.remove_css_class("zenbuji-wrong")
+                    # Blur the furigana now they've reproduced it — the remaining
+                    # reps are from memory (shown clearly again only on a slip).
+                    if reveal_reading is not None:
+                        reveal_reading.add_css_class("zenbuji-blur")
                     if player is not None:
                         player()
                     elif speak_fn is not None:
@@ -715,8 +726,11 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                         return
                     entry.grab_focus()
                 else:
-                    # No increment; flash the counter and keep their text + focus.
+                    # No increment; flash the counter, un-blur the reading to
+                    # remind them, and keep their text + focus.
                     counter.add_css_class("zenbuji-wrong")
+                    if reveal_reading is not None:
+                        reveal_reading.remove_css_class("zenbuji-blur")
                     entry.grab_focus()
 
             entry.connect("activate", attempt)
@@ -811,17 +825,22 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             row.append(again)
             phase.append(row)
 
-            # Every summary button closes the window, and the summary is built
-            # right where the just-confirmed "Got it" button stood. clear_phase()
-            # already dropped the stale default/focus (so a held Enter is a
-            # no-op); also briefly disable the buttons so the same click that
-            # confirmed the last card can't carry straight into one of them.
+            # The summary is built right where the just-confirmed "Got it" button
+            # stood, and clear_phase() dropped the stale default/focus. Briefly
+            # disable the buttons so the keypress that confirmed the last card
+            # can't carry straight into one of them; once armed, make "Practice
+            # again" the default so Enter starts a fresh round.
             for b in (close, stats, again):
                 b.set_sensitive(False)
 
             def _arm_buttons():
                 for b in (close, stats, again):
                     b.set_sensitive(True)
+                again.grab_focus()
+                try:
+                    win.set_default_widget(again)   # Enter -> start a new round
+                except Exception:  # noqa: BLE001 — focus alone is enough
+                    pass
                 return GLib.SOURCE_REMOVE
 
             GLib.timeout_add(350, _arm_buttons)

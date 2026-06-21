@@ -294,6 +294,11 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-verdict-no { background-color: #c0182a; }
 /* The revealed correct reading - the learning payload, large and in accent. */
 .zenbuji-reveal-reading { font-size: 27px; font-weight: 700; color: @accent_color; }
+/* Obscured (drill recall): keeps the same glyph box so the row holds its size
+   and the layout never jumps, but the text is an unreadable blur. */
+.zenbuji-reveal-reading.zenbuji-blur {
+    color: transparent; text-shadow: 0 0 13px @accent_color;
+}
 /* Inline submit tile fused to the right of the field: squared seam side,
    no fixed height so it matches the field it's linked to. */
 .zenbuji-quiz-go {
