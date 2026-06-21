@@ -26,10 +26,10 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
-    from zenbuji_glass import make_footer, make_glass_window
+    from zenbuji_glass import fmt_ms, make_footer, make_glass_window
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import make_footer, make_glass_window
+    from zenbuji_glass import fmt_ms, make_footer, make_glass_window
 
 LANG_NAMES_BY_UI = {
     "en": {"en": "English", "de": "Deutsch", "ja": "日本語"},
@@ -61,6 +61,7 @@ DICT_STRINGS = {
     "first":      {"en": "first",        "ja": "初回"},
     "last":       {"en": "last",         "ja": "最終"},
     "due":        {"en": "due",          "ja": "次回"},
+    "avg":        {"en": "avg",          "ja": "平均"},
     "game_title": {"en": "Game helper",  "ja": "ゲームヘルパー"},
     "game_banner": {"en": "✦ Word Quest ✦", "ja": "✦ ことばクエスト ✦"},
     "shortcuts":  {"en": "Shortcuts",    "ja": "ショートカット"},
@@ -603,6 +604,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     if srs.get("correct") or srs.get("wrong"):
                         meta_parts.append(
                             f"✓{srs.get('correct', 0)} ✗{srs.get('wrong', 0)}")
+                    if srs.get("avg_ms"):
+                        meta_parts.append(f"{t('avg')} {fmt_ms(srs['avg_ms'])}")
                 meta = Gtk.Label(label="   ·   ".join(meta_parts), xalign=0,
                                  wrap=True)
                 meta.add_css_class("zenbuji-meta")
