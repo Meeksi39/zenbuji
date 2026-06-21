@@ -13,6 +13,7 @@ All data/grading logic is injected by `launch_learning` in zenbuji/cli.py:
 
 from __future__ import annotations
 
+import difflib
 import random
 import subprocess
 import sys
@@ -26,15 +27,33 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
-    from zenbuji_glass import make_glass_window
+    from zenbuji_glass import accent_hex, make_glass_window
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import make_glass_window
+    from zenbuji_glass import accent_hex, make_glass_window
 
 LANG_NAMES_BY_UI = {
     "en": {"en": "English", "de": "Deutsch", "ja": "日本語"},
     "ja": {"en": "英語", "de": "ドイツ語", "ja": "日本語"},
 }
+
+def _reading_markup(correct: str, typed: str, accent: str) -> str:
+    """Pango markup for `correct`: the characters the learner got right stay the
+    default text colour, the ones they missed are shown in the accent colour
+    (so a missed word reveals exactly where it went wrong). The matched run is
+    the longest common subsequence (difflib)."""
+    matched = set()
+    sm = difflib.SequenceMatcher(None, (typed or "").strip(), correct,
+                                 autojunk=False)
+    for blk in sm.get_matching_blocks():
+        for i in range(blk.b, blk.b + blk.size):
+            matched.add(i)
+    out = []
+    for i, ch in enumerate(correct):
+        esc = GLib.markup_escape_text(ch)
+        out.append(esc if i in matched
+                   else f'<span foreground="{accent}">{esc}</span>')
+    return "".join(out)
 
 LEARN_STRINGS = {
     "title":        {"en": "Practice",        "ja": "練習"},
@@ -585,10 +604,18 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             if correct_reading:
                 reading_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                       spacing=6, halign=Gtk.Align.CENTER)
-                rl = Gtk.Label(label=correct_reading, wrap=True,
-                               justify=Gtk.Justification.CENTER)
+                rl = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
                 rl.add_css_class("zenbuji-reveal-reading")
                 rl.set_max_width_chars(20)
+                # Whole word missed → show the kana they got right in the default
+                # colour and the missed ones in accent; otherwise plain accent.
+                accent = accent_hex(Adw.StyleManager.get_default().get_dark())
+                if reading_ok or not accent:
+                    rl.set_text(correct_reading)
+                else:
+                    rl.add_css_class("zenbuji-graded")   # base = default fg
+                    rl.set_markup(_reading_markup(correct_reading, reading_in,
+                                                  accent))
                 reading_label = rl       # toggled blurry/clear during the drill
                 reading_row.append(rl)
                 if speak_fn is not None:
@@ -629,7 +656,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             # a miss; the "I was right" escape covers an over-strict grade. The
             # drill lives in its own right-hand column (built above).
             if do_drill:
-                build_drill(drill_col, cur, correct_reading, reading_label)
+                build_drill(drill_col, cur, correct_reading, reading_label,
+                            accent if not reading_ok else None)
                 return
 
             # 5b. Self-grade buttons, centered.
@@ -653,7 +681,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             except Exception:  # noqa: BLE001 — focus alone is enough
                 pass
 
-        def build_drill(col, cur, target, reveal_reading=None):
+        def build_drill(col, cur, target, reveal_reading=None, accent=None):
             """The copy-the-correction drill: retype `target` (the correct
             reading) `drill_repeats` times, each correct retype spoken aloud.
 
@@ -706,12 +734,16 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             col.append(override)
 
             def attempt(*_a):
-                if match_reading(entry.get_text(), target):
+                typed = entry.get_text()
+                if match_reading(typed, target):
                     # Stays red (from a previous miss) until they get one right.
                     counter.remove_css_class("zenbuji-wrong")
                     # Blur the furigana now they've reproduced it — the remaining
                     # reps are from memory (shown clearly again only on a slip).
+                    # Drop the markup first so the blur (a transparent text
+                    # colour) obscures it fully.
                     if reveal_reading is not None:
+                        reveal_reading.set_text(target)
                         reveal_reading.add_css_class("zenbuji-blur")
                     if player is not None:
                         player()
@@ -726,11 +758,16 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                         return
                     entry.grab_focus()
                 else:
-                    # No increment; flash the counter, un-blur the reading to
-                    # remind them, and keep their text + focus.
+                    # Slipped: flash the counter, reveal the reading again with
+                    # this attempt's mistakes in accent (right kana stay plain),
+                    # clear the box, and keep focus. No increment.
                     counter.add_css_class("zenbuji-wrong")
                     if reveal_reading is not None:
                         reveal_reading.remove_css_class("zenbuji-blur")
+                        if accent:
+                            reveal_reading.set_markup(
+                                _reading_markup(target, typed, accent))
+                    entry.set_text("")
                     entry.grab_focus()
 
             entry.connect("activate", attempt)
