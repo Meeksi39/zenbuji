@@ -17,6 +17,7 @@ import difflib
 import random
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import gi
@@ -332,7 +333,8 @@ def _ime_switcher():
 def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                   ui_language="en", grade_fn, review_fn, speak_fn=None,
                   auto_speak=False, greeting=True, drill_repeats=5,
-                  match_reading_fn=None, speak_phrase_fn=None) -> int:
+                  match_reading_fn=None, speak_phrase_fn=None,
+                  log_time_fn=None) -> int:
     def t(key):
         e = LEARN_STRINGS.get(key, {})
         return e.get(ui_language) or e.get("en") or key
@@ -517,6 +519,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             greet_lbl.set_visible(greeting and bool(GREETINGS)
                                   and state["idx"] == 0)
             cur = cards[state["idx"]]
+            state["question_shown_at"] = time.monotonic()   # for answer timing
             lvl = cur.get("status") or "new"
             for l in LEVEL_ORDER:
                 level_badge.remove_css_class(f"zenbuji-level-{l}")
@@ -578,6 +581,11 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             reading_entry.grab_focus()
 
         def show_reveal(cur, reading_in, translation_in):
+            # Recall time = question shown -> this first answer submit (the
+            # per-word speed). The total card time is taken later, at advance().
+            start = state.get("question_shown_at")
+            state["recall_ms"] = (round((time.monotonic() - start) * 1000)
+                                  if start is not None else None)
             res = grade_fn(cur, reading_in, translation_in)
             # The reading (furigana) decides the default: "Got it" only when it
             # actually matched, otherwise "Missed" is the primary/default button.
@@ -813,7 +821,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
 
         def finalize(cur, correct):
             old_status = cur.get("status", "")
-            info = review_fn(cur["text"], correct) or {}
+            info = review_fn(cur["text"], correct, state.get("recall_ms")) or {}
+            state["recall_ms"] = None        # consume so it can't double-count
             new_status = info.get("status", old_status)
             leveled_up = (correct
                           and _level_rank(new_status) > _level_rank(old_status))
@@ -826,6 +835,14 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             state["idx"] += 1
 
             def advance():
+                # Full time on this card (question -> moving on, incl. reveal /
+                # drill) feeds the cumulative learning-time total.
+                start = state.pop("question_shown_at", None)
+                if start is not None and log_time_fn is not None:
+                    try:
+                        log_time_fn(round((time.monotonic() - start) * 1000))
+                    except Exception:  # noqa: BLE001 — timing must never break
+                        pass
                 if state["idx"] < total:
                     show_question()
                 else:

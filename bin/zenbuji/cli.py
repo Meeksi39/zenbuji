@@ -1023,8 +1023,8 @@ def launch_learning(cfg: dict) -> int:
         return grade.grade_answer(card, reading_in, translation_in,
                                   test_translation=not show_tr)
 
-    def review_fn(text, correct):
-        st = srs.srs_review(text, correct)
+    def review_fn(text, correct, elapsed_ms=None):
+        st = srs.srs_review(text, correct, elapsed_ms)
         return {"status": srs.srs_status(st), "interval": st.get("interval", 0),
                 "due": st.get("due")}
 
@@ -1041,4 +1041,6 @@ def launch_learning(cfg: dict) -> int:
         drill_repeats=drill,
         match_reading_fn=grade.reading_matches,
         speak_phrase_fn=lambda t: tts.phrase_speaker(t, cfg),
+        # Cap a single card at 5 min so an afk pause can't balloon the total.
+        log_time_fn=lambda ms: store.add_study_time(min(ms, 300000)),
     )
