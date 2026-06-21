@@ -37,9 +37,9 @@ LANG_NAMES_BY_UI = {
     "ja": {"en": "英語", "de": "ドイツ語", "ja": "日本語"},
 }
 
-# How long the correct-answer ribbon holds over the result before the next word
-# loads automatically (ms).
-_BANNER_HOLD_MS = 1400
+# How long the correct-answer ribbon holds (after flying in, before flying out);
+# with the ~0.3s fly-out the next word loads ~1.4s after a correct answer.
+_BANNER_HOLD_MS = 1100
 
 def _reading_markup(correct: str, typed: str, accent: str) -> str:
     """Pango markup for `correct`: the characters the learner got right are shown
@@ -412,37 +412,53 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         kanji_overlay.set_child(kanji)
         card_box.append(kanji_overlay)
 
+        def _animate(widget, setter, frm, to, dur, easing, on_done=None):
+            """Smooth, eased property tween (see the animation note in CLAUDE.md).
+            Keeps the animation referenced so it isn't GC'd mid-flight."""
+            setter(frm)
+            tgt = Adw.CallbackAnimationTarget.new(setter)
+            anim = Adw.TimedAnimation.new(widget, frm, to, dur, tgt)
+            anim.set_easing(easing)
+            if on_done is not None:
+                anim.connect("done", lambda *_a: on_done())
+            state.setdefault("_anims", []).append(anim)  # keep refs alive
+            anim.play()
+            return anim
+
+        _BANNER_FLY = 90   # px the ribbon travels as it flies in / out
+
         def _show_banner(levelup=False):
             """JRPG-style ribbon over the result on a correct answer (the same
-            look as the game-helper capture banner). Returns the widget so the
-            caller can remove it when advancing."""
+            look as the game-helper capture banner). It flies in from the right
+            to centre; `_hide_banner` flies it back out. Returns the widget."""
             banner = Gtk.Label(label=t("banner_levelup") if levelup
                                else t("banner_correct"))
             banner.add_css_class("zenbuji-ribbon")
             banner.add_css_class("zenbuji-ribbon-levelup" if levelup
                                  else "zenbuji-ribbon-new")
-            # Top-right, overhanging — same as the game-helper ribbon.
-            banner.set_halign(Gtk.Align.END)
-            banner.set_valign(Gtk.Align.START)
+            banner.set_halign(Gtk.Align.CENTER)
+            banner.set_valign(Gtk.Align.CENTER)
             banner.set_can_target(False)
-            banner.set_opacity(0.0)
-            banner.set_margin_end(70)        # start off to the right, slide in
             kanji_overlay.add_overlay(banner)
-            anims = state.setdefault("_anims", [])  # keep refs alive
-            # Fade in...
-            ft = Adw.CallbackAnimationTarget.new(banner.set_opacity)
-            fade = Adw.TimedAnimation.new(banner, 0.0, 1.0, 260, ft)
-            fade.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-            anims.append(fade)
-            fade.play()
-            # ...while sliding into place from the right (margin_end 70 -> 0).
-            st = Adw.CallbackAnimationTarget.new(
-                lambda v: banner.set_margin_end(max(0, int(round(v)))))
-            slide = Adw.TimedAnimation.new(banner, 70, 0, 480, st)
-            slide.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
-            anims.append(slide)
-            slide.play()
+            # Fly in: ease OUT (decelerate into place) — fade + slide from right.
+            _animate(banner, banner.set_opacity, 0.0, 1.0, 300,
+                     Adw.Easing.EASE_OUT_CUBIC)
+            _animate(banner,
+                     lambda v: banner.set_margin_start(max(0, int(round(v)))),
+                     _BANNER_FLY, 0, 460, Adw.Easing.EASE_OUT_CUBIC)
             return banner
+
+        def _hide_banner(banner, on_done):
+            """Fly the ribbon back out (ease IN — accelerate away) then call
+            `on_done` (which removes it and loads the next word)."""
+            def done():
+                kanji_overlay.remove_overlay(banner)
+                on_done()
+            _animate(banner, banner.set_opacity, 1.0, 0.0, 300,
+                     Adw.Easing.EASE_IN_CUBIC)
+            _animate(banner,
+                     lambda v: banner.set_margin_end(max(0, int(round(v)))),
+                     0, _BANNER_FLY, 300, Adw.Easing.EASE_IN_CUBIC, on_done=done)
 
         # Translation hint: one label per language, divided by a vrule so the
         # EN / DE glosses read as clearly separate (not run together by spaces).
@@ -816,18 +832,18 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                     show_summary()
 
             if correct:
-                # Celebrate over the result, hold a beat, then auto-advance.
+                # Celebrate: ribbon flies in, holds a beat, flies out, next word.
                 state["score"] += 1
                 _play_correct_sound()
                 banner = _show_banner(leveled_up)
 
-                def _go():
+                def _out():
                     if win.get_mapped():       # window not closed during the hold
-                        kanji_overlay.remove_overlay(banner)
-                        advance()
+                        _hide_banner(banner,
+                                     lambda: win.get_mapped() and advance())
                     return GLib.SOURCE_REMOVE
 
-                GLib.timeout_add(_BANNER_HOLD_MS, _go)
+                GLib.timeout_add(_BANNER_HOLD_MS, _out)
             else:
                 advance()                       # missed → straight on, no banner
 
