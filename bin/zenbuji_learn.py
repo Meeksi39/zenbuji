@@ -38,10 +38,10 @@ LANG_NAMES_BY_UI = {
 }
 
 def _reading_markup(correct: str, typed: str, accent: str) -> str:
-    """Pango markup for `correct`: the characters the learner got right stay the
-    default text colour, the ones they missed are shown in the accent colour
-    (so a missed word reveals exactly where it went wrong). The matched run is
-    the longest common subsequence (difflib)."""
+    """Pango markup for `correct`: the characters the learner got right are shown
+    in the accent colour, the ones they missed are muted (the default colour
+    dimmed), so a missed word highlights what they nailed and fades the rest.
+    The matched run is the longest common subsequence (difflib)."""
     matched = set()
     sm = difflib.SequenceMatcher(None, (typed or "").strip(), correct,
                                  autojunk=False)
@@ -51,8 +51,8 @@ def _reading_markup(correct: str, typed: str, accent: str) -> str:
     out = []
     for i, ch in enumerate(correct):
         esc = GLib.markup_escape_text(ch)
-        out.append(esc if i in matched
-                   else f'<span foreground="{accent}">{esc}</span>')
+        out.append(f'<span foreground="{accent}">{esc}</span>' if i in matched
+                   else f'<span alpha="40%">{esc}</span>')
     return "".join(out)
 
 LEARN_STRINGS = {
@@ -607,13 +607,13 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 rl = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
                 rl.add_css_class("zenbuji-reveal-reading")
                 rl.set_max_width_chars(20)
-                # Whole word missed → show the kana they got right in the default
-                # colour and the missed ones in accent; otherwise plain accent.
+                # Whole word missed → show the kana they got right in accent and
+                # mute (fade) the ones they missed; otherwise plain accent.
                 accent = accent_hex(Adw.StyleManager.get_default().get_dark())
                 if reading_ok or not accent:
                     rl.set_text(correct_reading)
                 else:
-                    rl.add_css_class("zenbuji-graded")   # base = default fg
+                    rl.add_css_class("zenbuji-graded")   # base = default fg to dim
                     rl.set_markup(_reading_markup(correct_reading, reading_in,
                                                   accent))
                 reading_label = rl       # toggled blurry/clear during the drill
