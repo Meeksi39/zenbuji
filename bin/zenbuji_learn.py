@@ -37,6 +37,10 @@ LANG_NAMES_BY_UI = {
     "ja": {"en": "英語", "de": "ドイツ語", "ja": "日本語"},
 }
 
+# How long the correct-answer ribbon holds (after flying in, before flying out);
+# with the ~0.3s fly-out the next word loads ~1.4s after a correct answer.
+_BANNER_HOLD_MS = 1100
+
 def _reading_markup(correct: str, typed: str, accent: str) -> str:
     """Pango markup for `correct`: the characters the learner got right are shown
     in the accent colour, the ones they missed are muted (the default colour
@@ -75,6 +79,8 @@ LEARN_STRINGS = {
     "view_stats":   {"en": "View stats",      "ja": "統計を見る"},
     "level_up":     {"en": "Level up!",       "ja": "レベルアップ！"},
     "leveled_up":   {"en": "{n} leveled up!", "ja": "{n} 個レベルアップ！"},
+    "banner_correct": {"en": "✦ Correct! ✦",  "ja": "✦ 正解！ ✦"},
+    "banner_levelup": {"en": "✦ Level up! ✦", "ja": "✦ レベルアップ！ ✦"},
     "drill_prompt":     {"en": "Type the reading to lock it in",
                          "ja": "読みを入力して覚えよう"},
     "drill_progress":   {"en": "{n} / {total}", "ja": "{n} / {total}"},
@@ -401,35 +407,58 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
         level_badge.set_margin_top(2)
         card_box.append(level_badge)
 
-        # Overlay hosts the transient celebration mark on a correct answer.
+        # Overlay hosts the transient celebration ribbon on a correct answer.
         kanji_overlay = Gtk.Overlay()
         kanji_overlay.set_child(kanji)
         card_box.append(kanji_overlay)
 
-        def _fade_overlay(widget, duration):
-            kanji_overlay.add_overlay(widget)
-            target = Adw.CallbackAnimationTarget.new(widget.set_opacity)
-            anim = Adw.TimedAnimation.new(widget, 1.0, 0.0, duration, target)
-            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-            anim.connect("done", lambda *_a: kanji_overlay.remove_overlay(widget))
+        def _animate(widget, setter, frm, to, dur, easing, on_done=None):
+            """Smooth, eased property tween (see the animation note in CLAUDE.md).
+            Keeps the animation referenced so it isn't GC'd mid-flight."""
+            setter(frm)
+            tgt = Adw.CallbackAnimationTarget.new(setter)
+            anim = Adw.TimedAnimation.new(widget, frm, to, dur, tgt)
+            anim.set_easing(easing)
+            if on_done is not None:
+                anim.connect("done", lambda *_a: on_done())
             state.setdefault("_anims", []).append(anim)  # keep refs alive
             anim.play()
+            return anim
 
-        def celebrate(levelup=False):
-            _play_correct_sound()
-            mark = Gtk.Label(label="✓")
-            mark.add_css_class("zenbuji-celebrate")
-            mark.set_halign(Gtk.Align.CENTER)
-            mark.set_valign(Gtk.Align.CENTER)
-            mark.set_can_target(False)
-            _fade_overlay(mark, 700)
-            if levelup:
-                up = Gtk.Label(label=f"⬆ {t('level_up')}")
-                up.add_css_class("zenbuji-levelup")
-                up.set_halign(Gtk.Align.CENTER)
-                up.set_valign(Gtk.Align.END)
-                up.set_can_target(False)
-                _fade_overlay(up, 1300)
+        _BANNER_FLY = 90   # px the ribbon travels as it flies in / out
+
+        def _show_banner(levelup=False):
+            """JRPG-style ribbon over the result on a correct answer (the same
+            look as the game-helper capture banner). It flies in from the right
+            to centre; `_hide_banner` flies it back out. Returns the widget."""
+            banner = Gtk.Label(label=t("banner_levelup") if levelup
+                               else t("banner_correct"))
+            banner.add_css_class("zenbuji-ribbon")
+            banner.add_css_class("zenbuji-ribbon-levelup" if levelup
+                                 else "zenbuji-ribbon-new")
+            banner.set_halign(Gtk.Align.CENTER)
+            banner.set_valign(Gtk.Align.CENTER)
+            banner.set_can_target(False)
+            kanji_overlay.add_overlay(banner)
+            # Fly in: ease OUT (decelerate into place) — fade + slide from right.
+            _animate(banner, banner.set_opacity, 0.0, 1.0, 300,
+                     Adw.Easing.EASE_OUT_CUBIC)
+            _animate(banner,
+                     lambda v: banner.set_margin_start(max(0, int(round(v)))),
+                     _BANNER_FLY, 0, 460, Adw.Easing.EASE_OUT_CUBIC)
+            return banner
+
+        def _hide_banner(banner, on_done):
+            """Fly the ribbon back out (ease IN — accelerate away) then call
+            `on_done` (which removes it and loads the next word)."""
+            def done():
+                kanji_overlay.remove_overlay(banner)
+                on_done()
+            _animate(banner, banner.set_opacity, 1.0, 0.0, 300,
+                     Adw.Easing.EASE_IN_CUBIC)
+            _animate(banner,
+                     lambda v: banner.set_margin_end(max(0, int(round(v)))),
+                     0, _BANNER_FLY, 300, Adw.Easing.EASE_IN_CUBIC, on_done=done)
 
         # Translation hint: one label per language, divided by a vrule so the
         # EN / DE glosses read as clearly separate (not run together by spaces).
@@ -660,24 +689,28 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                             accent if not reading_ok else None)
                 return
 
-            # 5b. Self-grade buttons, centered.
+            # 5b. Correct → celebrate over the result and auto-advance (no click).
+            if reading_ok:
+                finalize(cur, True)
+                return
+
+            # 5c. Missed (no drill) → self-grade buttons so an over-strict grade
+            # can still be marked correct.
             btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                            homogeneous=True)
             btns.set_margin_top(8)
             got = Gtk.Button(label=t("got_it"))
             missed = Gtk.Button(label=t("missed"))
-            # Whichever matches the reading result is the primary/default button.
-            (got if reading_ok else missed).add_css_class("zenbuji-action")
-            (missed if reading_ok else got).add_css_class("zenbuji-secondary")
+            got.add_css_class("zenbuji-secondary")
+            missed.add_css_class("zenbuji-action")
             got.connect("clicked", lambda _b: finalize(cur, True))
             missed.connect("clicked", lambda _b: finalize(cur, False))
             btns.append(missed)
             btns.append(got)
             col.append(btns)
-            default_btn = got if reading_ok else missed
-            default_btn.grab_focus()
+            missed.grab_focus()
             try:
-                win.set_default_widget(default_btn)
+                win.set_default_widget(missed)
             except Exception:  # noqa: BLE001 — focus alone is enough
                 pass
 
@@ -784,9 +817,6 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             new_status = info.get("status", old_status)
             leveled_up = (correct
                           and _level_rank(new_status) > _level_rank(old_status))
-            if correct:
-                state["score"] += 1
-                celebrate(levelup=leveled_up)
             state["results"].append({
                 "text": cur["text"],
                 "correct": correct,
@@ -794,10 +824,28 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 "leveled_up": leveled_up,
             })
             state["idx"] += 1
-            if state["idx"] < total:
-                show_question()
+
+            def advance():
+                if state["idx"] < total:
+                    show_question()
+                else:
+                    show_summary()
+
+            if correct:
+                # Celebrate: ribbon flies in, holds a beat, flies out, next word.
+                state["score"] += 1
+                _play_correct_sound()
+                banner = _show_banner(leveled_up)
+
+                def _out():
+                    if win.get_mapped():       # window not closed during the hold
+                        _hide_banner(banner,
+                                     lambda: win.get_mapped() and advance())
+                    return GLib.SOURCE_REMOVE
+
+                GLib.timeout_add(_BANNER_HOLD_MS, _out)
             else:
-                show_summary()
+                advance()                       # missed → straight on, no banner
 
         def show_summary():
             progress.set_fraction(1.0)
