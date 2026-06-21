@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from dataclasses import asdict, dataclass, field
 
 KATAKANA_START = 0x30A1
@@ -56,11 +57,13 @@ def _tagger():
     return _TAGGER
 
 
-def analyze(text: str) -> tuple[str, list[Token]]:
-    """Return (full hiragana reading, tokens) for the given text."""
-    text = text.strip()
+@functools.lru_cache(maxsize=2048)
+def _tokenize(text: str) -> tuple[str, tuple[tuple[str, str, bool], ...]]:
+    """MeCab tokenisation, memoised. Returns an immutable (reading, tokens)
+    tuple — the expensive part — so `analyze` can hand back fresh, mutable Token
+    objects without ever sharing cached state. Pure function of `text`."""
     tagger = _tagger()
-    tokens: list[Token] = []
+    parts: list[tuple[str, str, bool]] = []
     reading_parts: list[str] = []
     for word in tagger(text):
         surface = word.surface
@@ -72,12 +75,14 @@ def analyze(text: str) -> tuple[str, list[Token]]:
             if val and val != "*":
                 kana = val
                 break
-        if kana:
-            reading = kata_to_hira(kana)
-        else:
-            reading = surface
+        reading = kata_to_hira(kana) if kana else surface
         reading_parts.append(reading)
-        tokens.append(
-            Token(surface=surface, reading=reading, has_kanji=has_kanji(surface))
-        )
-    return "".join(reading_parts), tokens
+        parts.append((surface, reading, has_kanji(surface)))
+    return "".join(reading_parts), tuple(parts)
+
+
+def analyze(text: str) -> tuple[str, list[Token]]:
+    """Return (full hiragana reading, tokens) for the given text."""
+    reading, parts = _tokenize(text.strip())
+    tokens = [Token(surface=s, reading=r, has_kanji=k) for s, r, k in parts]
+    return reading, tokens
