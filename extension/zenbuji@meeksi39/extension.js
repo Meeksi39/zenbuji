@@ -43,6 +43,7 @@ const UI_JA = {
     'Start VOICEVOX': 'VOICEVOX を起動',
     'Starting VOICEVOX…': 'VOICEVOX を起動中…',
     'Settings…': '設定…',
+    'About zenbuji': 'zenbuji について',
     'Looking up…': '検索中…',
 };
 let _ = s => s;
@@ -111,47 +112,37 @@ class ZenbujiIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const selItem = new PopupMenu.PopupMenuItem(_('Look up current selection'));
-        selItem.connect('activate', () => this._extension.lookupSelection());
-        this.menu.addMenuItem(selItem);
+        const item = (label, icon, cb) => {
+            const it = new PopupMenu.PopupImageMenuItem(label, icon);
+            it.connect('activate', cb);
+            this.menu.addMenuItem(it);
+            return it;
+        };
 
-        const ocrItem = new PopupMenu.PopupMenuItem(_('Look up screen region (OCR)'));
-        ocrItem.connect('activate', () => this._extension.lookupRegion());
-        this.menu.addMenuItem(ocrItem);
-
-        const ocrAddItem = new PopupMenu.PopupMenuItem(_('Add screen region to dictionary (OCR)'));
-        ocrAddItem.connect('activate', () => this._extension.addRegion());
-        this.menu.addMenuItem(ocrAddItem);
-
-        const dictItem = new PopupMenu.PopupMenuItem(_('Dictionary'));
-        dictItem.connect('activate', () => this._extension.openDictionary());
-        this.menu.addMenuItem(dictItem);
-
-        const learnItem = new PopupMenu.PopupMenuItem(_('Practice (SRS)'));
-        learnItem.connect('activate', () => this._extension.openLearning());
-        this.menu.addMenuItem(learnItem);
-
-        const statsItem = new PopupMenu.PopupMenuItem(_('Statistics'));
-        statsItem.connect('activate', () => this._extension.openStatistics());
-        this.menu.addMenuItem(statsItem);
-
-        const gameItem = new PopupMenu.PopupMenuItem(_('Game helper'));
-        gameItem.connect('activate', () => this._extension.openGame());
-        this.menu.addMenuItem(gameItem);
+        item(_('Look up current selection'), 'edit-find-symbolic',
+             () => this._extension.lookupSelection());
+        item(_('Look up screen region (OCR)'), 'camera-photo-symbolic',
+             () => this._extension.lookupRegion());
+        item(_('Add screen region to dictionary (OCR)'), 'list-add-symbolic',
+             () => this._extension.addRegion());
+        item(_('Dictionary'), 'accessories-dictionary-symbolic',
+             () => this._extension.openDictionary());
+        item(_('Practice (SRS)'), 'media-playback-start-symbolic',
+             () => this._extension.openLearning());
+        item(_('Statistics'), 'utilities-system-monitor-symbolic',
+             () => this._extension.openStatistics());
+        item(_('Game helper'), 'applications-games-symbolic',
+             () => this._extension.openGame());
 
         if (this._extension.voicevoxAvailable()) {
-            const vvItem = new PopupMenu.PopupMenuItem(_('Start VOICEVOX'));
-            vvItem.connect('activate', () => this._extension.startVoicevox(true));
-            this.menu.addMenuItem(vvItem);
+            item(_('Start VOICEVOX'), 'audio-volume-high-symbolic',
+                 () => this._extension.startVoicevox(true));
         }
 
-        const prefsItem = new PopupMenu.PopupMenuItem(_('Settings…'));
-        prefsItem.connect('activate', () => this._extension.openPreferences());
-        this.menu.addMenuItem(prefsItem);
-
-        const aboutItem = new PopupMenu.PopupMenuItem(_('About zenbuji'));
-        aboutItem.connect('activate', () => this._extension.openAbout());
-        this.menu.addMenuItem(aboutItem);
+        item(_('Settings…'), 'emblem-system-symbolic',
+             () => this._extension.openPreferences());
+        item(_('About zenbuji'), 'help-about-symbolic',
+             () => this._extension.openAbout());
 
         // Focus the entry when the menu opens.
         this.menu.connect('open-state-changed', (_m, open) => {
