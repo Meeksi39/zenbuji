@@ -1,6 +1,61 @@
 """Local dictionary cache: record / merge / stats / delete."""
 
+import json
+import os
+
 import zenbuji
+
+
+def _count_parses(monkeypatch):
+    """Count how many times the dictionary file is parsed from disk."""
+    calls = {"n": 0}
+    real = json.loads
+
+    def counting(s, *a, **k):
+        calls["n"] += 1
+        return real(s, *a, **k)
+
+    monkeypatch.setattr(zenbuji.store.json, "loads", counting)
+    return calls
+
+
+def test_load_dict_caches_in_memory(store, monkeypatch):
+    zenbuji.dict_record("水", "みず", {"en": "water"})   # writes + warms cache
+    parses = _count_parses(monkeypatch)
+    assert zenbuji.dict_get("水") is not None
+    assert zenbuji.dict_get("水") is not None
+    assert parses["n"] == 0      # both served from the in-memory cache
+
+
+def test_load_dict_reparses_once_when_cold(store, monkeypatch):
+    zenbuji.dict_record("水", "みず", {"en": "water"})
+    zenbuji.store._clear_caches()                  # simulate a fresh process
+    parses = _count_parses(monkeypatch)
+    zenbuji.dict_get("水")                          # cold -> one parse
+    zenbuji.dict_get("水")                          # warm -> cached
+    assert parses["n"] == 1
+
+
+def test_load_dict_sees_its_own_writes(store):
+    zenbuji.dict_record("a", "あ", {"en": "a"})
+    assert zenbuji.dict_get("a") is not None        # save refreshed the cache
+    zenbuji.dict_record("b", "べ", {"en": "b"})
+    assert zenbuji.dict_get("b") is not None        # not stuck on the old snapshot
+
+
+def test_load_dict_reloads_on_external_write(store):
+    zenbuji.dict_record("水", "みず", {"en": "water"})
+    assert zenbuji.dict_get("水") is not None        # warm the cache
+    # Another process rewrites the file; force a strictly newer mtime so the
+    # cache key (path, st_mtime_ns) misses and we reload.
+    p = zenbuji.paths.DICT_PATH
+    p.write_text(json.dumps(
+        {"火": {"text": "火", "reading": "ひ", "translations": {"en": "fire"}}}),
+        encoding="utf-8")
+    st = p.stat()
+    os.utime(p, ns=(st.st_mtime_ns + 1_000_000_000, st.st_mtime_ns + 1_000_000_000))
+    assert zenbuji.dict_get("火") is not None
+    assert zenbuji.dict_get("水") is None
 
 
 def test_record_creates_and_counts(store):

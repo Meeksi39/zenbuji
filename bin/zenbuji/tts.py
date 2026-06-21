@@ -8,6 +8,7 @@ here lands.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shlex
@@ -18,7 +19,11 @@ import threading
 import urllib.parse
 import urllib.request
 
+from . import paths
+
 VOICEVOX_DEFAULT_HOST = "127.0.0.1:50021"
+# Keep at most this many cached WAVs on disk; oldest-used are evicted past it.
+_WAV_CACHE_CAP = 600
 VOICEVOX_DEFAULT_SPEAKER = 3  # ずんだもん (Zundamon), normal style
 _AUDIO_PLAYERS = ("pw-play", "paplay", "aplay", "ffplay")
 
@@ -46,6 +51,58 @@ def voicevox_synthesize(text: str, host: str, speaker: int,
         headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=20) as resp:
         return resp.read()
+
+
+def _wav_cache_path(text: str, speaker: int, speed: float):
+    key = hashlib.sha1(f"{text}|{speaker}|{speed}".encode("utf-8")).hexdigest()
+    return paths.TTS_CACHE_DIR / f"{key}.wav"
+
+
+def _evict_wav_cache(cap: int | None = None) -> None:
+    """Trim the on-disk WAV cache to `cap` files, oldest-used first."""
+    if cap is None:
+        cap = _WAV_CACHE_CAP
+    try:
+        files = sorted(paths.TTS_CACHE_DIR.glob("*.wav"),
+                       key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return
+    for p in files[:max(0, len(files) - cap)]:
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
+def _cached_synthesize(text: str, host: str, speaker: int, speed: float) -> bytes:
+    """`voicevox_synthesize` with an on-disk WAV cache keyed on text+speaker+speed.
+
+    Re-reading a phrase rendered before (this session or a past one) is a cheap
+    file read instead of CPU-heavy neural synthesis. A synthesis failure
+    propagates to the caller (which treats it as "no VOICEVOX"); cache read/write
+    failures fall back to a direct synth so audio never breaks.
+    """
+    path = _wav_cache_path(text, speaker, speed)
+    try:
+        wav = path.read_bytes()
+        if wav:
+            try:
+                os.utime(path)  # mark recently used for oldest-first eviction
+            except OSError:
+                pass
+            return wav
+    except OSError:
+        pass  # cache miss / unreadable — synthesize below
+    wav = voicevox_synthesize(text, host, speaker, speed)
+    try:
+        paths.TTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".wav.tmp")
+        tmp.write_bytes(wav)
+        tmp.replace(path)  # atomic publish
+        _evict_wav_cache()
+    except OSError:
+        pass
+    return wav
 
 
 def _play_wav(wav: bytes) -> None:
@@ -111,7 +168,7 @@ def speak(text: str, cfg: dict, block: bool = False) -> None:
 
             if engine in ("voicevox", "auto"):
                 try:
-                    wav = voicevox_synthesize(
+                    wav = _cached_synthesize(
                         text, cfg.get("voicevox_host", VOICEVOX_DEFAULT_HOST),
                         cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER),
                         speed)
@@ -168,7 +225,7 @@ def phrase_speaker(text: str, cfg: dict):
                     state["rendered"] = True
                     try:
                         speed = float(cfg.get("tts_speed", 1.0) or 1.0)
-                        state["wav"] = voicevox_synthesize(
+                        state["wav"] = _cached_synthesize(
                             text, cfg.get("voicevox_host", VOICEVOX_DEFAULT_HOST),
                             cfg.get("voicevox_speaker", VOICEVOX_DEFAULT_SPEAKER),
                             speed)

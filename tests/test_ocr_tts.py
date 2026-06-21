@@ -190,3 +190,44 @@ def test_phrase_speaker_off_is_silent(monkeypatch):
     monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize", boom)
     monkeypatch.setattr(zenbuji.tts, "_play_wav", boom)
     zenbuji.tts.phrase_speaker("てすと", {"tts_engine": "off"})(block=True)
+
+
+# --- on-disk WAV cache (TTS_CACHE_DIR redirected to tmp by the autouse fixture) #
+def test_cached_synthesize_hits_disk_second_time(monkeypatch):
+    synth = []
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize",
+                        lambda *a, **k: (synth.append(a), b"WAV")[1])
+    w1 = zenbuji.tts._cached_synthesize("こ", "h", 3, 1.0)
+    w2 = zenbuji.tts._cached_synthesize("こ", "h", 3, 1.0)
+    assert w1 == w2 == b"WAV"
+    assert len(synth) == 1            # second call read the cached file
+
+
+def test_cached_synthesize_keys_on_voice_and_speed(monkeypatch):
+    synth = []
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize",
+                        lambda *a, **k: (synth.append(a), b"W")[1])
+    zenbuji.tts._cached_synthesize("こ", "h", 3, 1.0)
+    zenbuji.tts._cached_synthesize("こ", "h", 3, 1.2)   # different speed
+    zenbuji.tts._cached_synthesize("こ", "h", 8, 1.0)   # different speaker
+    assert len(synth) == 3            # distinct keys, no false cache hits
+
+
+def test_speak_voicevox_goes_through_disk_cache(monkeypatch):
+    synth, played = [], []
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize",
+                        lambda *a, **k: (synth.append(a), b"WAV")[1])
+    monkeypatch.setattr(zenbuji.tts, "_play_wav", lambda wav: played.append(wav))
+    zenbuji.speak("こ", {"tts_engine": "voicevox"}, block=True)
+    zenbuji.speak("こ", {"tts_engine": "voicevox"}, block=True)
+    assert played == [b"WAV", b"WAV"]   # played both times
+    assert len(synth) == 1              # but synthesized only once
+
+
+def test_wav_cache_evicts_oldest(monkeypatch):
+    monkeypatch.setattr(zenbuji.tts, "_WAV_CACHE_CAP", 3)
+    monkeypatch.setattr(zenbuji.tts, "voicevox_synthesize", lambda *a, **k: b"W")
+    for i in range(6):
+        zenbuji.tts._cached_synthesize(f"t{i}", "h", 3, 1.0)
+    files = list(zenbuji.paths.TTS_CACHE_DIR.glob("*.wav"))
+    assert len(files) <= 3              # bounded; oldest evicted

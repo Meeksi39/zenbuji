@@ -61,12 +61,40 @@ def append_history(result: "Result", limit: int = 20) -> None:
 # --------------------------------------------------------------------------- #
 # Dictionary (persistent cache of DeepL translations + usage stats)
 # --------------------------------------------------------------------------- #
+# In-memory cache of the parsed dictionary, so a resident window (the browser,
+# the game overlay) or a multi-item op (cmd_add, repeated lookups) doesn't
+# re-read and re-parse the whole growing JSON on every dict_get. Keyed on
+# (path, st_mtime_ns): a different path (tests redirect DICT_PATH) or a changed
+# mtime (another process rewrote the file — e.g. a background `zenbuji add`
+# while the game overlay is open) is a miss, so the cache reloads. save_dict
+# refreshes it in place so a same-process read-after-write needs no disk round
+# trip. Value is (path_str, mtime_ns, data).
+_DICT_CACHE = None
+
+
+def _clear_caches() -> None:
+    """Drop the in-memory dictionary cache (used by tests to stay hermetic)."""
+    global _DICT_CACHE
+    _DICT_CACHE = None
+
+
 def load_dict() -> dict:
     """Load the local dictionary: {text: {reading, translations, count, …}}."""
+    global _DICT_CACHE
+    path = paths.DICT_PATH
+    key = str(path)
     try:
-        if paths.DICT_PATH.exists():
-            data = json.loads(paths.DICT_PATH.read_text(encoding="utf-8"))
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        mtime = None
+    if (mtime is not None and _DICT_CACHE is not None
+            and _DICT_CACHE[0] == key and _DICT_CACHE[1] == mtime):
+        return _DICT_CACHE[2]
+    try:
+        if mtime is not None:
+            data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
+                _DICT_CACHE = (key, mtime, data)
                 return data
     except (OSError, ValueError):
         pass
@@ -74,12 +102,20 @@ def load_dict() -> dict:
 
 
 def save_dict(data: dict) -> None:
+    global _DICT_CACHE
     try:
         paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
         paths.DICT_PATH.write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        # Refresh the cache to the just-written data + new mtime so the next
+        # load_dict() in this process sees its own write without a re-read.
+        try:
+            _DICT_CACHE = (str(paths.DICT_PATH),
+                           paths.DICT_PATH.stat().st_mtime_ns, data)
+        except OSError:
+            _DICT_CACHE = None
     except OSError:
         pass
 
@@ -95,6 +131,7 @@ def dict_delete(text: str) -> None:
 
 
 def clear_dict() -> None:
+    _clear_caches()
     try:
         paths.DICT_PATH.unlink()
     except (FileNotFoundError, OSError):
