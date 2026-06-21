@@ -60,6 +60,37 @@ def test_dict_clear_removes_file(cli):
     assert not (cli.data / "dictionary.json").exists()
 
 
+def test_export_tsv_skips_excluded(cli):
+    _seed(cli, "dictionary.json", {
+        "水": {"text": "水", "reading": "みず",
+               "translations": {"en": "water", "de": "Wasser"},
+               "first_seen": "2026-01-01T00:00:00"},
+        "除外": {"text": "除外", "reading": "じょがい",
+                 "translations": {"en": "excluded"}, "exclude": True,
+                 "first_seen": "2026-01-02T00:00:00"},
+    })
+    r = cli("export")
+    assert r.returncode == 0, r.stderr
+    assert "#separator:tab" in r.stdout
+    assert "水\tみず\twater\tWasser" in r.stdout
+    assert "除外" not in r.stdout                       # excluded by default
+
+    r_all = cli("export", "--all")
+    assert r_all.returncode == 0, r_all.stderr
+    assert "除外" in r_all.stdout                        # --all includes it
+
+
+def test_export_writes_file_with_output_flag(cli):
+    _seed(cli, "dictionary.json",
+          {"水": {"text": "水", "reading": "みず",
+                  "translations": {"en": "water"}}})
+    out = cli.data / "deck.tsv"
+    r = cli("export", "-o", str(out))
+    assert r.returncode == 0, r.stderr
+    assert "exported 1 cards" in r.stdout
+    assert "水\tみず\twater" in out.read_text(encoding="utf-8")
+
+
 def test_config_writes_only_to_isolated_path(cli):
     # SAFETY proof: a config write lands in the temp config dir, not the real one.
     r = cli("config", "--backend", "argos")

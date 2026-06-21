@@ -20,7 +20,8 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-from . import grade, lang, ocr, paths, pipeline, srs, store, translation, tts
+from . import (exporting, grade, lang, ocr, paths, pipeline, srs, store,
+               translation, tts)
 
 
 HELP = """zenbuji — furigana + EN/DE translation for Japanese text.
@@ -35,6 +36,7 @@ Usage:
   zenbuji ocr [image]         OCR a screen region (or image file) and look it up
   zenbuji add <words…>        Translate & store words in the dictionary, no GUI
   zenbuji dict                Open the local dictionary (cached DeepL lookups)
+  zenbuji export              Export the dictionary as Anki TSV/CSV (-o FILE)
   zenbuji learn               Practice cached words (spaced repetition quiz)
   zenbuji stats               Show learning statistics (--json for machines)
   zenbuji game                Game-helper overlay (shortcuts + live dictionary)
@@ -435,8 +437,8 @@ def main(argv=None) -> int:
 
     known_commands = {
         "read", "furigana", "tr", "translate", "popup", "selection",
-        "config", "models", "usage", "ocr", "dict", "learn", "stats", "game",
-        "add", "speak", "voices", "voicevox", "about",
+        "config", "models", "usage", "ocr", "dict", "export", "learn", "stats",
+        "game", "add", "speak", "voices", "voicevox", "about",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -603,6 +605,40 @@ def main(argv=None) -> int:
             print(json.dumps(srs.srs_stats(), ensure_ascii=False))
             return 0
         return launch_stats(cfg)
+
+    if command == "export":
+        p = argparse.ArgumentParser(prog="zenbuji export")
+        p.add_argument("--format", choices=["tsv", "csv"], default="tsv",
+                       help="output format (default tsv — Anki-native)")
+        p.add_argument("--all", action="store_true",
+                       help="include entries excluded from practice")
+        p.add_argument("--no-header", dest="header", action="store_false",
+                       help="omit the Anki #separator/#columns header lines")
+        p.add_argument("--lang", help="languages to export (comma separated; "
+                       "default from config)")
+        p.add_argument("-o", "--output",
+                       help="write to a file instead of standard output")
+        a = p.parse_args(rest)
+        languages = (
+            [s.strip() for s in a.lang.split(",") if s.strip()]
+            if a.lang else cfg.get("languages", ["en", "de"])
+        )
+        text, count = exporting.dict_to_anki(
+            store.load_dict(), languages, fmt=a.format,
+            include_excluded=a.all, header=a.header)
+        if a.output:
+            out = Path(a.output).expanduser()
+            try:
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(text, encoding="utf-8")
+            except OSError as e:
+                print(f"could not write {out}: {e}", file=sys.stderr)
+                return 1
+            print(f"exported {count} cards to {out}")
+        else:
+            # No trailing blank line on top of csv.writer's own newlines.
+            sys.stdout.write(text)
+        return 0
 
     if command == "game":
         argparse.ArgumentParser(prog="zenbuji game").parse_args(rest)
