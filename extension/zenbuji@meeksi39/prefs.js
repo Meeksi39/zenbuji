@@ -65,6 +65,9 @@ const UI_JA = {
     'Also store offline translations': 'オフライン翻訳も保存',
     'Cache Argos (offline) translations in the dictionary too, not just DeepL — lets you build a practice deck without a key.':
         'DeepL だけでなく Argos（オフライン）翻訳も辞書にキャッシュします。キーなしで練習用の単語帳を作れます。',
+    'Normalize to dictionary form': '辞書形に正規化',
+    'Look up and store an inflected word as its dictionary form (食べた → 食べる), so one verb is one entry.':
+        '活用した単語を辞書形（食べた → 食べる）で検索・保存します。一つの動詞が一つの項目になります。',
     'Speech': '音声',
     'Read words aloud': '単語を読み上げる',
     'Speak the reading after an OCR/silent add, and via the 🔊 buttons.':
@@ -377,6 +380,19 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         trGroup.add(cacheOfflineRow);
 
+        const normalizeRow = new Adw.SwitchRow({
+            title: _('Normalize to dictionary form'),
+            subtitle: _('Look up and store an inflected word as its dictionary ' +
+                'form (食べた → 食べる), so one verb is one entry.'),
+        });
+        normalizeRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--normalize', normalizeRow.get_active() ? 'on' : 'off']);
+        });
+        trGroup.add(normalizeRow);
+
         const charRow = new Adw.SpinRow({
             title: _('Translation length limit'),
             subtitle: _('Maximum characters sent to translate in one lookup.'),
@@ -669,6 +685,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 closeRow.set_active(cfg.popup_close_on_focus_loss !== false);
                 dictRow.set_active(cfg.dictionary !== false);
                 cacheOfflineRow.set_active(cfg.cache_offline === true);
+                normalizeRow.set_active(cfg.normalize === true);
                 ttsRow.set_active(cfg.tts === true);
                 ttsLookupRow.set_active(cfg.tts_on_lookup === true);
                 ttsAddTrRow.set_active(cfg.tts_add_translation === true);
