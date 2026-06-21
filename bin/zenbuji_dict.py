@@ -194,7 +194,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             row.append(entry)
             if analyze_fn is not None:
                 fill = Gtk.Button(icon_name="view-refresh-symbolic")
-                fill.add_css_class("zenbuji-icon")
+                fill.add_css_class("flat")          # strip the default frame
+                fill.add_css_class("zenbuji-icon")  # neutral, accent on hover
                 fill.set_valign(Gtk.Align.CENTER)
                 fill.set_tooltip_text(t("fill_reading"))
 
@@ -299,7 +300,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 keys_box.append(pair)
             frow.append(keys_box)
         else:
-            # --- Header: title + stats + clear-all ------------------------ //
+            # --- Header: title + add + stats (clear-all lives in the footer) -- //
             header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             title = Gtk.Label(label=t("title"), xalign=0)
             title.add_css_class("zenbuji-title")
@@ -308,21 +309,25 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             if save_fn is not None:
                 add_btn = Gtk.Button(label=t("add_word"))
                 add_btn.add_css_class("zenbuji-secondary")
+                add_btn.add_css_class("zenbuji-small")
                 add_btn.set_valign(Gtk.Align.CENTER)
                 add_btn.set_tooltip_text(t("add_word"))
                 add_btn.connect("clicked", lambda _b: toggle_add_form())
                 header.append(add_btn)
             stats_btn = Gtk.Button(label=t("stats"))
             stats_btn.add_css_class("zenbuji-secondary")
+            stats_btn.add_css_class("zenbuji-small")
             stats_btn.set_valign(Gtk.Align.CENTER)
             stats_btn.set_tooltip_text(t("stats"))
             stats_btn.connect("clicked", lambda _b: _spawn_stats())
+            header.append(stats_btn)
+            # Destructive: kept out of the header, tucked into the footer below
+            # as a small button so it's harder to hit by accident.
             clear_btn = Gtk.Button(label=t("clear_all"))
             clear_btn.add_css_class("zenbuji-secondary")
+            clear_btn.add_css_class("zenbuji-small")
             clear_btn.add_css_class("zenbuji-icon-danger")  # destructive: red
             clear_btn.set_valign(Gtk.Align.CENTER)
-            header.append(stats_btn)
-            header.append(clear_btn)
             card.append(header)
 
             # The "Add word" form lives just under the header, hidden until the
@@ -349,7 +354,6 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 state["editing"] = True
                 word = Gtk.Entry(hexpand=True)
                 word.set_placeholder_text(t("word"))
-                word.add_css_class("zenbuji-quiz-input")
                 add_form.append(word)
                 reading_row, reading = make_reading_field(word.get_text)
                 add_form.append(reading_row)
@@ -421,6 +425,17 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
         if game_footer is not None:
             card.append(game_footer)
+        elif not game_mode:
+            # Footer holds the destructive "Clear all", away from the everyday
+            # header actions so it's harder to hit by accident.
+            foot_rule = Gtk.Box()
+            foot_rule.add_css_class("zenbuji-hairline")
+            card.append(foot_rule)
+            footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            footer.set_halign(Gtk.Align.END)
+            footer.set_margin_top(6)
+            footer.append(clear_btn)
+            card.append(footer)
 
         empty_label = Gtk.Label(label=t("empty"), xalign=0)
         empty_label.add_css_class("zenbuji-note")
