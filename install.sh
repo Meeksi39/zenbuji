@@ -64,6 +64,11 @@ if [[ "$MODE" == uninstall ]]; then
     rm -f "$NAUTILUS_SCRIPTS/zenbuji (furigana + translation)"
     rm -f "$NAUTILUS_EXT_DIR/zenbuji-nautilus.py"
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/zenbuji-learn.desktop"
+    # App icon + desktop entry.
+    rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/applications/com.meeksi39.zenbuji.desktop"
+    rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps/com.meeksi39.zenbuji.png"
+    command -v gtk-update-icon-cache >/dev/null \
+        && gtk-update-icon-cache -qtf "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || true
     # Tear down the VOICEVOX engine service/unit if we set it up (keeps the
     # pulled image — `podman rmi voicevox/voicevox_engine` reclaims that space).
     VV_UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd/voicevox.container"
@@ -144,6 +149,34 @@ EOF
 chmod +x "$BIN_DIR/zenbuji"
 ln -sf "$BIN_DIR/zenbuji" "$BIN_DIR/zb"
 echo "  installed $BIN_DIR/zenbuji (+ zb alias)"
+
+# --- App icon + desktop entry -------------------------------------------- #
+# Every GTK window runs under the app-id com.meeksi39.zenbuji, so a desktop file
+# of that name (matching StartupWMClass) lets GNOME show our icon for them in
+# the dock / window list. The icon lives in the hicolor theme.
+APP_ID="com.meeksi39.zenbuji"
+ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
+APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$ICON_DIR" "$APPS_DIR"
+cp "$REPO_DIR/icons/$APP_ID.png" "$ICON_DIR/$APP_ID.png"
+cat > "$APPS_DIR/$APP_ID.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=zenbuji
+GenericName=Japanese reading helper
+Comment=Furigana + EN/DE translation for Japanese, anywhere on screen
+Exec=$BIN_DIR/zenbuji dict
+Icon=$APP_ID
+Terminal=false
+Categories=Education;
+Keywords=Japanese;furigana;kanji;translation;
+StartupWMClass=$APP_ID
+EOF
+command -v gtk-update-icon-cache >/dev/null \
+    && gtk-update-icon-cache -qtf "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || true
+command -v update-desktop-database >/dev/null \
+    && update-desktop-database "$APPS_DIR" 2>/dev/null || true
+echo "  installed app icon + $APPS_DIR/$APP_ID.desktop"
 
 # --- GNOME extension ----------------------------------------------------- #
 mkdir -p "$(dirname "$EXT_DST")"
