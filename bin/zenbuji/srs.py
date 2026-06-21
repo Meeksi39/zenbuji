@@ -282,6 +282,9 @@ def srs_stats() -> dict:
     activity = store.load_activity()
     today_day = activity.get(today.isoformat(), {})
     accuracy = (correct_total / reviews_total) if reviews_total else None
+    total_study_ms = sum(int(day.get("time_ms", 0)) for day in activity.values())
+    days_studied = sum(1 for day in activity.values()
+                       if int(day.get("time_ms", 0)) > 0)
     return {
         "total": total,
         "reviewed": reviewed,
@@ -297,8 +300,9 @@ def srs_stats() -> dict:
         "slowest": slowest[:5],
         "avg_answer_ms": round(answer_ms_total / answer_n_total)
                          if answer_n_total else None,
-        "total_study_ms": sum(int(day.get("time_ms", 0))
-                              for day in activity.values()),
+        "total_study_ms": total_study_ms,
+        "avg_day_ms": round(total_study_ms / days_studied) if days_studied
+                      else None,
         "today_study_ms": int(today_day.get("time_ms", 0)),
         "streak": store.activity_streak(activity),
         "today_reviews": int(today_day.get("reviews", 0)),

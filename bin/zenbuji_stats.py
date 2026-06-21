@@ -58,6 +58,7 @@ STATS_STRINGS = {
     "slowest":    {"en": "Slowest",           "ja": "時間がかかる"},
     "avg_time":   {"en": "Avg answer",        "ja": "平均回答"},
     "total_time": {"en": "Total time",        "ja": "総学習時間"},
+    "per_day":    {"en": "Per day",           "ja": "1日平均"},
     "practice":   {"en": "Practice now",      "ja": "練習する"},
     "close":      {"en": "Close",             "ja": "閉じる"},
     "empty":      {"en": "No words to learn yet — look up some Japanese first.",
@@ -247,6 +248,9 @@ def _time_row(stats, t):
     row.set_margin_top(8)
     row.append(_stat(fmt_duration(stats.get("total_study_ms", 0)),
                      t("total_time"), accent=True))
+    row.append(_vrule())
+    per_day = stats.get("avg_day_ms")
+    row.append(_stat(fmt_duration(per_day) if per_day else "—", t("per_day")))
     row.append(_vrule())
     avg = stats.get("avg_answer_ms")
     row.append(_stat(fmt_ms(avg) if avg else "—", t("avg_time")))

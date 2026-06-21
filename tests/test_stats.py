@@ -110,6 +110,7 @@ def test_answer_time_average_slowest_and_total(store):
     assert s["slowest"][0]["text"] == "slow"        # highest per-card avg first
     assert s["total_study_ms"] == 35000             # 30000 + 5000
     assert s["today_study_ms"] == 30000
+    assert s["avg_day_ms"] == 17500                 # 35000 over 2 studied days
 
 
 def test_streak_and_today_from_activity(store):
