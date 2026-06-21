@@ -110,6 +110,9 @@ const UI_JA = {
     'Greeting when practice opens': '練習開始時のあいさつ',
     'Show a random casual greeting (spoken too, if read-aloud is on).':
         'ランダムなカジュアルなあいさつを表示します（読み上げが有効なら音声でも）。',
+    'Drill missed readings': '間違えた読みをドリル',
+    'Retype a reading you got wrong this many times (0 = off).':
+        '間違えた読みをこの回数だけ入力し直します（0 で無効）。',
     'Show translation as a hint': '翻訳をヒントとして表示',
     'Show the meaning during practice (test only the reading).':
         '練習中に意味を表示します（読みのみ出題）。',
