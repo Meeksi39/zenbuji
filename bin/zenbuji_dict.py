@@ -50,6 +50,12 @@ DICT_STRINGS = {
     "edit":       {"en": "Edit translations", "ja": "翻訳を編集"},
     "save":       {"en": "Save",         "ja": "保存"},
     "cancel":     {"en": "Cancel",       "ja": "キャンセル"},
+    "add_word":   {"en": "Add word",     "ja": "単語を追加"},
+    "create":     {"en": "Create",       "ja": "作成"},
+    "word":       {"en": "Word",         "ja": "単語"},
+    "reading":    {"en": "Reading",      "ja": "読み"},
+    "fill_reading": {"en": "Fill reading (offline)",
+                     "ja": "読みを自動入力（オフライン）"},
     "exclude":    {"en": "Exclude from practice", "ja": "練習から除外"},
     "excluded":   {"en": "Excluded from practice", "ja": "練習から除外中"},
     "first":      {"en": "first",        "ja": "初回"},
@@ -139,12 +145,18 @@ def _spawn_stats():
 
 def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     load_fn, delete_fn, clear_fn, stats_fn,
-                    refresh_fn=None, update_fn=None, set_exclude_fn=None,
+                    refresh_fn=None, update_fn=None, save_fn=None,
+                    analyze_fn=None, set_exclude_fn=None,
                     watch_path=None, quota_fn=None, speak_fn=None,
                     game_mode=False, shortcuts=None, busy_path=None) -> int:
     """Show the dictionary window. The *_fn callables provide the data layer.
 
-    `update_fn(text, {lang: value})` corrects an entry's translations,
+    `save_fn(text, reading, {lang: value}, original=None)` creates or edits an
+    entry by hand (no lookup) — it backs both the "Add word" form and the inline
+    editor (which can also fix the reading and rename the surface word; pass the
+    old key as `original`). `analyze_fn(text)->reading` optionally fills the
+    reading offline. `update_fn(text, {lang: value})` is the older
+    translations-only edit, used when no `save_fn` is given (e.g. game mode).
     `set_exclude_fn(text, bool)` toggles a word out of the practice quiz, and
     `watch_path` (the dictionary file) drives live auto-refresh so background
     OCR-adds show up in an already-open window.
@@ -173,6 +185,32 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         stats_label = None
         quota_label = None
         spinner = busy_box = busy_lbl = None
+
+        def make_reading_field(get_surface, value=""):
+            """A reading entry fused with an optional offline-fill (↻) button.
+            `get_surface()` supplies the text to analyse. Returns (row, entry)."""
+            entry = Gtk.Entry(text=value, hexpand=True)
+            entry.set_placeholder_text(t("reading"))
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            row.append(entry)
+            if analyze_fn is not None:
+                fill = Gtk.Button(icon_name="view-refresh-symbolic")
+                fill.add_css_class("flat")          # strip the default frame
+                fill.add_css_class("zenbuji-icon")  # neutral, accent on hover
+                fill.set_valign(Gtk.Align.CENTER)
+                fill.set_tooltip_text(t("fill_reading"))
+
+                def do_fill(_b):
+                    surface = (get_surface() or "").strip()
+                    if surface:
+                        try:
+                            entry.set_text(analyze_fn(surface) or "")
+                        except Exception:  # noqa: BLE001 — fill is best-effort
+                            pass
+
+                fill.connect("clicked", do_fill)
+                row.append(fill)
+            return row, entry
 
         game_footer = None
         combo_lbl = quip_lbl = None
@@ -263,24 +301,102 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 keys_box.append(pair)
             frow.append(keys_box)
         else:
-            # --- Header: title + stats + clear-all ------------------------ //
+            # --- Header: title + add + stats (clear-all lives in the footer) -- //
             header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             title = Gtk.Label(label=t("title"), xalign=0)
             title.add_css_class("zenbuji-title")
             title.set_hexpand(True)
+            header.append(title)
+            if save_fn is not None:
+                add_btn = Gtk.Button(label=t("add_word"))
+                add_btn.add_css_class("zenbuji-secondary")
+                add_btn.add_css_class("zenbuji-small")
+                add_btn.set_valign(Gtk.Align.CENTER)
+                add_btn.set_tooltip_text(t("add_word"))
+                add_btn.connect("clicked", lambda _b: toggle_add_form())
+                header.append(add_btn)
             stats_btn = Gtk.Button(label=t("stats"))
             stats_btn.add_css_class("zenbuji-secondary")
+            stats_btn.add_css_class("zenbuji-small")
             stats_btn.set_valign(Gtk.Align.CENTER)
             stats_btn.set_tooltip_text(t("stats"))
             stats_btn.connect("clicked", lambda _b: _spawn_stats())
+            header.append(stats_btn)
+            # Destructive: kept out of the header, tucked into the footer below
+            # as a small button so it's harder to hit by accident.
             clear_btn = Gtk.Button(label=t("clear_all"))
             clear_btn.add_css_class("zenbuji-secondary")
+            clear_btn.add_css_class("zenbuji-small")
             clear_btn.add_css_class("zenbuji-icon-danger")  # destructive: red
             clear_btn.set_valign(Gtk.Align.CENTER)
-            header.append(title)
-            header.append(stats_btn)
-            header.append(clear_btn)
             card.append(header)
+
+            # The "Add word" form lives just under the header, hidden until the
+            # button reveals it. Rebuilt fresh (blank fields) each time it opens.
+            add_form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            add_form.add_css_class("zenbuji-add-form")
+            add_form.set_visible(False)
+            card.append(add_form)
+
+            def close_add_form():
+                child = add_form.get_first_child()
+                while child is not None:
+                    add_form.remove(child)
+                    child = add_form.get_first_child()
+                add_form.set_visible(False)
+                state["editing"] = False
+                _run_pending()
+
+            def toggle_add_form():
+                if add_form.get_visible():
+                    close_add_form()
+                    return
+                # Pause live-refresh while typing, like the inline editor.
+                state["editing"] = True
+                word = Gtk.Entry(hexpand=True)
+                word.set_placeholder_text(t("word"))
+                add_form.append(word)
+                reading_row, reading = make_reading_field(word.get_text)
+                add_form.append(reading_row)
+                fields = {}
+                for lang in languages:
+                    e = Gtk.Entry(hexpand=True)
+                    e.set_placeholder_text(lang_names.get(lang, lang.upper()))
+                    fields[lang] = e
+                    add_form.append(e)
+
+                def do_create(*_a):
+                    surface = word.get_text().strip()
+                    if not surface or save_fn is None:
+                        return
+                    try:
+                        save_fn(surface, reading.get_text(),
+                                {l: w.get_text() for l, w in fields.items()})
+                    except Exception:  # noqa: BLE001
+                        pass
+                    close_add_form()
+                    rebuild()
+
+                btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                               homogeneous=True)
+                cancel_b = Gtk.Button(label=t("cancel"))
+                cancel_b.add_css_class("zenbuji-secondary")
+                cancel_b.connect("clicked", lambda _b: close_add_form())
+                create_b = Gtk.Button(label=t("create"))
+                create_b.add_css_class("zenbuji-action")
+                create_b.connect("clicked", do_create)
+                for w in [word, reading, *fields.values()]:
+                    w.connect("activate", do_create)
+                btns.append(cancel_b)
+                btns.append(create_b)
+                add_form.append(btns)
+                # Set the form off from the stats/search/list below it.
+                rule = Gtk.Box()
+                rule.add_css_class("zenbuji-hairline")
+                rule.set_margin_top(6)
+                add_form.append(rule)
+                add_form.set_visible(True)
+                word.grab_focus()
 
             stats_label = Gtk.Label(xalign=0, wrap=True)
             stats_label.add_css_class("zenbuji-quota")
@@ -315,6 +431,17 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
         if game_footer is not None:
             card.append(game_footer)
+        elif not game_mode:
+            # Footer holds the destructive "Clear all", away from the everyday
+            # header actions so it's harder to hit by accident.
+            foot_rule = Gtk.Box()
+            foot_rule.add_css_class("zenbuji-hairline")
+            card.append(foot_rule)
+            footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            footer.set_halign(Gtk.Align.END)
+            footer.set_margin_top(6)
+            footer.append(clear_btn)
+            card.append(footer)
 
         empty_label = Gtk.Label(label=t("empty"), xalign=0)
         empty_label.add_css_class("zenbuji-note")
@@ -417,7 +544,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                         lambda _b, r=(reading or text): speak_fn(r)))
                 top.append(_icon_btn("accessories-dictionary-symbolic", "look_up",
                                      lambda _b, x=text: _spawn_popup(x)))
-                if update_fn is not None:
+                if save_fn is not None or update_fn is not None:
                     top.append(_icon_btn("document-edit-symbolic", "edit",
                                          lambda _b: show_edit()))
                 if refresh_fn is not None:
@@ -489,21 +616,44 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 outer.set_margin_bottom(8)
                 outer.set_margin_start(6)
                 outer.set_margin_end(6)
-                head = Gtk.Label(label=f"{text}　{reading}" if reading else text,
-                                 xalign=0, wrap=True)
-                head.add_css_class("zenbuji-dict-jp")
-                head.set_max_width_chars(40)
-                outer.append(head)
+                # With save_fn the whole entry is editable — including the
+                # surface word itself (a rename) and the reading — and every
+                # configured language gets a field. The older update_fn path
+                # keeps the surface read-only and edits translations only.
+                surface_entry = None
+                if save_fn is not None:
+                    surface_entry = Gtk.Entry(text=text, hexpand=True)
+                    surface_entry.set_placeholder_text(t("word"))
+                    outer.append(surface_entry)
+                else:
+                    head = Gtk.Label(label=text, xalign=0, wrap=True)
+                    head.add_css_class("zenbuji-dict-jp")
+                    head.set_max_width_chars(40)
+                    outer.append(head)
+
+                reading_entry = None
+                if save_fn is not None:
+                    reading_row, reading_entry = make_reading_field(
+                        lambda: (surface_entry.get_text() if surface_entry
+                                 else text),
+                        value=reading)
+                    outer.append(reading_row)
 
                 fields = {}
-                for lang in _langs_in(trans):
+                edit_langs = languages if save_fn is not None else _langs_in(trans)
+                for lang in edit_langs:
                     e = Gtk.Entry(text=trans.get(lang, ""), hexpand=True)
                     e.set_placeholder_text(lang_names.get(lang, lang.upper()))
                     fields[lang] = e
                     outer.append(e)
 
                 def on_save(*_a):
-                    do_save(text, {l: w.get_text() for l, w in fields.items()})
+                    new_text = (surface_entry.get_text() if surface_entry
+                                is not None else text)
+                    do_save(new_text, {l: w.get_text() for l, w in fields.items()},
+                            reading=(reading_entry.get_text()
+                                     if reading_entry is not None else None),
+                            original=text)
 
                 btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                                homogeneous=True)
@@ -513,7 +663,12 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 save_b = Gtk.Button(label=t("save"))
                 save_b.add_css_class("zenbuji-action")
                 save_b.connect("clicked", on_save)
-                for w in fields.values():
+                inputs = list(fields.values())
+                if reading_entry is not None:
+                    inputs = [reading_entry] + inputs
+                if surface_entry is not None:
+                    inputs = [surface_entry] + inputs
+                for w in inputs:
                     w.connect("activate", on_save)
                 btns.append(cancel_b)
                 btns.append(save_b)
@@ -593,13 +748,15 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             delete_fn(text)
             rebuild()
 
-        def do_save(text, translations):
+        def do_save(text, translations, reading=None, original=None):
             state["editing"] = False
-            if update_fn is not None:
-                try:
+            try:
+                if save_fn is not None:
+                    save_fn(text, reading or "", translations, original=original)
+                elif update_fn is not None:
                     update_fn(text, translations)
-                except Exception:  # noqa: BLE001
-                    pass
+            except Exception:  # noqa: BLE001
+                pass
             state["pending"] = False
             rebuild()
 

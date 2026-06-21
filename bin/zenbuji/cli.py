@@ -245,6 +245,44 @@ def _capture_voice(selected) -> int:
     return _CAPTURE_VOICE_ALT if selected == _CAPTURE_VOICE else _CAPTURE_VOICE
 
 
+def _add_manual(args, cfg) -> int:
+    """`zenbuji add --manual`: create/edit one entry by hand, no lookup.
+
+    Surface = the joined positional words; reading from --reading (or the offline
+    analyzer with --fill-reading); meanings from repeatable --tr LANG=VALUE.
+    """
+    surface = " ".join(args.words).strip()
+    if not surface:
+        print('No word given (e.g. zenbuji add --manual 食べる --reading たべる '
+              '--tr en="to eat").', file=sys.stderr)
+        return 2
+    translations: dict = {}
+    for pair in (args.tr or []):
+        key, sep, val = pair.partition("=")
+        if not sep:
+            print(f"ignoring --tr {pair!r} (expected LANG=VALUE)", file=sys.stderr)
+            continue
+        translations[key.strip()] = val.strip()
+    reading = (args.reading or "").strip()
+    if not reading and args.fill_reading:
+        reading = lang.analyze(surface)[0]
+    entry = store.dict_set(surface, reading, translations)
+    if entry is None:
+        print("Could not add (blank word).", file=sys.stderr)
+        return 1
+
+    if bool(args.speak or (cfg.get("tts", False) and not args.no_speak)):
+        tts.speak(entry.get("reading") or surface, cfg, block=True)
+
+    if args.json:
+        print(json.dumps(entry, ensure_ascii=False))
+    elif not args.quiet:
+        tr = "; ".join(f"{l}: {v}" for l, v in entry["translations"].items())
+        reading_disp = f"（{entry['reading']}）" if entry.get("reading") else ""
+        print(f"✓ {surface}{reading_disp}" + (f" — {tr}" if tr else ""))
+    return 0
+
+
 def cmd_add(args, cfg) -> int:
     """Translate words and store them in the local dictionary with no popup.
 
@@ -264,6 +302,9 @@ def cmd_add(args, cfg) -> int:
         if args.lang
         else cfg.get("languages", ["en", "de"])
     )
+
+    if getattr(args, "manual", False):
+        return _add_manual(args, cfg)
 
     ocr_notes: list[str] = []
     want_ocr = args.ocr or args.ocr_image
@@ -469,6 +510,13 @@ def main(argv=None) -> int:
                        help="don't read aloud even if tts is on in config")
         p.add_argument("--quiet", "-q", action="store_true",
                        help="suppress the per-word summary")
+        p.add_argument("--manual", action="store_true",
+                       help="create/edit an entry by hand — no translation lookup")
+        p.add_argument("--reading", help="reading (furigana) for --manual")
+        p.add_argument("--fill-reading", dest="fill_reading", action="store_true",
+                       help="fill the --manual reading from the offline analyzer")
+        p.add_argument("--tr", action="append", metavar="LANG=VALUE",
+                       help="a translation for --manual (repeatable, e.g. en=water)")
         p.add_argument("--json", action="store_true")
         p.add_argument("words", nargs="*")
         return cmd_add(p.parse_args(rest), cfg)
@@ -881,6 +929,18 @@ def launch_dictionary(cfg: dict) -> int:
         fresh = translation.translate_deepl(text, targets, key, lang_ui)
         return store.dict_record(text, reading, fresh)
 
+    def save_entry(text, reading, translations, original=None):
+        """Manual create/edit (no lookup). When `original` differs, it's a
+        rename: move the key — keeping count/timestamps — and carry the SRS
+        card across; otherwise create-or-edit in place."""
+        if original and original.strip() and original.strip() != text.strip():
+            entry = store.dict_rename(original, text, reading=reading,
+                                      translations=translations)
+            if entry is not None:
+                srs.srs_rename(original, text)
+            return entry
+        return store.dict_set(text, reading, translations)
+
     return show_dictionary(
         ui_language=cfg.get("ui_language", "en"),
         languages=cfg.get("languages", ["en", "de"]),
@@ -889,7 +949,8 @@ def launch_dictionary(cfg: dict) -> int:
         clear_fn=store.clear_dict,
         stats_fn=store.dict_stats,
         refresh_fn=refresh_fn,
-        update_fn=store.dict_update_translations,
+        save_fn=save_entry,
+        analyze_fn=lambda t: lang.analyze(t)[0],
         set_exclude_fn=store.dict_set_exclude,
         watch_path=paths.DICT_PATH,
         quota_fn=lambda: (translation.deepl_usage(cfg.get("deepl_api_key", ""))

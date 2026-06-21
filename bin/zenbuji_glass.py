@@ -51,6 +51,7 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 }
 
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
+.zenbuji-add-form { padding: 6px 2px 10px 2px; }
 
 /* --- buttons: Apple-style glass --- */
 /* Soft, padded pills so the controls feel friendly across every window. */
@@ -94,6 +95,11 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
    / danger red) readable, instead of the theme's default solid active fill. */
 .zenbuji-secondary:active,
 .zenbuji-secondary:checked { background-color: alpha(currentColor, 0.24); }
+/* Compact modifier for toolbar / footer actions; pairs with -secondary. */
+.zenbuji-small {
+    padding: 3px 11px; min-height: 0; border-radius: 9px;
+    font-size: 12px; font-weight: 500;
+}
 /* Flat icon buttons: neutral by default so dense rows stay calm, accent on
    hover. Destructive stays red so delete reads clearly. */
 .zenbuji-icon { color: alpha(currentColor, 0.45); }

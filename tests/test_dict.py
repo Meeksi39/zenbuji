@@ -99,6 +99,24 @@ def test_delete_and_clear(store):
     assert zenbuji.load_dict() == {}
 
 
+def test_delete_also_removes_srs_card(store):
+    # Regression: deleting 雪 left its SRS card behind, so it kept showing up.
+    zenbuji.dict_record("雪", "ゆき", {"en": "snow"})
+    zenbuji.srs_review("雪", True)                 # give it a schedule
+    assert zenbuji.srs_get("雪") is not None
+    zenbuji.dict_delete("雪")
+    assert zenbuji.dict_get("雪") is None
+    assert zenbuji.srs_get("雪") is None            # no orphaned card
+
+
+def test_clear_dict_also_clears_srs(store):
+    zenbuji.dict_record("雪", "ゆき", {"en": "snow"})
+    zenbuji.srs_review("雪", True)
+    zenbuji.clear_dict()
+    assert zenbuji.load_dict() == {}
+    assert zenbuji.srs_get("雪") is None
+
+
 def test_update_translations_replaces_value(store):
     zenbuji.dict_record("水", "みず", {"en": "watr", "de": "Wasser"})
     e = zenbuji.dict_update_translations("水", {"en": "water"})
@@ -114,6 +132,50 @@ def test_update_translations_blank_drops_language(store):
 
 def test_update_translations_unknown_entry_returns_none(store):
     assert zenbuji.dict_update_translations("nope", {"en": "x"}) is None
+
+
+# --- dict_set: manual create / edit (no lookup, no count bump) -------------- #
+def test_dict_set_creates_with_zero_count(store):
+    e = zenbuji.dict_set("食べる", "たべる", {"en": "to eat", "de": "essen"})
+    assert e["count"] == 0                       # no lookup happened
+    assert e["reading"] == "たべる"
+    assert e["translations"] == {"en": "to eat", "de": "essen"}
+    assert e["first_seen"] and e["last_seen"]    # stamped so it sorts/export
+
+
+def test_dict_set_blank_text_returns_none(store):
+    assert zenbuji.dict_set("  ", "x", {"en": "y"}) is None
+
+
+def test_dict_set_edits_reading_and_merges(store):
+    zenbuji.dict_set("水", "みづ", {"en": "watr"})        # typo'd reading + meaning
+    before = zenbuji.dict_get("水")
+    e = zenbuji.dict_set("水", "みず", {"en": "water", "de": "Wasser"})
+    assert e["reading"] == "みず"                          # reading corrected
+    assert e["translations"] == {"en": "water", "de": "Wasser"}   # merged
+    assert e["count"] == 0                                 # still no lookup
+    assert e["first_seen"] == before["first_seen"]         # timestamps stable
+
+
+def test_dict_set_blank_value_drops_language(store):
+    zenbuji.dict_set("水", "みず", {"en": "water", "de": "Wasser"})
+    e = zenbuji.dict_set("水", "みず", {"de": "   "})
+    assert "de" not in e["translations"] and e["translations"]["en"] == "water"
+
+
+def test_dict_set_then_record_bumps_from_zero(store):
+    # A manual entry that's later looked up starts counting from its real first
+    # lookup, not pre-inflated.
+    zenbuji.dict_set("水", "みず", {"en": "water"})
+    e = zenbuji.dict_record("水", "みず", {"en": "water"})
+    assert e["count"] == 1
+
+
+def test_dict_set_monotonic_last_seen(store):
+    for w in ["a", "b", "c"]:
+        zenbuji.dict_set(w, w, {"en": w})
+    stamps = [zenbuji.dict_get(w)["last_seen"] for w in ["a", "b", "c"]]
+    assert stamps == sorted(stamps) and len(set(stamps)) == 3
 
 
 def test_record_last_seen_is_strictly_monotonic(store):
@@ -142,3 +204,32 @@ def test_set_exclude_toggles_flag(store):
     assert zenbuji.dict_get("水")["exclude"] is True
     zenbuji.dict_set_exclude("水", False)
     assert "exclude" not in zenbuji.dict_get("水")
+
+
+# --- dict_rename: change the surface word, keep the entry's history --------- #
+def test_dict_rename_moves_key_and_keeps_history(store):
+    zenbuji.dict_record("食ベる", "たべる", {"en": "eat"})   # typo'd katakana ベ
+    zenbuji.dict_record("食ベる", "たべる", {"en": "eat"})   # count -> 2
+    e0 = zenbuji.dict_get("食ベる")
+    count0, first0 = e0["count"], e0["first_seen"]
+    e = zenbuji.dict_rename("食ベる", "食べる")
+    assert zenbuji.dict_get("食ベる") is None
+    assert e["text"] == "食べる"
+    assert e["count"] == count0 and e["first_seen"] == first0   # preserved
+
+
+def test_dict_rename_can_edit_in_the_same_step(store):
+    zenbuji.dict_record("X", "えくす", {"en": "old"})
+    e = zenbuji.dict_rename("X", "新", reading="しん",
+                            translations={"en": "new", "de": "neu"})
+    assert e["reading"] == "しん"
+    assert e["translations"] == {"en": "new", "de": "neu"}
+
+
+def test_dict_rename_guards(store):
+    assert zenbuji.dict_rename("nope", "x") is None        # no such entry
+    zenbuji.dict_record("a", "あ", {"en": "a"})
+    assert zenbuji.dict_rename("a", "   ") is None          # blank new key
+    zenbuji.dict_record("b", "べ", {"en": "b"})
+    assert zenbuji.dict_rename("a", "b") is None            # won't clobber b
+    assert zenbuji.dict_get("a") is not None                # a left untouched

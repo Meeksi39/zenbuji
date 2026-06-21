@@ -93,3 +93,16 @@ def test_summary_after_review(store):
     assert s["level"] == "learning"
     assert s["correct"] == 1 and s["wrong"] == 0
     assert s["due"]
+
+
+def test_srs_rename_carries_the_card(store):
+    zenbuji.srs_review("食ベる", True)               # build progress on the typo
+    zenbuji.srs_rename("食ベる", "食べる")
+    assert zenbuji.srs_get("食ベる") is None
+    moved = zenbuji.srs_get("食べる")
+    assert moved is not None and moved["correct"] == 1   # progress preserved
+
+
+def test_srs_rename_noop_when_no_card(store):
+    zenbuji.srs_rename("ghost", "x")                 # no card -> nothing created
+    assert zenbuji.srs_get("x") is None

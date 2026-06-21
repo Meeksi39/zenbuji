@@ -91,6 +91,33 @@ def test_export_writes_file_with_output_flag(cli):
     assert "水\tみず\twater" in out.read_text(encoding="utf-8")
 
 
+def test_add_manual_creates_entry_without_lookup(cli):
+    r = cli("add", "--manual", "食べる", "--reading", "たべる",
+            "--tr", "en=to eat", "--tr", "de=essen")
+    assert r.returncode == 0, r.stderr
+    d = json.loads(cli("dict", "--json").stdout)
+    e = d["食べる"]
+    assert e["reading"] == "たべる"
+    assert e["translations"] == {"en": "to eat", "de": "essen"}
+    assert e["count"] == 0                       # manual: no lookup happened
+
+
+def test_add_manual_edits_existing(cli):
+    cli("add", "--manual", "水", "--reading", "みづ", "--tr", "en=watr")
+    r = cli("add", "--manual", "水", "--reading", "みず",
+            "--tr", "en=water", "--tr", "de=Wasser")
+    assert r.returncode == 0, r.stderr
+    e = json.loads(cli("dict", "--json").stdout)["水"]
+    assert e["reading"] == "みず"                  # corrected
+    assert e["translations"] == {"en": "water", "de": "Wasser"}
+    assert e["count"] == 0
+
+
+def test_add_manual_needs_a_word(cli):
+    r = cli("add", "--manual", "--tr", "en=x")
+    assert r.returncode == 2                       # no surface given
+
+
 def test_config_writes_only_to_isolated_path(cli):
     # SAFETY proof: a config write lands in the temp config dir, not the real one.
     r = cli("config", "--backend", "argos")

@@ -73,6 +73,23 @@ def test_excluded_words_drop_from_stats(store):
     assert all(h["text"] != "b" for h in s["hardest"])  # b not in hardest
 
 
+def test_orphaned_srs_card_ignored_in_stats(store):
+    # A card whose word is no longer in the dictionary must not show up in the
+    # totals or the "hardest" list (defends the delete-leaves-orphan bug).
+    dict_data = {"a": {"text": "a", "reading": "あ", "translations": {"en": "a"}}}
+    srs_data = {
+        "a": {"interval": 1, "last_reviewed": "2026-01-01T00:00:00",
+              "correct": 1, "wrong": 0, "lapses": 0},
+        "雪": {"interval": 1, "last_reviewed": "2026-01-01T00:00:00",
+               "correct": 0, "wrong": 9, "lapses": 9},   # orphan: not in dict
+    }
+    _seed(store, dict_data, srs_data)
+    s = zenbuji.srs_stats()
+    assert s["total"] == 1
+    assert s["reviews_total"] == 1 and s["wrong_total"] == 0
+    assert all(h["text"] != "雪" for h in s["hardest"])
+
+
 def test_streak_and_today_from_activity(store):
     today = dt.datetime.now().date()
     activity = {(today - dt.timedelta(days=i)).isoformat(): {"reviews": 3, "correct": 2}
