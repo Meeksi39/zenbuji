@@ -33,6 +33,7 @@ def _isolate_caches(tmp_path, monkeypatch):
     zenbuji.store._clear_caches()
     zenbuji.srs._clear_caches()
     zenbuji.lang._tokenize.cache_clear()
+    zenbuji.lang.dict_form.cache_clear()
 
 
 @pytest.fixture

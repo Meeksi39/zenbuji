@@ -86,3 +86,39 @@ def analyze(text: str) -> tuple[str, list[Token]]:
     reading, parts = _tokenize(text.strip())
     tokens = [Token(surface=s, reading=r, has_kanji=k) for s, r, k in parts]
     return reading, tokens
+
+
+# Parts of speech (unidic pos1) that can carry an inflection we'd want to undo.
+_CONTENT_POS = {"動詞", "形容詞", "形状詞"}      # verb, i-adjective, na-adjective
+_INFLECTION_POS = {"助動詞", "接尾辞"}            # auxiliary, suffix (the conjugation)
+
+
+@functools.lru_cache(maxsize=2048)
+def dict_form(text: str) -> str | None:
+    """The dictionary (base) form of `text` when it's a single inflected content
+    word — e.g. 食べた→食べる, 高かった→高い, 来た→来る — else None.
+
+    Only fires for a lone verb/adjective followed by inflectional auxiliaries:
+    a second content word, a particle, or a bare noun all yield None, so a real
+    phrase (本を読む), a te-form (走って), or a progressive (読んでいる) is never
+    collapsed. Uses unidic's ``orthBase`` (which keeps the surface's script:
+    きれい stays きれい, する stays する) rather than the sometimes
+    over-kanjified ``lemma`` (奇麗 / 為る). None means "leave the text as-is".
+    """
+    text = text.strip()
+    if not text:
+        return None
+    base = None
+    for word in _tagger()(text):
+        pos = getattr(word.feature, "pos1", None)
+        if pos in _CONTENT_POS:
+            if base is not None:
+                return None                      # a 2nd content word → a phrase
+            ob = (getattr(word.feature, "orthBase", None)
+                  or getattr(word.feature, "lemma", None))
+            base = ob if (ob and ob != "*") else word.surface
+        elif pos in _INFLECTION_POS:
+            continue                             # part of the conjugation
+        else:
+            return None                          # particle / noun / etc.
+    return base if (base and base != text) else None

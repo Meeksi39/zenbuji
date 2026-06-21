@@ -63,6 +63,10 @@ NOTES = {
         "en": "OCR failed: {error}",
         "ja": "OCR に失敗しました: {error}",
     },
+    "normalized": {
+        "en": "Normalized {src} → {dst} (dictionary form).",
+        "ja": "{src} を {dst} に正規化しました（辞書形）。",
+    },
 }
 
 
