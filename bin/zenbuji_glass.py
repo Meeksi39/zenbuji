@@ -459,6 +459,9 @@ def make_glass_window(application, *, title, default_size=(460, -1),
     draggable from empty areas, and optionally dismisses on focus loss.
     """
     install_css()
+    # The mascot icon (installed to the hicolor theme by install.sh) — used for
+    # the window list / alt-tab; the dock pulls it from the matching .desktop.
+    Gtk.Window.set_default_icon_name("com.meeksi39.zenbuji")
     win = Gtk.ApplicationWindow(application=application)
     win.set_title(title)
     width, height = default_size
