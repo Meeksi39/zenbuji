@@ -612,6 +612,21 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         learnGroup.add(learnGreetingRow);
 
+        const learnDrillRow = new Adw.SpinRow({
+            title: _('Drill missed readings'),
+            subtitle: _('Retype a reading you got wrong this many times (0 = off).'),
+            adjustment: new Gtk.Adjustment({
+                lower: 0, upper: 20, step_increment: 1, page_increment: 5,
+            }),
+        });
+        learnDrillRow.get_adjustment().connect('value-changed', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--learn-drill-repeats', String(learnDrillRow.get_value())]);
+        });
+        learnGroup.add(learnDrillRow);
+
         // --- Shortcuts ---------------------------------------------------- //
         const scGroup = new Adw.PreferencesGroup({
             title: _('Shortcuts'),
@@ -688,6 +703,8 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 learnHintRow.set_active(cfg.learn_show_translation !== false);
                 learnLoginRow.set_active(cfg.learn_on_login === true);
                 learnGreetingRow.set_active(cfg.learn_greeting !== false);
+                learnDrillRow.set_value(
+                    cfg.learn_drill_repeats !== undefined ? cfg.learn_drill_repeats : 5);
             } else if (err) {
                 trGroup.set_description(
                     _('Could not read zenbuji config — check the command in Advanced.'));

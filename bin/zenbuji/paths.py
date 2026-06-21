@@ -65,6 +65,10 @@ DEFAULT_CONFIG = {
     "learn_show_translation": True,
     "learn_on_login": False,
     "learn_count": 10,
+    # When a reading is missed in the quiz, drill it in by making me retype the
+    # correct reading this many times (each retype is read aloud). 0 disables the
+    # drill and just shows the old Got it / Missed buttons.
+    "learn_drill_repeats": 5,
     # Show (and, with TTS auto-read on, speak) a random casual greeting when a
     # practice round opens.
     "learn_greeting": True,

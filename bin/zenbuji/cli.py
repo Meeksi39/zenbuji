@@ -189,6 +189,9 @@ def cmd_config(args, cfg) -> int:
     if args.learn_greeting:
         cfg["learn_greeting"] = args.learn_greeting == "on"
         changed = True
+    if args.learn_drill_repeats is not None:
+        cfg["learn_drill_repeats"] = max(0, min(20, int(args.learn_drill_repeats)))
+        changed = True
     if changed:
         paths.save_config(cfg)
     if args.clear_history:
@@ -506,6 +509,9 @@ def main(argv=None) -> int:
         p.add_argument("--learn-greeting", dest="learn_greeting",
                        choices=["on", "off"],
                        help="show/speak a random greeting when practice opens")
+        p.add_argument("--learn-drill-repeats", dest="learn_drill_repeats",
+                       type=int,
+                       help="retype a missed reading this many times (0 = off)")
         p.add_argument("--clear-history", action="store_true")
         p.add_argument("--json", action="store_true")
         return cmd_config(p.parse_args(rest), cfg)
@@ -899,6 +905,9 @@ def launch_learning(cfg: dict) -> int:
     show_tr = bool(cfg.get("learn_show_translation", True))
     count = int(cfg.get("learn_count", 10) or 10)
     cards = srs.srs_select(count)
+    # Keep 0 (drill off) distinct from "unset" — no `or` fallback here.
+    drill = cfg.get("learn_drill_repeats", 5)
+    drill = max(0, int(drill)) if drill is not None else 5
 
     def grade_fn(card, reading_in, translation_in):
         return grade.grade_answer(card, reading_in, translation_in,
@@ -919,4 +928,6 @@ def launch_learning(cfg: dict) -> int:
         speak_fn=lambda t: tts.speak(t, cfg),
         auto_speak=bool(cfg.get("tts_on_lookup", False)),
         greeting=bool(cfg.get("learn_greeting", True)),
+        drill_repeats=drill,
+        match_reading_fn=grade.reading_matches,
     )

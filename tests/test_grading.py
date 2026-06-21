@@ -51,3 +51,25 @@ def test_returns_correct_answers():
     res = zenbuji.grade_answer(card(), "", "")
     assert res["correct_reading"] == "にほんご"
     assert res["correct_translations"]["de"] == "Japanisch"
+
+
+# --- reading_matches: the practice-drill retype check, same normalisation ---
+
+def test_reading_matches_exact():
+    assert zenbuji.reading_matches("にほんご", "にほんご") is True
+
+
+def test_reading_matches_katakana():
+    assert zenbuji.reading_matches("ニホンゴ", "にほんご") is True
+
+
+def test_reading_matches_spaces_ignored():
+    assert zenbuji.reading_matches("に ほ ん ご", "にほんご") is True
+
+
+def test_reading_matches_wrong():
+    assert zenbuji.reading_matches("ちがう", "にほんご") is False
+
+
+def test_reading_matches_blank():
+    assert zenbuji.reading_matches("", "にほんご") is False
