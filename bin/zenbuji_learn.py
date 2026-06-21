@@ -421,16 +421,27 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             banner.add_css_class("zenbuji-ribbon")
             banner.add_css_class("zenbuji-ribbon-levelup" if levelup
                                  else "zenbuji-ribbon-new")
-            banner.set_halign(Gtk.Align.CENTER)
-            banner.set_valign(Gtk.Align.CENTER)
+            # Top-right, overhanging — same as the game-helper ribbon.
+            banner.set_halign(Gtk.Align.END)
+            banner.set_valign(Gtk.Align.START)
             banner.set_can_target(False)
             banner.set_opacity(0.0)
+            banner.set_margin_end(70)        # start off to the right, slide in
             kanji_overlay.add_overlay(banner)
-            target = Adw.CallbackAnimationTarget.new(banner.set_opacity)
-            anim = Adw.TimedAnimation.new(banner, 0.0, 1.0, 260, target)
-            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
-            state.setdefault("_anims", []).append(anim)  # keep refs alive
-            anim.play()
+            anims = state.setdefault("_anims", [])  # keep refs alive
+            # Fade in...
+            ft = Adw.CallbackAnimationTarget.new(banner.set_opacity)
+            fade = Adw.TimedAnimation.new(banner, 0.0, 1.0, 260, ft)
+            fade.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+            anims.append(fade)
+            fade.play()
+            # ...while sliding into place from the right (margin_end 70 -> 0).
+            st = Adw.CallbackAnimationTarget.new(
+                lambda v: banner.set_margin_end(max(0, int(round(v)))))
+            slide = Adw.TimedAnimation.new(banner, 70, 0, 480, st)
+            slide.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
+            anims.append(slide)
+            slide.play()
             return banner
 
         # Translation hint: one label per language, divided by a vrule so the
