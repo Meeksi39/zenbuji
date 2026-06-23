@@ -138,3 +138,20 @@ def test_popup_window(gui):
 
 def test_about_window(gui):
     _launch_ok(gui.env, ["about"])
+
+
+def test_dict_window_with_captured_prompt(gui):
+    # Staged caption words (not in the dict) should build the "new words from
+    # videos" prompt on open without crashing.
+    _seed(gui, "dictionary.json", _CARD)
+    _seed(gui, "captured.json", {
+        "走る": {"lemma": "走る", "reading": "はしる", "pos": "動詞", "count": 2,
+                 "first_seen": "2026-01-01T00:00:00",
+                 "last_seen": "2026-01-03T00:00:00",
+                 "sample": "犬が走る", "source_title": "vid", "source_url": ""},
+        "猫": {"lemma": "猫", "reading": "ねこ", "pos": "名詞", "count": 1,
+               "first_seen": "2026-01-01T00:00:00",
+               "last_seen": "2026-01-02T00:00:00",
+               "sample": "猫がいる", "source_title": "vid", "source_url": ""},
+    })
+    _launch_ok(gui.env, ["dict"])
