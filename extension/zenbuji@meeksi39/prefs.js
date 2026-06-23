@@ -68,6 +68,9 @@ const UI_JA = {
     'Normalize to dictionary form': '辞書形に正規化',
     'Look up and store an inflected word as its dictionary form (食べた → 食べる), so one verb is one entry.':
         '活用した単語を辞書形（食べた → 食べる）で検索・保存します。一つの動詞が一つの項目になります。',
+    'Ignore pure katakana words': 'カタカナのみの単語を無視',
+    'Hide katakana-only words (loanwords like コーヒー) from the captured "new words" review list.':
+        'カタカナだけの単語（コーヒーなどの外来語）を「新着の単語」一覧から隠します。',
     'Speech': '音声',
     'Read words aloud': '単語を読み上げる',
     'Speak the reading after an OCR/silent add, and via the 🔊 buttons.':

@@ -105,6 +105,35 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 .zenbuji-icon { color: alpha(currentColor, 0.45); }
 .zenbuji-icon:hover { color: @accent_color; }
 .zenbuji-icon-danger { color: #e01b24; }
+/* Segmented tab bar (reusable via make_tabs): a faint inset track holding
+   flat segments; the active one is a solid accent pill so it reads clearly. */
+.zenbuji-tabs {
+    background-color: alpha(currentColor, 0.08);
+    border-radius: 12px;
+    padding: 3px;
+}
+.zenbuji-tab {
+    border: none;
+    background: none;
+    background-image: none;
+    box-shadow: none;
+    border-radius: 9px;
+    padding: 6px 14px;
+    min-height: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: alpha(currentColor, 0.55);
+}
+.zenbuji-tab:hover {
+    background-color: alpha(currentColor, 0.10);
+    color: currentColor;
+}
+.zenbuji-tab:checked {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+    box-shadow: 0 1px 3px alpha(#000000, 0.22);
+}
+.zenbuji-tab:checked:hover { background-color: shade(@accent_bg_color, 1.08); }
 
 /* Default text inputs (popup / dict search): subtle translucent fields that sit
    quietly on the glass. */
@@ -540,3 +569,60 @@ def make_footer():
     content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
     footer.append(content)
     return footer, content
+
+
+def make_tabs(tabs, on_select):
+    """A reusable segmented tab bar (styled like a real tab strip, not loose
+    buttons). `tabs` is a list of ``(name, label)``; `on_select(name)` fires when
+    a tab becomes active. The first tab starts selected (no callback for that).
+
+    Returns ``(widget, controller)``: append `widget` to the card, and use
+    ``controller.select(name)`` to switch programmatically or
+    ``controller.set_label(name, label)`` to update a tab's text (e.g. a count).
+    Exactly one tab is always active — clicking the active tab is a no-op.
+    """
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0,
+                  homogeneous=True)
+    box.add_css_class("zenbuji-tabs")
+    buttons = {}
+    state = {"active": None, "guard": False}
+
+    def select(name, *, notify=True):
+        if name not in buttons or state["guard"]:
+            return
+        state["guard"] = True
+        for n, b in buttons.items():
+            b.set_active(n == name)
+        state["guard"] = False
+        state["active"] = name
+        if notify:
+            on_select(name)
+
+    def _toggled(btn, name):
+        if state["guard"]:
+            return
+        if btn.get_active():
+            select(name)
+        elif state["active"] == name:        # can't un-select the active tab
+            state["guard"] = True
+            btn.set_active(True)
+            state["guard"] = False
+
+    for name, label in tabs:
+        b = Gtk.ToggleButton(label=label)
+        b.add_css_class("zenbuji-tab")
+        b.connect("toggled", _toggled, name)
+        buttons[name] = b
+        box.append(b)
+
+    class _Tabs:
+        def select(self, name):
+            select(name)
+
+        def set_label(self, name, label):
+            if name in buttons:
+                buttons[name].set_label(label)
+
+    if tabs:
+        select(tabs[0][0], notify=False)
+    return box, _Tabs()

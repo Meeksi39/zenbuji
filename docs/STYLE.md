@@ -31,6 +31,15 @@ dismissal. **Always build new surfaces on this** — never a bare
 `Gtk.ApplicationWindow`. Use `application_id="com.meeksi39.zenbuji"` +
 `NON_UNIQUE` so windows coexist and the Blur My Shell whitelist matches.
 
+Two more reusable bits live alongside it:
+- `make_footer()` → `(footer, content)`: a hairline + a horizontal row to drop
+  footer buttons into.
+- `make_tabs(tabs, on_select)` → `(widget, controller)`: a segmented tab strip
+  (`.zenbuji-tabs` track + `.zenbuji-tab` pills; the active one is a solid accent
+  pill so it stays readable). `tabs` is `[(name, label), …]`; the controller has
+  `.select(name)` and `.set_label(name, label)`. Use it instead of hand-rolling
+  toggle buttons (see `zenbuji_review.py`).
+
 ## Color
 
 - **Accent**: use the CSS vars `@accent_color` (vivid, for text/borders/icons)

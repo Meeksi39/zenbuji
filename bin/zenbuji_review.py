@@ -24,10 +24,10 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
-    from zenbuji_glass import make_footer, make_glass_window
+    from zenbuji_glass import make_footer, make_glass_window, make_tabs
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import make_footer, make_glass_window
+    from zenbuji_glass import make_footer, make_glass_window, make_tabs
 
 REVIEW_STRINGS = {
     "title":        {"en": "New words from videos",
@@ -143,16 +143,11 @@ def show_review(*, ui_language="en", languages=("en", "de"),
         title.add_css_class("zenbuji-title")
         card.append(title)
 
-        tabs = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6,
-                       homogeneous=True)
-        tab_new = Gtk.ToggleButton(label=t("tab_new", n=len(new_records)))
-        tab_new.add_css_class("zenbuji-secondary")
-        tab_ign = Gtk.ToggleButton(label=t("tab_ignored", m=len(ignored_records)))
-        tab_ign.add_css_class("zenbuji-secondary")
-        tab_new.set_active(True)
-        tabs.append(tab_new)
-        tabs.append(tab_ign)
-        card.append(tabs)
+        tabs_box, tabs = make_tabs(
+            [("new", t("tab_new", n=len(new_records))),
+             ("ignored", t("tab_ignored", m=len(ignored_records)))],
+            lambda name: _select(name))
+        card.append(tabs_box)
 
         # --- global processing indicator (only while adds are in flight) --- //
         indicator = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
@@ -218,8 +213,8 @@ def show_review(*, ui_language="en", languages=("en", "de"),
 
         # --- helpers ------------------------------------------------------- //
         def _refresh_tabs():
-            tab_new.set_label(t("tab_new", n=len(new_records)))
-            tab_ign.set_label(t("tab_ignored", m=len(ignored_records)))
+            tabs.set_label("new", t("tab_new", n=len(new_records)))
+            tabs.set_label("ignored", t("tab_ignored", m=len(ignored_records)))
             empty_new.set_visible(not new_records)
             scroll_new.set_visible(bool(new_records))
             empty_ign.set_visible(not ignored_records)
@@ -408,18 +403,11 @@ def show_review(*, ui_language="en", languages=("en", "de"),
         ignore_all_b.connect("clicked", on_ignore_all)
         restore_all_b.connect("clicked", on_restore_all)
 
-        # --- tab switching (mutually exclusive, re-entrancy guarded) ------- //
+        # --- tab switching (make_tabs handles the toggle mechanics) -------- //
         def _select(name):
             state["active"] = name
-            tab_new.set_active(name == "new")
-            tab_ign.set_active(name == "ignored")
             stack.set_visible_child_name(name)
             _sync_footer()
-
-        tab_new.connect("toggled",
-                        lambda b: b.get_active() and _select("new"))
-        tab_ign.connect("toggled",
-                        lambda b: b.get_active() and _select("ignored"))
 
         # --- initial population -------------------------------------------- //
         for rec in new_records:
