@@ -91,6 +91,46 @@ def analyze(text: str) -> tuple[str, list[Token]]:
 # Parts of speech (unidic pos1) that can carry an inflection we'd want to undo.
 _CONTENT_POS = {"動詞", "形容詞", "形状詞"}      # verb, i-adjective, na-adjective
 _INFLECTION_POS = {"助動詞", "接尾辞"}            # auxiliary, suffix (the conjugation)
+_NOUN_POS = "名詞"                               # noun
+_SKIP_NOUN_POS2 = {"固有名詞", "数詞"}            # drop proper nouns + numerals
+
+
+def content_words(text: str) -> list[tuple[str, str, str]]:
+    """Content words in `text` as ``(lemma, reading, pos1)``, deduped in
+    first-occurrence order.
+
+    Built for harvesting vocabulary from a caption line: keeps verbs,
+    i-/na-adjectives and common nouns, and drops particles, auxiliaries,
+    punctuation, symbols, proper nouns and numerals. Inflected words are folded
+    to their dictionary form (食べた→食べる) so one verb is one entry. The lemma
+    uses unidic's ``orthBase`` (keeps the surface script, like :func:`dict_form`);
+    the reading prefers the *base*-form kana fields so it matches the lemma, not
+    the surface (タベル/たべる for 食べた, not タベ).
+    """
+    out: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+    for word in _tagger()(text.strip()):
+        feat = word.feature
+        pos1 = getattr(feat, "pos1", None)
+        if pos1 == _NOUN_POS:
+            if getattr(feat, "pos2", None) in _SKIP_NOUN_POS2:
+                continue
+        elif pos1 not in _CONTENT_POS:
+            continue
+        ob = getattr(feat, "orthBase", None) or getattr(feat, "lemma", None)
+        lemma = ob if (ob and ob != "*") else word.surface
+        if not lemma or lemma in seen:
+            continue
+        kana = None
+        for attr in ("kanaBase", "pronBase", "kana", "pron"):
+            val = getattr(feat, attr, None)
+            if val and val != "*":
+                kana = val
+                break
+        reading = kata_to_hira(kana) if kana else lemma
+        seen.add(lemma)
+        out.append((lemma, reading, pos1))
+    return out
 
 
 @functools.lru_cache(maxsize=2048)

@@ -463,6 +463,117 @@ def cmd_voicevox(args, cfg) -> int:
     return 0
 
 
+def cmd_captured(args, cfg) -> int:
+    """Stage / inspect words captured from YouTube captions.
+
+    With no flags it ingests caption lines (positional, else stdin): each line is
+    tokenised to its content words (:func:`zenbuji.lang.content_words`) and staged
+    via :func:`zenbuji.store.capture_words` — no translation, and lemmas already
+    in the dictionary are skipped. ``--new``/``--list`` print JSON (the dict
+    window reads ``--new``); ``--ignore``/``--clear`` manage the staging area.
+    """
+    if args.clear:
+        store.clear_captured()
+        print("captured words cleared")
+        return 0
+    if args.ignore:
+        store.captured_ignore(args.ignore)
+        return 0
+    if args.new:
+        print(json.dumps(store.captured_new(), ensure_ascii=False))
+        return 0
+    if args.list:
+        print(json.dumps(store.load_captured(), ensure_ascii=False))
+        return 0
+
+    if args.lines:
+        lines = list(args.lines)
+    elif not sys.stdin.isatty():
+        lines = sys.stdin.read().splitlines()
+    else:
+        print("No input (give caption lines or pipe stdin).", file=sys.stderr)
+        return 2
+
+    added = 0
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        added += store.capture_words(
+            lang.content_words(line), sample=line,
+            source_title=args.source_title, source_url=args.source_url)
+    noun = "word" if added == 1 else "words"
+    print(f"staged {added} new {noun}")
+    return 0
+
+
+def _read_exact(stream, n: int):
+    """Read exactly `n` bytes from a binary stream, or None at EOF / truncation."""
+    buf = b""
+    while len(buf) < n:
+        chunk = stream.read(n - len(buf))
+        if not chunk:
+            return None
+        buf += chunk
+    return buf
+
+
+def _nm_read(stream):
+    """Read one Firefox native-messaging message (4-byte LE length + UTF-8 JSON).
+
+    Returns the decoded object, ``{}`` on a malformed body (skip it, don't crash
+    the host), or None at EOF / on a truncated stream (the host loop should exit).
+    """
+    import struct
+    raw = _read_exact(stream, 4)
+    if raw is None:
+        return None
+    (length,) = struct.unpack("<I", raw)
+    body = _read_exact(stream, length)
+    if body is None:
+        return None
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return {}
+
+
+def _nm_write(stream, obj) -> None:
+    """Write one native-messaging message with the 4-byte LE length framing."""
+    import struct
+    data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+    stream.write(struct.pack("<I", len(data)))
+    stream.write(data)
+    stream.flush()
+
+
+def cmd_native_host(cfg, stdin=None, stdout=None) -> int:
+    """Firefox native-messaging host: stage caption words sent by the extension.
+
+    Each inbound ``{lines, title, url}`` message has its lines tokenised to
+    content words and staged via :func:`zenbuji.store.capture_words`; the reply
+    reports how many words were added and how many are now new. ``stdout`` carries
+    ONLY framed messages (diagnostics go to stderr) or the protocol breaks and
+    Firefox drops the connection. Buffers are injectable so tests can drive it
+    with :class:`io.BytesIO`.
+    """
+    inp = stdin if stdin is not None else sys.stdin.buffer
+    out = stdout if stdout is not None else sys.stdout.buffer
+    while True:
+        msg = _nm_read(inp)
+        if msg is None:
+            return 0
+        added = 0
+        for line in (msg.get("lines") or []):
+            if isinstance(line, str) and line.strip():
+                added += store.capture_words(
+                    lang.content_words(line), sample=line.strip(),
+                    source_title=msg.get("title", "") or "",
+                    source_url=msg.get("url", "") or "")
+        _nm_write(out, {"ok": True, "added": added,
+                        "new": len(store.captured_new())})
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = paths.load_config()
@@ -483,6 +594,7 @@ def main(argv=None) -> int:
         "read", "furigana", "tr", "translate", "popup", "selection",
         "config", "models", "usage", "ocr", "dict", "export", "learn", "stats",
         "game", "add", "speak", "voices", "voicevox", "about",
+        "captured", "native-host",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -701,6 +813,27 @@ def main(argv=None) -> int:
     if command == "about":
         argparse.ArgumentParser(prog="zenbuji about").parse_args(rest)
         return launch_about(cfg)
+
+    if command == "captured":
+        p = argparse.ArgumentParser(prog="zenbuji captured", add_help=False)
+        p.add_argument("--source-title", dest="source_title", default="")
+        p.add_argument("--source-url", dest="source_url", default="")
+        p.add_argument("--list", action="store_true",
+                       help="print all staged words as JSON")
+        p.add_argument("--new", action="store_true",
+                       help="print staged words not yet in the dictionary as JSON")
+        p.add_argument("--ignore", metavar="WORD",
+                       help="hide a staged word (won't resurface on re-capture)")
+        p.add_argument("--clear", action="store_true",
+                       help="drop all staged words")
+        p.add_argument("lines", nargs="*",
+                       help="caption line(s) to stage (else read stdin)")
+        return cmd_captured(p.parse_args(rest), cfg)
+
+    if command == "native-host":
+        argparse.ArgumentParser(prog="zenbuji native-host",
+                                add_help=False).parse_args(rest)
+        return cmd_native_host(cfg)
 
     # Shared options for the text commands.
     p = argparse.ArgumentParser(prog=f"zenbuji {command}", add_help=False)

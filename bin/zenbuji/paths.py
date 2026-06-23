@@ -23,6 +23,9 @@ DATA_DIR = Path(
 HISTORY_PATH = DATA_DIR / "history.json"
 # Local dictionary of cached DeepL translations (see the Dictionary section).
 DICT_PATH = DATA_DIR / "dictionary.json"
+# Words staged from YouTube captions by the Firefox native-messaging host,
+# kept cheaply (no translation) until added from the dict window (see store.py).
+CAPTURED_PATH = DATA_DIR / "captured.json"
 # Spaced-repetition learning state, keyed by text (see the SRS section).
 SRS_PATH = DATA_DIR / "srs.json"
 # Daily review tallies for the statistics window (streak + recent activity).
