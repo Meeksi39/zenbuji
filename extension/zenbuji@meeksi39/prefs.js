@@ -396,6 +396,20 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
         });
         trGroup.add(normalizeRow);
 
+        const katakanaRow = new Adw.SwitchRow({
+            title: _('Ignore pure katakana words'),
+            subtitle: _('Hide katakana-only words (loanwords like コーヒー) from ' +
+                'the captured "new words" review list.'),
+        });
+        katakanaRow.connect('notify::active', () => {
+            if (loading)
+                return;
+            this._setConfig(settings,
+                ['--capture-ignore-katakana',
+                    katakanaRow.get_active() ? 'on' : 'off']);
+        });
+        trGroup.add(katakanaRow);
+
         const charRow = new Adw.SpinRow({
             title: _('Translation length limit'),
             subtitle: _('Maximum characters sent to translate in one lookup.'),
@@ -689,6 +703,7 @@ export default class ZenbujiPrefs extends ExtensionPreferences {
                 dictRow.set_active(cfg.dictionary !== false);
                 cacheOfflineRow.set_active(cfg.cache_offline === true);
                 normalizeRow.set_active(cfg.normalize === true);
+                katakanaRow.set_active(cfg.capture_ignore_katakana === true);
                 ttsRow.set_active(cfg.tts === true);
                 ttsLookupRow.set_active(cfg.tts_on_lookup === true);
                 ttsAddTrRow.set_active(cfg.tts_add_translation === true);

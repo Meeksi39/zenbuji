@@ -67,17 +67,8 @@ DICT_STRINGS = {
     "shortcuts":  {"en": "Shortcuts",    "ja": "ショートカット"},
     "busy_reading":     {"en": "Reading…",      "ja": "読み取り中…"},
     "busy_translating": {"en": "Translating…",  "ja": "翻訳中…"},
-    # The "new words from captured videos" prompt ({n} is filled in code).
-    "captured_title": {"en": "New words from videos",
-                       "ja": "動画で見つけた新しい単語"},
-    "captured_sub":   {"en": "Add these to your dictionary?",
-                       "ja": "辞書に追加しますか？"},
-    "captured_count": {"en": "{n} new", "ja": "新着 {n} 件"},
-    "add":            {"en": "Add",        "ja": "追加"},
-    "ignore":         {"en": "Ignore",     "ja": "無視"},
-    "add_all":        {"en": "Add all",    "ja": "すべて追加"},
-    "ignore_all":     {"en": "Ignore all", "ja": "すべて無視"},
-    "dismiss":        {"en": "Dismiss",    "ja": "閉じる"},
+    # Header button → the review window, when caption words are waiting ({n} in code).
+    "new_words":  {"en": "New words ({n})", "ja": "新着 ({n})"},
 }
 
 # The game overlay is intentionally Japanese-only for flavour (immersion):
@@ -155,14 +146,21 @@ def _spawn_stats():
         pass
 
 
+def _spawn_review():
+    cli = str(Path(__file__).resolve().parent / "zenbuji_main.py")
+    try:
+        subprocess.Popen([sys.executable, cli, "review"], start_new_session=True)
+    except OSError:
+        pass
+
+
 def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     load_fn, delete_fn, clear_fn, stats_fn,
                     refresh_fn=None, update_fn=None, save_fn=None,
                     analyze_fn=None, set_exclude_fn=None,
                     watch_path=None, quota_fn=None, speak_fn=None,
                     game_mode=False, shortcuts=None, busy_path=None,
-                    captured_new_fn=None, captured_resolve_fn=None,
-                    add_captured_fn=None) -> int:
+                    captured_count_fn=None) -> int:
     """Show the dictionary window. The *_fn callables provide the data layer.
 
     `save_fn(text, reading, {lang: value}, original=None)` creates or edits an
@@ -175,11 +173,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     `watch_path` (the dictionary file) drives live auto-refresh so background
     OCR-adds show up in an already-open window.
 
-    `captured_new_fn() -> [{lemma, reading, count, sample}]` returns words staged
-    from YouTube captions that aren't in the dictionary yet; when it's non-empty
-    on open, a "new words found" prompt slides in. `add_captured_fn(word)`
-    translates + stores one (translate-on-confirm), and `captured_resolve_fn(
-    word, "added"|"ignored")` clears it from the staging area.
+    `captured_count_fn() -> int` is how many words are waiting in the review
+    window; when > 0 a "New words (N)" header button appears that opens it.
     """
     t = _make_tr(ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
@@ -327,6 +322,22 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             title.add_css_class("zenbuji-title")
             title.set_hexpand(True)
             header.append(title)
+            # When caption-captured words are waiting, a button to the review
+            # window (its own surface — see zenbuji review / the top-bar menu).
+            _new_n = 0
+            if captured_count_fn is not None:
+                try:
+                    _new_n = int(captured_count_fn() or 0)
+                except Exception:  # noqa: BLE001
+                    _new_n = 0
+            if _new_n > 0:
+                new_btn = Gtk.Button(label=t("new_words").format(n=_new_n))
+                new_btn.add_css_class("zenbuji-secondary")
+                new_btn.add_css_class("zenbuji-small")
+                new_btn.set_valign(Gtk.Align.CENTER)
+                new_btn.set_tooltip_text(t("new_words").format(n=_new_n))
+                new_btn.connect("clicked", lambda _b: _spawn_review())
+                header.append(new_btn)
             if save_fn is not None:
                 add_btn = Gtk.Button(label=t("add_word"))
                 add_btn.add_css_class("zenbuji-secondary")
@@ -1038,221 +1049,11 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 quota_label.set_visible(False)
             return GLib.SOURCE_REMOVE
 
-        # --- "new words from videos" prompt (caption capture) -------------- //
-        def _remove_captured_panel():
-            panel = state.get("captured_panel")
-            if panel is not None:
-                card.remove(panel)
-                state["captured_panel"] = None
-
-        def _close_captured_panel():
-            panel = state.get("captured_panel")
-            if panel is None:
-                return
-            if not win.get_mapped():
-                _remove_captured_panel()
-                return
-            _fade(panel, panel.get_opacity(), 0.0, dur=240,
-                  easing=Adw.Easing.EASE_IN_CUBIC)
-            _slide_margin(panel, 0, 18, 240, panel.set_margin_top,
-                          easing=Adw.Easing.EASE_IN_CUBIC)
-
-            def done():
-                _remove_captured_panel()
-                return GLib.SOURCE_REMOVE
-
-            GLib.timeout_add(260, done)
-
-        def maybe_show_captured():
-            if (game_mode or captured_new_fn is None
-                    or state.get("captured_panel") is not None):
-                return GLib.SOURCE_REMOVE
-            try:
-                words = captured_new_fn() or []
-            except Exception:  # noqa: BLE001
-                words = []
-            if not words:
-                return GLib.SOURCE_REMOVE
-
-            panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-            panel.add_css_class("zenbuji-panel")
-            state["captured_panel"] = panel
-            remaining = set()
-
-            head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            title = Gtk.Label(label=t("captured_title"), xalign=0, hexpand=True)
-            title.add_css_class("zenbuji-title")
-            head.append(title)
-            count = Gtk.Label(label=t("captured_count").format(n=len(words)))
-            count.add_css_class("zenbuji-section-count")
-            count.set_valign(Gtk.Align.CENTER)
-            head.append(count)
-            panel.append(head)
-
-            sub = Gtk.Label(label=t("captured_sub"), xalign=0, wrap=True)
-            sub.add_css_class("zenbuji-meta")
-            panel.append(sub)
-
-            wordlist = Gtk.ListBox()
-            wordlist.add_css_class("zenbuji-dict-list")
-            wordlist.set_selection_mode(Gtk.SelectionMode.NONE)
-            scroll = Gtk.ScrolledWindow()
-            scroll.add_css_class("zenbuji-dict-scroll")
-            scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            scroll.set_max_content_height(220)
-            scroll.set_propagate_natural_height(True)
-            scroll.set_child(wordlist)
-            panel.append(scroll)
-
-            footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
-                             homogeneous=True)
-            add_all_b = Gtk.Button(label=t("add_all"))
-            add_all_b.add_css_class("zenbuji-action")
-            ign_all_b = Gtk.Button(label=t("ignore_all"))
-            ign_all_b.add_css_class("zenbuji-secondary")
-            dismiss_b = Gtk.Button(label=t("dismiss"))
-            dismiss_b.add_css_class("zenbuji-secondary")
-            footer.append(add_all_b)
-            footer.append(ign_all_b)
-            footer.append(dismiss_b)
-            panel.append(footer)
-
-            def _drop_row(lemma, row):
-                remaining.discard(lemma)
-                wordlist.remove(row)
-                if not remaining:
-                    _close_captured_panel()
-
-            def _resolve(lemma, action):
-                if captured_resolve_fn is not None:
-                    try:
-                        captured_resolve_fn(lemma, action)
-                    except Exception:  # noqa: BLE001
-                        pass
-
-            def on_ignore_one(lemma, row):
-                _resolve(lemma, "ignored")
-                _drop_row(lemma, row)
-
-            def on_add_one(lemma, row, add_b, ign_b):
-                if add_captured_fn is None:
-                    return
-                add_b.set_sensitive(False)
-                ign_b.set_sensitive(False)
-
-                def work():
-                    try:
-                        add_captured_fn(lemma)
-                    except Exception:  # noqa: BLE001
-                        pass
-                    _resolve(lemma, "added")
-                    GLib.idle_add(after)
-
-                def after():
-                    if win.get_mapped():
-                        _drop_row(lemma, row)
-                        rebuild()       # the freshly-added word joins the list
-                    return GLib.SOURCE_REMOVE
-
-                threading.Thread(target=work, daemon=True).start()
-
-            def on_ignore_all(_b):
-                for lemma in list(remaining):
-                    _resolve(lemma, "ignored")
-                _close_captured_panel()
-
-            def on_add_all(_b):
-                if add_captured_fn is None:
-                    return
-                add_all_b.set_sensitive(False)
-                ign_all_b.set_sensitive(False)
-                todo = list(remaining)
-
-                def work():
-                    for lemma in todo:        # sequential so DeepL isn't stampeded
-                        try:
-                            add_captured_fn(lemma)
-                        except Exception:  # noqa: BLE001
-                            pass
-                        _resolve(lemma, "added")
-                    GLib.idle_add(after)
-
-                def after():
-                    if win.get_mapped():
-                        rebuild()
-                        _close_captured_panel()
-                    return GLib.SOURCE_REMOVE
-
-                threading.Thread(target=work, daemon=True).start()
-
-            add_all_b.connect("clicked", on_add_all)
-            ign_all_b.connect("clicked", on_ignore_all)
-            dismiss_b.connect("clicked", lambda _b: _close_captured_panel())
-
-            def make_word_row(w):
-                lemma = w.get("lemma", "")
-                reading = w.get("reading", "")
-                sample = w.get("sample", "")
-                row = Gtk.ListBoxRow()
-                remaining.add(lemma)
-                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-                box.set_margin_top(6)
-                box.set_margin_bottom(6)
-                box.set_margin_start(4)
-                box.set_margin_end(4)
-                col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-                col.set_hexpand(True)
-                jp = Gtk.Label(label=lemma, xalign=0, wrap=True, selectable=True)
-                jp.add_css_class("zenbuji-dict-jp")
-                jp.set_max_width_chars(22)
-                col.append(jp)
-                if reading and reading != lemma:
-                    rl = Gtk.Label(label=reading, xalign=0, wrap=True)
-                    rl.add_css_class("zenbuji-reading")
-                    rl.set_max_width_chars(30)
-                    col.append(rl)
-                if sample:
-                    sm = Gtk.Label(label=sample, xalign=0, wrap=True)
-                    sm.add_css_class("zenbuji-meta")
-                    sm.set_max_width_chars(40)
-                    col.append(sm)
-                box.append(col)
-                add_b = Gtk.Button(icon_name="list-add-symbolic")
-                add_b.add_css_class("flat")
-                add_b.add_css_class("zenbuji-icon")
-                add_b.set_valign(Gtk.Align.CENTER)
-                add_b.set_tooltip_text(t("add"))
-                ign_b = Gtk.Button(icon_name="action-unavailable-symbolic")
-                ign_b.add_css_class("flat")
-                ign_b.add_css_class("zenbuji-icon")
-                ign_b.set_valign(Gtk.Align.CENTER)
-                ign_b.set_tooltip_text(t("ignore"))
-                add_b.connect(
-                    "clicked",
-                    lambda _b, l=lemma, r=row, a=add_b, i=ign_b: on_add_one(l, r, a, i))
-                ign_b.connect(
-                    "clicked", lambda _b, l=lemma, r=row: on_ignore_one(l, r))
-                box.append(add_b)
-                box.append(ign_b)
-                row.set_child(box)
-                return row
-
-            for w in words:
-                wordlist.append(make_word_row(w))
-
-            card.insert_child_after(panel, add_form)
-            _fade(panel, 0.0, 1.0, dur=300)
-            _slide_margin(panel, 18, 0, 320, panel.set_margin_top,
-                          easing=Adw.Easing.EASE_OUT_CUBIC)
-            return GLib.SOURCE_REMOVE
-
         rebuild()
         win.present()
         refresh_quota()
         setup_watch()
         setup_busy_watch()
-        if not game_mode and captured_new_fn is not None:
-            GLib.idle_add(maybe_show_captured)
 
     app.connect("activate", on_activate)
     return app.run([])

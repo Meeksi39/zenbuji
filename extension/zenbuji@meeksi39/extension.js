@@ -127,6 +127,8 @@ class ZenbujiIndicator extends PanelMenu.Button {
              () => this._extension.addRegion());
         item(_('Dictionary'), 'accessories-dictionary-symbolic',
              () => this._extension.openDictionary());
+        item(_('New words from videos'), 'view-list-symbolic',
+             () => this._extension.openReview());
         item(_('Practice (SRS)'), 'media-playback-start-symbolic',
              () => this._extension.openLearning());
         item(_('Statistics'), 'utilities-system-monitor-symbolic',
@@ -413,6 +415,10 @@ export default class ZenbujiExtension extends Extension {
 
     openDictionary() {
         this._spawnPopup(['dict']);
+    }
+
+    openReview() {
+        this._spawnPopup(['review']);
     }
 
     openLearning() {
