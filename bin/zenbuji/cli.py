@@ -1032,22 +1032,18 @@ def shortcuts_info(ui_language: str = "en") -> list:
 
 
 def launch_game(cfg: dict) -> int:
-    """Show the trimmed game-helper overlay (live dictionary + shortcuts + status)."""
+    """Show the game-helper overlay (hero spotlight + live list + shortcuts)."""
     try:
-        from zenbuji_dict import show_dictionary
+        from zenbuji_game import show_game
     except ImportError:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from zenbuji_dict import show_dictionary
+        from zenbuji_game import show_game
 
-    return show_dictionary(
+    return show_game(
         ui_language=cfg.get("ui_language", "en"),
         languages=cfg.get("languages", ["en", "de"]),
         load_fn=srs.dict_with_srs,
-        delete_fn=store.dict_delete,
-        clear_fn=store.clear_dict,
-        stats_fn=store.dict_stats,
         speak_fn=lambda t: tts.speak(t, cfg),
-        game_mode=True,
         shortcuts=shortcuts_info(cfg.get("ui_language", "en")),
         busy_path=paths.BUSY_PATH,
         watch_path=paths.DICT_PATH,   # live-refresh the overlay as words are added
