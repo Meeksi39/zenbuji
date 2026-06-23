@@ -140,22 +140,29 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border-radius: 12px;
     margin: 4px;
 }
-/* Sort dropdown styled to match the .zenbuji-secondary pills (its visible part
-   is an inner button; the popover stays the theme default). */
-.zenbuji-dropdown { background: none; }
+/* Sort dropdown: its visible part is an inner button - style it EXACTLY like the
+   .zenbuji-secondary .zenbuji-small header buttons, including the open/pressed
+   (:checked) state, so it doesn't fall back to the theme's accent highlight. The
+   popover list stays the theme default. */
+.zenbuji-dropdown { background: none; box-shadow: none; }
 .zenbuji-dropdown > button {
-    border-radius: 12px;
-    padding: 3px 10px;
+    border-radius: 9px;            /* .zenbuji-small */
+    padding: 3px 11px;
     min-height: 0;
     font-size: 12px;
     font-weight: 500;
     background-image: none;
-    background-color: alpha(currentColor, 0.10);
+    background-color: alpha(currentColor, 0.10);   /* .zenbuji-secondary */
     border: 1px solid alpha(currentColor, 0.14);
     box-shadow: none;
+    color: inherit;
 }
 .zenbuji-dropdown > button:hover { background-color: alpha(currentColor, 0.16); }
-.zenbuji-dropdown > button:active { background-color: alpha(currentColor, 0.24); }
+.zenbuji-dropdown > button:active,
+.zenbuji-dropdown > button:checked {
+    background-color: alpha(currentColor, 0.24);
+    box-shadow: none;
+}
 
 /* Default text inputs (popup / dict search): subtle translucent fields that sit
    quietly on the glass. */
