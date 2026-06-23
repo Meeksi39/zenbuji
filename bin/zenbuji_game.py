@@ -211,6 +211,7 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
             trans = entry.get("translations", {})
             holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
             holder.add_css_class("zenbuji-dict-card")
+            holder.add_css_class("zenbuji-game-card")   # inner padding for the cell
             holder.set_hexpand(True)
             jp = Gtk.Label(label=text, xalign=0, wrap=True, selectable=True)
             jp.add_css_class("zenbuji-game-jp")          # large kanji
