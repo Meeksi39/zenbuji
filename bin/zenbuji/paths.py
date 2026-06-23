@@ -70,6 +70,9 @@ DEFAULT_CONFIG = {
     # Fold a lone inflected word to its dictionary form before lookup/storage
     # (食べた -> 食べる), so one verb is one entry. Off by default.
     "normalize": False,
+    # Hide katakana-only words (loanwords like コーヒー) from the caption "new
+    # words" review list. Off by default — don't hide vocab unasked.
+    "capture_ignore_katakana": False,
     # Max characters accepted in the popup's translation input.
     "translation_char_limit": 200,
     # Learning quiz: show the translation as a hint (test reading only) vs hide

@@ -111,3 +111,12 @@ def test_content_words_dedups():
     pytest.importorskip("unidic_lite")
     lemmas = [w[0] for w in zenbuji.lang.content_words("猫と猫と猫")]
     assert lemmas.count("猫") == 1
+
+
+def test_content_words_drops_romaji_and_digits():
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    lemmas = [w[0] for w in zenbuji.lang.content_words("猫のtestと2024")]
+    assert "猫" in lemmas
+    assert "test" not in lemmas              # pure romaji dropped
+    assert all(not lem.isascii() for lem in lemmas)   # nothing latin/numeric slips through
