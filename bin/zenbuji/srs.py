@@ -35,32 +35,28 @@ def load_srs() -> dict:
     if (mtime is not None and _SRS_CACHE is not None
             and _SRS_CACHE[0] == key and _SRS_CACHE[1] == mtime):
         return _SRS_CACHE[2]
-    try:
+    # Recover from the .bak if the main file is missing/corrupt (load_json
+    # restores it), then re-stat for the cache mtime.
+    data = paths.load_json(path, None)
+    if isinstance(data, dict):
+        try:
+            mtime = path.stat().st_mtime_ns
+        except OSError:
+            mtime = None
         if mtime is not None:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                _SRS_CACHE = (key, mtime, data)
-                return data
-    except (OSError, ValueError):
-        pass
+            _SRS_CACHE = (key, mtime, data)
+        return data
     return {}
 
 
 def save_srs(data: dict) -> None:
     global _SRS_CACHE
+    paths.atomic_write_json(paths.SRS_PATH, data)
     try:
-        paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        paths.SRS_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        try:
-            _SRS_CACHE = (str(paths.SRS_PATH),
-                          paths.SRS_PATH.stat().st_mtime_ns, data)
-        except OSError:
-            _SRS_CACHE = None
+        _SRS_CACHE = (str(paths.SRS_PATH),
+                      paths.SRS_PATH.stat().st_mtime_ns, data)
     except OSError:
-        pass
+        _SRS_CACHE = None
 
 
 def srs_get(text: str) -> dict | None:
@@ -78,10 +74,7 @@ def srs_delete(text: str) -> None:
 def srs_clear() -> None:
     """Drop every SRS schedule (when the whole dictionary is cleared)."""
     _clear_caches()
-    try:
-        paths.SRS_PATH.unlink()
-    except (FileNotFoundError, OSError):
-        pass
+    paths.unlink_with_backup(paths.SRS_PATH)
 
 
 def srs_rename(old: str, new: str) -> None:

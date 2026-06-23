@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 
 CONFIG_DIR = Path(
@@ -113,18 +114,92 @@ DEFAULT_CONFIG = {
 
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
-    try:
-        if CONFIG_PATH.exists():
-            cfg.update(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        pass
+    saved = load_json(CONFIG_PATH, {})
+    if isinstance(saved, dict):
+        cfg.update(saved)
     if not cfg.get("deepl_api_key"):
         cfg["deepl_api_key"] = os.environ.get("DEEPL_API_KEY", "")
     return cfg
 
 
 def save_config(cfg: dict) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    atomic_write_json(CONFIG_PATH, cfg)
+
+
+# --------------------------------------------------------------------------- #
+# Durable state writes: never leave a half-written (truncated) file if the
+# process is killed mid-write, and keep one rolling `.bak` of the last-good copy
+# so a corrupt file can self-heal on the next read. Used by every JSON state
+# saver (dict, srs, captured, activity, history, config). Stdlib only.
+# --------------------------------------------------------------------------- #
+def _atomic_write_bytes(path: Path, data: bytes, *, backup: bool) -> None:
+    """Write `data` to `path` atomically (temp in the same dir + os.replace), so
+    a crash can't truncate it. With `backup`, copy the current good file to
+    `path + ".bak"` first (last-known-good). Best-effort: never raises."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if backup and path.exists():
+            try:
+                bak = path.with_name(path.name + ".bak")
+                bak.write_bytes(path.read_bytes())
+            except OSError:
+                pass
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent),
+                                   prefix=path.name + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+        except OSError:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def atomic_write_json(path: Path, data, *, backup: bool = True) -> None:
+    """Atomically write `data` as pretty JSON (matches the legacy format:
+    ensure_ascii=False, indent=2, trailing newline) + roll a `.bak`."""
+    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    _atomic_write_bytes(path, text.encode("utf-8"), backup=backup)
+
+
+def atomic_write_text(path: Path, text: str, *, backup: bool = False) -> None:
+    """Atomically write plain text (e.g. the autostart .desktop / last-learn date)."""
+    _atomic_write_bytes(path, text.encode("utf-8"), backup=backup)
+
+
+def unlink_with_backup(path: Path) -> None:
+    """Delete a state file and its rolling `.bak` (so a 'clear' really clears)."""
+    for p in (path, path.with_name(path.name + ".bak")):
+        try:
+            p.unlink()
+        except (FileNotFoundError, OSError):
+            pass
+
+
+def load_json(path: Path, default):
+    """Parse JSON at `path`; if it's missing or corrupt, fall back to its `.bak`
+    (and restore the main file from it, self-healing). Returns `default` if both
+    are unusable. `default` is returned as-is (callers pass {} / [])."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return default
+    except (OSError, ValueError):
+        pass
+    bak = path.with_name(path.name + ".bak")
+    try:
+        data = json.loads(bak.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+    # The main file was corrupt but the backup is good — restore it.
+    try:
+        _atomic_write_bytes(path, bak.read_bytes(), backup=False)
+    except OSError:
+        pass
+    return data

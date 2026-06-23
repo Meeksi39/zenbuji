@@ -17,23 +17,12 @@ from . import paths
 # History
 # --------------------------------------------------------------------------- #
 def load_history() -> list:
-    try:
-        if paths.HISTORY_PATH.exists():
-            data = json.loads(paths.HISTORY_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                return data
-    except (OSError, ValueError):
-        pass
-    return []
+    data = paths.load_json(paths.HISTORY_PATH, [])
+    return data if isinstance(data, list) else []
 
 
 def clear_history() -> None:
-    try:
-        paths.HISTORY_PATH.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        pass
+    paths.unlink_with_backup(paths.HISTORY_PATH)
 
 
 def append_history(result: "Result", limit: int = 20) -> None:
@@ -48,14 +37,7 @@ def append_history(result: "Result", limit: int = 20) -> None:
     history = [e for e in load_history() if e.get("text") != result.text]
     history.insert(0, entry)
     del history[max(0, limit):]
-    try:
-        paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        paths.HISTORY_PATH.write_text(
-            json.dumps(history, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    except OSError:
-        pass
+    paths.atomic_write_json(paths.HISTORY_PATH, history)
 
 
 # --------------------------------------------------------------------------- #
@@ -90,34 +72,30 @@ def load_dict() -> dict:
     if (mtime is not None and _DICT_CACHE is not None
             and _DICT_CACHE[0] == key and _DICT_CACHE[1] == mtime):
         return _DICT_CACHE[2]
-    try:
+    # load_json recovers from the .bak if the main file is missing/corrupt (and
+    # restores it), so re-stat for the cache mtime afterwards.
+    data = paths.load_json(path, None)
+    if isinstance(data, dict):
+        try:
+            mtime = path.stat().st_mtime_ns
+        except OSError:
+            mtime = None
         if mtime is not None:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                _DICT_CACHE = (key, mtime, data)
-                return data
-    except (OSError, ValueError):
-        pass
+            _DICT_CACHE = (key, mtime, data)
+        return data
     return {}
 
 
 def save_dict(data: dict) -> None:
     global _DICT_CACHE
+    paths.atomic_write_json(paths.DICT_PATH, data)
+    # Refresh the cache to the just-written data + new mtime so the next
+    # load_dict() in this process sees its own write without a re-read.
     try:
-        paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        paths.DICT_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        # Refresh the cache to the just-written data + new mtime so the next
-        # load_dict() in this process sees its own write without a re-read.
-        try:
-            _DICT_CACHE = (str(paths.DICT_PATH),
-                           paths.DICT_PATH.stat().st_mtime_ns, data)
-        except OSError:
-            _DICT_CACHE = None
+        _DICT_CACHE = (str(paths.DICT_PATH),
+                       paths.DICT_PATH.stat().st_mtime_ns, data)
     except OSError:
-        pass
+        _DICT_CACHE = None
 
 
 def dict_get(text: str) -> dict | None:
@@ -137,10 +115,7 @@ def dict_delete(text: str) -> None:
 
 def clear_dict() -> None:
     _clear_caches()
-    try:
-        paths.DICT_PATH.unlink()
-    except (FileNotFoundError, OSError):
-        pass
+    paths.unlink_with_backup(paths.DICT_PATH)
     from . import srs        # see dict_delete: cascade, no orphaned cards
     srs.srs_clear()
 
@@ -320,25 +295,12 @@ def dict_set_exclude(text: str, excluded: bool) -> None:
 # --- Daily activity log (powers the statistics streak + recent graph) ------ #
 def load_activity() -> dict:
     """Per-day review tallies: {"YYYY-MM-DD": {"reviews": int, "correct": int}}."""
-    try:
-        if paths.ACTIVITY_PATH.exists():
-            data = json.loads(paths.ACTIVITY_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-    except (OSError, ValueError):
-        pass
-    return {}
+    data = paths.load_json(paths.ACTIVITY_PATH, {})
+    return data if isinstance(data, dict) else {}
 
 
 def save_activity(data: dict) -> None:
-    try:
-        paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        paths.ACTIVITY_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    except OSError:
-        pass
+    paths.atomic_write_json(paths.ACTIVITY_PATH, data)
 
 
 def log_activity(correct: bool) -> None:
@@ -404,15 +366,13 @@ def activity_recent(days: int = 14, data: dict | None = None) -> list:
 
 # --- Background-busy marker (read by the game-helper window) ---------------- #
 def set_busy(stage: str) -> None:
-    """Mark that a translation/OCR is running (stage: 'reading' | 'translating')."""
-    try:
-        paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        paths.BUSY_PATH.write_text(
-            json.dumps({"stage": stage,
-                        "ts": datetime.now().isoformat(timespec="seconds")}),
-            encoding="utf-8")
-    except OSError:
-        pass
+    """Mark that a translation/OCR is running (stage: 'reading' | 'translating').
+
+    Transient marker — atomic (so a reader never sees half a line) but no `.bak`."""
+    paths.atomic_write_json(
+        paths.BUSY_PATH,
+        {"stage": stage, "ts": datetime.now().isoformat(timespec="seconds")},
+        backup=False)
 
 
 def clear_busy() -> None:
@@ -424,9 +384,8 @@ def clear_busy() -> None:
 
 def read_busy(max_age: float = 120.0) -> dict | None:
     """Current busy state, or None when idle/stale (a crashed run can't stick)."""
-    try:
-        data = json.loads(paths.BUSY_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    data = paths.load_json(paths.BUSY_PATH, None)
+    if not isinstance(data, dict):
         return None
     ts = _due_date_dt(data.get("ts"))
     try:
@@ -446,25 +405,12 @@ def read_busy(max_age: float = 120.0) -> dict | None:
 def load_captured() -> dict:
     """Staged caption words: ``{lemma: {reading, pos, count, first_seen,
     last_seen, sample, source_title, source_url, ignored?}}``."""
-    try:
-        if paths.CAPTURED_PATH.exists():
-            data = json.loads(paths.CAPTURED_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-    except (OSError, ValueError):
-        pass
-    return {}
+    data = paths.load_json(paths.CAPTURED_PATH, {})
+    return data if isinstance(data, dict) else {}
 
 
 def save_captured(data: dict) -> None:
-    try:
-        paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        paths.CAPTURED_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    except OSError:
-        pass
+    paths.atomic_write_json(paths.CAPTURED_PATH, data)
 
 
 def capture_words(words, *, sample: str = "", source_title: str = "",
@@ -580,10 +526,7 @@ def captured_resolve(word: str, action: str) -> None:
 
 
 def clear_captured() -> None:
-    try:
-        paths.CAPTURED_PATH.unlink()
-    except (FileNotFoundError, OSError):
-        pass
+    paths.unlink_with_backup(paths.CAPTURED_PATH)
 
 
 def _due_date_dt(iso: str):
