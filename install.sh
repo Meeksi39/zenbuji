@@ -74,7 +74,8 @@ if [[ "$MODE" == uninstall ]]; then
     rm -rf "$EXT_DST"
     rm -f "$NAUTILUS_SCRIPTS/zenbuji (furigana + translation)"
     rm -f "$NAUTILUS_EXT_DIR/zenbuji-nautilus.py"
-    rm -f "$NMH_WRAPPER" "$NMH_MANIFEST" "$FF_FLATPAK_NMH/$NMH_ID.json"
+    rm -f "$NMH_WRAPPER" "$NMH_MANIFEST" \
+          "$FF_FLATPAK_NMH/$NMH_ID.json" "$FF_FLATPAK_NMH/zenbuji-spawn.sh"
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/zenbuji-learn.desktop"
     # App icon + desktop entry.
     rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/applications/com.meeksi39.zenbuji.desktop"
@@ -183,10 +184,38 @@ cat > "$NMH_MANIFEST" <<EOF
 }
 EOF
 echo "  registered Firefox native-messaging host: $NMH_MANIFEST"
+# Flatpak Firefox runs native-messaging hosts INSIDE its sandbox, where the host
+# wrapper in ~/.local/bin isn't visible. So for Flatpak we install a stub in the
+# sandbox-reachable manifest dir that breaks out to the host via flatpak-spawn,
+# point the manifest at the stub's in-sandbox path (~/.mozilla maps to this dir
+# inside the sandbox), and grant Firefox permission to spawn host processes.
 if [[ -d "$HOME/.var/app/org.mozilla.firefox" ]]; then
     mkdir -p "$FF_FLATPAK_NMH"
-    cp "$NMH_MANIFEST" "$FF_FLATPAK_NMH/$NMH_ID.json"
-    echo "  also registered it for Flatpak Firefox"
+    cat > "$FF_FLATPAK_NMH/zenbuji-spawn.sh" <<EOF
+#!/bin/sh
+# Runs inside the Firefox Flatpak sandbox; breaks out to the host to run the
+# real native-messaging host (stdio, the native-messaging pipe, is forwarded).
+exec flatpak-spawn --host "$NMH_WRAPPER" "\$@"
+EOF
+    chmod +x "$FF_FLATPAK_NMH/zenbuji-spawn.sh"
+    cat > "$FF_FLATPAK_NMH/$NMH_ID.json" <<EOF
+{
+  "name": "$NMH_ID",
+  "description": "zenbuji YouTube caption capture host",
+  "path": "$HOME/.mozilla/native-messaging-hosts/zenbuji-spawn.sh",
+  "type": "stdio",
+  "allowed_extensions": ["$WEBEXT_ID"]
+}
+EOF
+    if command -v flatpak >/dev/null; then
+        flatpak override --user --talk-name=org.freedesktop.Flatpak org.mozilla.firefox 2>/dev/null \
+            && echo "  registered the host for Flatpak Firefox + granted spawn permission" \
+            || echo "  registered the host for Flatpak Firefox (could not set the flatpak override; run:
+    flatpak override --user --talk-name=org.freedesktop.Flatpak org.mozilla.firefox)"
+    else
+        echo "  registered the host for Flatpak Firefox"
+    fi
+    echo "    (restart Firefox so the permission takes effect)"
 fi
 echo "  Firefox extension lives at $WEBEXT_SRC"
 echo "    load it via about:debugging ▸ Load Temporary Add-on (see firefox/README.md)"

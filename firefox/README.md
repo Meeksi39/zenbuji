@@ -30,6 +30,26 @@ You should see a 振 toolbar button appear, and the add-on's id should read
 `zenbuji-capture@meeksi39` (a random id instead means the native host won't match
 — check that the manifest's `allowed_extensions` lines up).
 
+## Flatpak Firefox
+
+If your Firefox is the Flatpak (the usual case on Fedora Silverblue/Bazzite and
+other immutable setups), its sandbox can't read loose files outside `~/Downloads`
+— so loading the unpacked folder gives a blank icon, an empty popup, and a
+`Loading failed for the <script>` error. Two differences:
+
+- **Load it as a zip, not the folder.** Zip the extension and drop it somewhere
+  the sandbox can see (`~/Downloads` works):
+  ```bash
+  cd firefox/zenbuji-capture && zip -r ~/Downloads/zenbuji-capture.zip . -x '.*'
+  ```
+  Then **Load Temporary Add-on…** → pick `~/Downloads/zenbuji-capture.zip`. Firefox
+  reads the archive internally, so the sandbox never has to touch the files.
+- **The native host runs through `flatpak-spawn`.** `./install.sh` handles this for
+  you: it drops a tiny stub in the Flatpak's manifest dir that breaks out to the
+  host, and runs `flatpak override --user --talk-name=org.freedesktop.Flatpak
+  org.mozilla.firefox` so Firefox is allowed to launch it. **Restart Firefox after
+  installing** so that permission takes effect.
+
 ## Using it
 
 Click the toolbar button → **Start capturing**, then play a video with Japanese

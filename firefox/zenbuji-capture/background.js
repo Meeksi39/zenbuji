@@ -1,4 +1,4 @@
-// zenbuji caption capture — background event page.
+// zenbuji caption capture - background event page.
 //
 // Owns the long-lived native-messaging port to the zenbuji host, batches the
 // caption lines the content script sends, and reflects the on/off toggle to the
@@ -6,8 +6,8 @@
 //
 // The Firefox MV3 event page can be unloaded when idle, which drops the port. We
 // don't fight it: ensurePort() reconnects lazily on the next flush (losing at
-// most one ~4s batch), and the on/off state lives in storage so a fresh page —
-// or a freshly injected content script — picks it back up.
+// most one ~4s batch), and the on/off state lives in storage so a fresh page -
+// or a freshly injected content script - picks it back up.
 
 const HOST = "com.meeksi39.zenbuji_capture";
 const FLUSH_MS = 4000;
@@ -23,7 +23,7 @@ function ensurePort() {
   if (port) return port;
   port = browser.runtime.connectNative(HOST);
   port.onMessage.addListener((reply) => {
-    // The host reports a running "new words waiting" count — show it on the badge.
+    // The host reports a running "new words waiting" count - show it on the badge.
     if (reply && typeof reply.new === "number") {
       browser.action.setBadgeText({ text: reply.new ? String(reply.new) : "" });
     }
