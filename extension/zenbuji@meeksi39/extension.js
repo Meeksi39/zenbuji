@@ -37,6 +37,7 @@ const UI_JA = {
     'Look up screen region (OCR)': '画面領域を調べる（OCR）',
     'Add screen region to dictionary (OCR)': '画面領域を辞書に追加（OCR）',
     'Dictionary': '辞書',
+    'New words from videos': '動画で見つけた新しい単語',
     'Practice (SRS)': '練習（SRS）',
     'Statistics': '統計',
     'Game helper': 'ゲームヘルパー',
