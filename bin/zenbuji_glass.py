@@ -49,6 +49,9 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     color: #1c1c1e;
     border: 1px solid rgba(0, 0, 0, 0.22);
 }
+/* Dictionary window drops the card's horizontal padding so the scroll/list
+   spans edge to edge; its other rows are re-inset in code. */
+.zenbuji-card.zenbuji-dict-window { padding-left: 0; padding-right: 0; }
 
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
 .zenbuji-add-form { padding: 6px 2px 10px 2px; }
@@ -140,19 +143,18 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border-radius: 12px;
     margin: 4px;
 }
-/* Sort dropdown: its visible part is an inner button - style it EXACTLY like the
-   .zenbuji-secondary .zenbuji-small header buttons, including the open/pressed
-   (:checked) state, so it doesn't fall back to the theme's accent highlight. The
-   popover list stays the theme default. */
+/* Sort dropdown: its visible part is an inner button - style it like a full-size
+   .zenbuji-secondary button (same height as the standard action buttons),
+   including the open/pressed (:checked) state, so it doesn't fall back to the
+   theme's accent highlight. The popover list stays the theme default. */
 .zenbuji-dropdown { background: none; box-shadow: none; }
 .zenbuji-dropdown > button {
-    border-radius: 9px;            /* .zenbuji-small */
-    padding: 3px 11px;
-    min-height: 0;
-    font-size: 12px;
+    border-radius: 12px;           /* .zenbuji-secondary (full size) */
+    padding: 7px 16px;
+    min-height: 18px;
     font-weight: 500;
     background-image: none;
-    background-color: alpha(currentColor, 0.10);   /* .zenbuji-secondary */
+    background-color: alpha(currentColor, 0.10);
     border: 1px solid alpha(currentColor, 0.14);
     box-shadow: none;
     color: inherit;

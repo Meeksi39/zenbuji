@@ -192,6 +192,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         win, card = make_glass_window(
             application, title="zenbuji 辞書", default_size=(940, 720),
             resizable=True, draggable=True, close_on_focus_loss=False)
+        # Drop the card's horizontal padding so the scroll/list spans edge to
+        # edge; every non-list row is re-inset by INSET below.
+        card.add_css_class("zenbuji-dict-window")
+        INSET = 18
 
         def make_reading_field(get_surface, value=""):
             """A reading entry fused with an optional offline-fill (↻) button.
@@ -812,6 +816,15 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             else:
                 quota_label.set_visible(False)
             return GLib.SOURCE_REMOVE
+
+        # Re-inset every row except the list, so the scroll spans full width
+        # while the header/search/chips/footer keep the window's side padding.
+        child = card.get_first_child()
+        while child is not None:
+            if child is not list_box:
+                child.set_margin_start(INSET)
+                child.set_margin_end(INSET)
+            child = child.get_next_sibling()
 
         refresh_list()
         win.present()
