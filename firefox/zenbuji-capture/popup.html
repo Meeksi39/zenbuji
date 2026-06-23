@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font: 13px/1.4 system-ui, sans-serif;
+        margin: 0;
+        padding: 14px;
+        width: 210px;
+      }
+      h1 {
+        font-size: 13px;
+        margin: 0 0 10px;
+        font-weight: 600;
+      }
+      button {
+        width: 100%;
+        padding: 9px 10px;
+        border: 0;
+        border-radius: 8px;
+        font: inherit;
+        cursor: pointer;
+        background: #d24317;
+        color: #fff;
+      }
+      button.off {
+        background: #e9e9ec;
+        color: #222;
+      }
+      #count {
+        margin-top: 10px;
+        color: #888;
+        font-size: 12px;
+        text-align: center;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #1d1d20;
+          color: #eee;
+        }
+        button.off {
+          background: #333;
+          color: #eee;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>zenbuji — caption capture</h1>
+    <button id="toggle">…</button>
+    <div id="count"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>
