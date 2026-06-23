@@ -365,9 +365,15 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         chips_row.append(count_lbl)
         card.append(chips_row)
 
+        # List area: top hairline, the scroll (with conditional inset edge
+        # shadows), and the bottom hairline packed flush (spacing 0) so a
+        # half-scrolled row is cut right at the line.
+        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        list_box.set_vexpand(True)
         hairline = Gtk.Box()
         hairline.add_css_class("zenbuji-hairline")
-        card.append(hairline)
+        list_box.append(hairline)
+        card.append(list_box)
 
         scroll = Gtk.ScrolledWindow(vexpand=True)
         scroll.add_css_class("zenbuji-dict-scroll")
@@ -404,14 +410,43 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         gridview.set_enable_rubberband(False)
         gridview.set_single_click_activate(False)
         scroll.set_child(gridview)
-        card.append(scroll)
+        # Overlay two thin gradient strips at the scroll edges, shown only when
+        # there's more content that way (greyish-black inset → the cut row reads
+        # as clipped, not faded out).
+        scroll_overlay = Gtk.Overlay()
+        scroll_overlay.set_vexpand(True)
+        scroll_overlay.set_child(scroll)
+        top_shadow = Gtk.Box()
+        top_shadow.add_css_class("zenbuji-scroll-shadow-top")
+        top_shadow.set_valign(Gtk.Align.START)
+        top_shadow.set_can_target(False)
+        top_shadow.set_visible(False)
+        bot_shadow = Gtk.Box()
+        bot_shadow.add_css_class("zenbuji-scroll-shadow-bottom")
+        bot_shadow.set_valign(Gtk.Align.END)
+        bot_shadow.set_can_target(False)
+        bot_shadow.set_visible(False)
+        scroll_overlay.add_overlay(top_shadow)
+        scroll_overlay.add_overlay(bot_shadow)
+        list_box.append(scroll_overlay)
+
+        _vadj = scroll.get_vadjustment()
+
+        def _update_edges(*_a):
+            v, up, pg = (_vadj.get_value(), _vadj.get_upper(), _vadj.get_page_size())
+            top_shadow.set_visible(v > 0.5)
+            bot_shadow.set_visible(v < up - pg - 0.5)
+
+        _vadj.connect("value-changed", _update_edges)
+        _vadj.connect("changed", _update_edges)   # upper/page-size after layout
+
         # GridView has no placeholder; an empty-state label toggled below.
         empty_label = Gtk.Label(label=t("empty"), xalign=0.5, wrap=True)
         empty_label.add_css_class("zenbuji-note")
         empty_label.set_margin_top(18)
         empty_label.set_halign(Gtk.Align.CENTER)
         empty_label.set_visible(False)
-        card.append(empty_label)
+        list_box.append(empty_label)
 
         def _update_count():
             count_lbl.set_text(t("count_shown").format(
@@ -442,10 +477,11 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
         search.connect("search-changed", _do_search)
 
-        # Footer: the destructive "Clear all", away from the everyday actions.
+        # Bottom hairline packed flush under the scroll (so the cut sits on the
+        # line); the destructive "Clear all" stays a row below, off to itself.
         foot_rule = Gtk.Box()
         foot_rule.add_css_class("zenbuji-hairline")
-        card.append(foot_rule)
+        list_box.append(foot_rule)
         footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         footer.set_halign(Gtk.Align.END)
         footer.set_margin_top(6)
