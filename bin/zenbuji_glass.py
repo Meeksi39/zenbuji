@@ -167,14 +167,14 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
    shown only when there is more content past that edge (toggled in code), so a
    half-scrolled row reads as clipped rather than faded out. */
 .zenbuji-scroll-shadow-top {
-    min-height: 12px;
+    min-height: 28px;
     background-image: linear-gradient(to bottom,
-        alpha(#000000, 0.30), alpha(#000000, 0));
+        alpha(#000000, 0.18), alpha(#000000, 0));
 }
 .zenbuji-scroll-shadow-bottom {
-    min-height: 12px;
+    min-height: 28px;
     background-image: linear-gradient(to top,
-        alpha(#000000, 0.30), alpha(#000000, 0));
+        alpha(#000000, 0.18), alpha(#000000, 0));
 }
 
 /* Default text inputs (popup / dict search): subtle translucent fields that sit
