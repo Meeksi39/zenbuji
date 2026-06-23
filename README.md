@@ -474,6 +474,7 @@ zenbuji stands on a whole pile of other people's hard work — go show them some
 - **[fugashi] + [unidic-lite]** — MeCab-powered morphological analysis, aka the reason the furigana is actually *correct* and not vibes-based.
 - **[Argos Translate]** — offline neural translation · **[DeepL]** — the optional online backend when you want it crisper.
 - **[manga-ocr]** — the Japanese-tuned OCR model that reads text right off your screen.
+- **[Springin' Sound Stock]** — the quiz/game sound effects (the chime, buzz, and sword-slash) come from their free system-sound library. ありがとう！
 - **[Blur My Shell]** — supplies the real frosted-glass blur behind the popup.
 - **GTK 4 / libadwaita / PyGObject / GNOME Shell** — the toolkit and platform it all rides on. Plus `jaconv`, `speech-dispatcher` / `espeak-ng` for fallback TTS, and `podman` for running VOICEVOX.
 
@@ -488,6 +489,7 @@ mine to answer for though (´･ω･`)
 [unidic-lite]: https://github.com/polm/unidic-lite
 [Argos Translate]: https://github.com/argosopentech/argos-translate
 [manga-ocr]: https://github.com/kha-white/manga-ocr
+[Springin' Sound Stock]: https://www.springin.org/sound-stock/category/system/
 [DeepL]: https://www.deepl.com/pro-api
 [Blur My Shell]: https://extensions.gnome.org/extension/3193/blur-my-shell/
 [VOICEVOX]: https://voicevox.hiroshiba.jp/
