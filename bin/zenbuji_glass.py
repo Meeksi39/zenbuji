@@ -140,7 +140,22 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     border-radius: 12px;
     margin: 4px;
 }
-.zenbuji-dropdown { min-height: 0; }
+/* Sort dropdown styled to match the .zenbuji-secondary pills (its visible part
+   is an inner button; the popover stays the theme default). */
+.zenbuji-dropdown { background: none; }
+.zenbuji-dropdown > button {
+    border-radius: 12px;
+    padding: 3px 10px;
+    min-height: 0;
+    font-size: 12px;
+    font-weight: 500;
+    background-image: none;
+    background-color: alpha(currentColor, 0.10);
+    border: 1px solid alpha(currentColor, 0.14);
+    box-shadow: none;
+}
+.zenbuji-dropdown > button:hover { background-color: alpha(currentColor, 0.16); }
+.zenbuji-dropdown > button:active { background-color: alpha(currentColor, 0.24); }
 
 /* Default text inputs (popup / dict search): subtle translucent fields that sit
    quietly on the glass. */

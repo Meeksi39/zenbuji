@@ -80,16 +80,16 @@ def test_new_word_voice_order_reading_translation_then_fanfare(store, monkeypatc
 
 def test_launch_game_wires_live_refresh(store, monkeypatch):
     # Regression: the game overlay must pass watch_path so it live-refreshes
-    # (it previously didn't, so added words never showed up).
+    # (it previously didn't, so added words never showed up). The game window
+    # now lives in its own module, zenbuji_game.
     import pytest
-    pytest.importorskip("gi")  # importing zenbuji_dict needs GTK
-    import zenbuji_dict
+    pytest.importorskip("gi")  # importing zenbuji_game needs GTK
+    import zenbuji_game
 
     captured = {}
-    monkeypatch.setattr(zenbuji_dict, "show_dictionary",
+    monkeypatch.setattr(zenbuji_game, "show_game",
                         lambda **kw: captured.update(kw) or 0)
     zenbuji.launch_game({})
-    assert captured.get("game_mode") is True
     assert captured.get("watch_path") == zenbuji.DICT_PATH
     assert captured.get("busy_path") == zenbuji.BUSY_PATH
     assert captured.get("shortcuts")
