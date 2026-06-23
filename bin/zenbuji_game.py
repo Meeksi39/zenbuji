@@ -26,13 +26,15 @@ from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
     from zenbuji_glass import make_footer, make_glass_window
-    from zenbuji_widgets import (LANG_NAMES_BY_UI, icon_button, langs_in,
-                                 make_tr, translation_lines)
+    from zenbuji_widgets import (LANG_NAMES_BY_UI, DictItem, langs_in, make_tr,
+                                 make_card_gridview, scroll_with_edge_shadows,
+                                 translation_lines)
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from zenbuji_glass import make_footer, make_glass_window
-    from zenbuji_widgets import (LANG_NAMES_BY_UI, icon_button, langs_in,
-                                 make_tr, translation_lines)
+    from zenbuji_widgets import (LANG_NAMES_BY_UI, DictItem, langs_in, make_tr,
+                                 make_card_gridview, scroll_with_edge_shadows,
+                                 translation_lines)
 
 # The game overlay is intentionally Japanese-only for flavour (immersion):
 GAME_TITLE = "✦ 漢字キャプチャー ✦"   # "KanjiCapture", JRPG-style
@@ -47,9 +49,8 @@ GAME_BANNER_LEVELUP = "✦ レベルアップ！ ✦"  # re-captured -> gold "LE
 
 GAME_STRINGS = {
     "search":           {"en": "Search…",       "ja": "検索…"},
-    "empty":            {"en": "No cached translations yet.",
-                         "ja": "キャッシュされた翻訳はまだありません。"},
-    "read_aloud":       {"en": "Read aloud",     "ja": "読み上げる"},
+    "new_word":         {"en": "NEW",            "ja": "新規"},
+    "known":            {"en": "KNOWN",          "ja": "既習"},
     "busy_reading":     {"en": "Reading…",       "ja": "読み取り中…"},
     "busy_translating": {"en": "Translating…",   "ja": "翻訳中…"},
 }
@@ -157,31 +158,29 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
         search.set_placeholder_text(t("search"))
         card.append(search)
 
-        hairline = Gtk.Box()
-        hairline.add_css_class("zenbuji-hairline")
-        card.append(hairline)
+        # Recent words: the SAME virtualized card grid as the dictionary (cards,
+        # responsive columns, inset edge shadows), shared via zenbuji_widgets.
+        # Read-only glance cells (see build_game_cell).
+        game_store = Gio.ListStore(item_type=DictItem)
 
-        scroll = Gtk.ScrolledWindow(vexpand=True)
-        scroll.add_css_class("zenbuji-dict-scroll")
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_propagate_natural_width(False)
-        scroll.set_min_content_width(380)
-        listbox = Gtk.ListBox()
-        listbox.add_css_class("zenbuji-dict-list")
-        listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        scroll.set_child(listbox)
-        card.append(scroll)
-
-        empty = Gtk.Label(label=t("empty"), xalign=0)
-        empty.add_css_class("zenbuji-note")
-        listbox.set_placeholder(empty)
-
-        def filter_func(row):
+        def _filt(item, _u=None):
             needle = search.get_text().strip().lower()
-            return needle in getattr(row, "_haystack", "") if needle else True
+            if not needle:
+                return True
+            e = item.entry
+            hay = " ".join([e.get("text", ""), e.get("reading", ""),
+                            *e.get("translations", {}).values()]).lower()
+            return needle in hay
 
-        listbox.set_filter_func(filter_func)
-        search.connect("search-changed", lambda _s: listbox.invalidate_filter())
+        game_filter = Gtk.CustomFilter.new(_filt)
+        filter_model = Gtk.FilterListModel(model=game_store, filter=game_filter)
+        gridview = make_card_gridview(Gtk.NoSelection(model=filter_model),
+                                      lambda it: build_game_cell(it))
+        list_box, _scroll = scroll_with_edge_shadows(gridview)
+        card.append(list_box)
+        search.connect(
+            "search-changed",
+            lambda _s: game_filter.changed(Gtk.FilterChange.DIFFERENT))
 
         # --- footer: the background-add shortcut chips ---------------------- //
         game_footer, frow = make_footer()
@@ -200,37 +199,40 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
         frow.append(keys_box)
         card.append(game_footer)
 
-        # --- row builder ---------------------------------------------------- //
-        def make_row(entry):
+        # --- card builder: a clean, big-kanji second-screen glance card ----- //
+        def build_game_cell(item):
+            entry = item.entry
             text = entry.get("text", "")
             reading = entry.get("reading", "")
             trans = entry.get("translations", {})
-            row = Gtk.ListBoxRow()
-            row._haystack = " ".join([text, reading, *trans.values()]).lower()
-            outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            outer.set_margin_top(8)
-            outer.set_margin_bottom(8)
-            outer.set_margin_start(6)
-            outer.set_margin_end(6)
-            top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+            holder.add_css_class("zenbuji-dict-card")
+            holder.set_hexpand(True)
             jp = Gtk.Label(label=text, xalign=0, wrap=True, selectable=True)
-            jp.add_css_class("zenbuji-dict-jp")
-            jp.set_hexpand(True)
-            jp.set_max_width_chars(26)
-            top.append(jp)
-            if speak_fn is not None:
-                top.append(icon_button("audio-volume-high-symbolic", t("read_aloud"),
-                                       lambda _b, r=(reading or text): speak_fn(r)))
-            outer.append(top)
+            jp.add_css_class("zenbuji-game-jp")          # large kanji
+            jp.set_max_width_chars(22)
+            holder.append(jp)
             if reading and reading != text:
                 rl = Gtk.Label(label=reading, xalign=0, wrap=True)
                 rl.add_css_class("zenbuji-reading")
                 rl.set_max_width_chars(36)
-                outer.append(rl)
+                holder.append(rl)
             for line in translation_lines(trans, languages, lang_names, max_chars=36):
-                outer.append(line)
-            row.set_child(outer)
-            return row
+                holder.append(line)
+            # Corner ribbon: new (unreviewed) vs already known (has SRS progress).
+            known = (entry.get("srs") or {}).get("level") in (
+                "learning", "young", "mature")
+            ribbon = Gtk.Label(label=t("known") if known else t("new_word"))
+            ribbon.add_css_class("zenbuji-card-ribbon")
+            ribbon.add_css_class("zenbuji-ribbon-levelup" if known
+                                 else "zenbuji-ribbon-new")
+            ribbon.set_halign(Gtk.Align.END)
+            ribbon.set_valign(Gtk.Align.START)
+            ribbon.set_can_target(False)
+            cell = Gtk.Overlay()
+            cell.set_child(holder)
+            cell.add_overlay(ribbon)
+            return cell
 
         # --- animation primitives (smooth eased; margins stay >= 0) --------- //
         def _fade(widget, frm, to, dur=240, easing=None):
@@ -248,14 +250,6 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
                 lambda v: set_margin(max(0, int(round(v)))))
             anim = Adw.TimedAnimation.new(widget, frm, to, dur, tgt)
             anim.set_easing(easing)
-            state["anims"].append(anim)
-            anim.play()
-
-        def _animate_in(row):
-            row.set_opacity(0.0)
-            target = Adw.CallbackAnimationTarget.new(row.set_opacity)
-            anim = Adw.TimedAnimation.new(row, 0.0, 1.0, 450, target)
-            anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
             state["anims"].append(anim)
             anim.play()
 
@@ -350,7 +344,6 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
 
         # --- data refresh + capture detection ------------------------------- //
         def rebuild():
-            listbox.remove_all()
             data = load_fn()
             entries = sorted(data.values(),
                              key=lambda e: e.get("last_seen", ""), reverse=True)
@@ -368,25 +361,16 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
                     _show_hero(top)
             else:
                 hero.set_visible(False)
-            list_entries = entries[1:]
 
-            fresh = []
-            for e in list_entries:
-                txt = e.get("text", "")
-                row = make_row(e)
-                listbox.append(row)
-                if state["primed"] and prev.get(txt) != e.get("last_seen", ""):
-                    fresh.append(row)
+            # The list shows everything but the hero word, as cards.
+            items = [DictItem(e.get("text", ""), e) for e in entries[1:]]
+            game_store.splice(0, game_store.get_n_items(), items)
 
             state["seen"] = current
             if not state["primed"]:
                 state["primed"] = True
-            else:
-                for row in fresh:
-                    _animate_in(row)
-                if captured:
-                    _celebrate(top, any_new)
-            listbox.invalidate_filter()
+            elif captured:
+                _celebrate(top, any_new)
 
         def schedule_rebuild():
             state["token"] += 1

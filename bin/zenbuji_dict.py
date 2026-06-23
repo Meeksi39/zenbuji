@@ -25,29 +25,21 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, GObject, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 try:
     from zenbuji_glass import fmt_ms, make_glass_window, make_tabs
-    from zenbuji_widgets import (LANG_NAMES_BY_UI, STATUS_NAMES, icon_button,
-                                 langs_in, make_tr, short_dt, translation_lines)
+    from zenbuji_widgets import (LANG_NAMES_BY_UI, STATUS_NAMES, DictItem,
+                                 icon_button, langs_in, make_card_gridview,
+                                 make_tr, scroll_with_edge_shadows, short_dt,
+                                 translation_lines)
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from zenbuji_glass import fmt_ms, make_glass_window, make_tabs
-    from zenbuji_widgets import (LANG_NAMES_BY_UI, STATUS_NAMES, icon_button,
-                                 langs_in, make_tr, short_dt, translation_lines)
-
-
-class DictItem(GObject.Object):
-    """Wraps one dictionary entry for the virtualized list model. Holds the live
-    entry dict (mutated in place for the exclude flag) and its key (surface word).
-    """
-    __gtype_name__ = "ZenbujiDictItem"
-
-    def __init__(self, key, entry):
-        super().__init__()
-        self.key = key
-        self.entry = entry
+    from zenbuji_widgets import (LANG_NAMES_BY_UI, STATUS_NAMES, DictItem,
+                                 icon_button, langs_in, make_card_gridview,
+                                 make_tr, scroll_with_edge_shadows, short_dt,
+                                 translation_lines)
 
 
 DICT_STRINGS = {
@@ -369,23 +361,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         chips_row.append(count_lbl)
         card.append(chips_row)
 
-        # List area: top hairline, the scroll (with conditional inset edge
-        # shadows), and the bottom hairline packed flush (spacing 0) so a
-        # half-scrolled row is cut right at the line.
-        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        list_box.set_vexpand(True)
-        list_box.set_hexpand(True)
-        hairline = Gtk.Box()
-        hairline.add_css_class("zenbuji-hairline")
-        list_box.append(hairline)
-        card.append(list_box)
-
-        scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
-        scroll.add_css_class("zenbuji-dict-scroll")
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_propagate_natural_width(False)
-        scroll.set_min_content_width(380)
-
+        # List area: a virtualized card grid with inset edge shadows + flush
+        # hairlines (the scaffold is shared with the game overlay via
+        # zenbuji_widgets). list_box spans full width; the inset loop skips it.
         dict_store = Gio.ListStore(item_type=DictItem)
 
         def _sort_cmp(a, b, _u=None):
@@ -403,48 +381,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         dict_filter = Gtk.CustomFilter.new(_filt)
         sorted_model = Gtk.SortListModel(model=dict_store, sorter=dict_sorter)
         filter_model = Gtk.FilterListModel(model=sorted_model, filter=dict_filter)
-        factory = Gtk.SignalListItemFactory()
-        factory.connect(
-            "bind", lambda _f, li: li.set_child(build_dict_item(li.get_item())))
-        factory.connect("unbind", lambda _f, li: li.set_child(None))
-        gridview = Gtk.GridView(model=Gtk.NoSelection(model=filter_model),
-                                factory=factory)
-        gridview.add_css_class("zenbuji-dict-list")
-        gridview.set_hexpand(True)
-        gridview.set_min_columns(1)
-        gridview.set_max_columns(4)
-        gridview.set_enable_rubberband(False)
-        gridview.set_single_click_activate(False)
-        scroll.set_child(gridview)
-        # Overlay two thin gradient strips at the scroll edges, shown only when
-        # there's more content that way (greyish-black inset → the cut row reads
-        # as clipped, not faded out).
-        scroll_overlay = Gtk.Overlay()
-        scroll_overlay.set_vexpand(True)
-        scroll_overlay.set_child(scroll)
-        top_shadow = Gtk.Box()
-        top_shadow.add_css_class("zenbuji-scroll-shadow-top")
-        top_shadow.set_valign(Gtk.Align.START)
-        top_shadow.set_can_target(False)
-        top_shadow.set_visible(False)
-        bot_shadow = Gtk.Box()
-        bot_shadow.add_css_class("zenbuji-scroll-shadow-bottom")
-        bot_shadow.set_valign(Gtk.Align.END)
-        bot_shadow.set_can_target(False)
-        bot_shadow.set_visible(False)
-        scroll_overlay.add_overlay(top_shadow)
-        scroll_overlay.add_overlay(bot_shadow)
-        list_box.append(scroll_overlay)
-
-        _vadj = scroll.get_vadjustment()
-
-        def _update_edges(*_a):
-            v, up, pg = (_vadj.get_value(), _vadj.get_upper(), _vadj.get_page_size())
-            top_shadow.set_visible(v > 0.5)
-            bot_shadow.set_visible(v < up - pg - 0.5)
-
-        _vadj.connect("value-changed", _update_edges)
-        _vadj.connect("changed", _update_edges)   # upper/page-size after layout
+        gridview = make_card_gridview(Gtk.NoSelection(model=filter_model),
+                                      lambda it: build_dict_item(it))
+        list_box, _scroll = scroll_with_edge_shadows(gridview)
+        card.append(list_box)
 
         # GridView has no placeholder; an empty-state label toggled below.
         empty_label = Gtk.Label(label=t("empty"), xalign=0.5, wrap=True)
@@ -452,7 +392,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         empty_label.set_margin_top(18)
         empty_label.set_halign(Gtk.Align.CENTER)
         empty_label.set_visible(False)
-        list_box.append(empty_label)
+        card.append(empty_label)
 
         def _update_count():
             count_lbl.set_text(t("count_shown").format(

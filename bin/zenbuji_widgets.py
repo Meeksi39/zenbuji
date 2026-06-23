@@ -10,7 +10,7 @@ from __future__ import annotations
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GObject, Gtk  # noqa: E402
 
 # Target-language names shown in the UI language.
 LANG_NAMES_BY_UI = {
@@ -75,3 +75,84 @@ def translation_lines(trans, languages, lang_names, max_chars=36):
         line.set_max_width_chars(max_chars)
         out.append(line)
     return out
+
+
+class DictItem(GObject.Object):
+    """List-model wrapper for one dictionary entry: its key (surface word) + the
+    live entry dict (mutated in place for the exclude flag)."""
+    __gtype_name__ = "ZenbujiDictItem"
+
+    def __init__(self, key, entry):
+        super().__init__()
+        self.key = key
+        self.entry = entry
+
+
+def make_card_gridview(model, build_cell, *, min_columns=1, max_columns=4):
+    """A virtualized `Gtk.GridView` of cards: the factory builds each cell from
+    ``build_cell(item)`` on bind and clears it on unbind. `model` is the
+    selection model wrapping the (filtered/sorted) item list. Responsive columns."""
+    factory = Gtk.SignalListItemFactory()
+    factory.connect("bind", lambda _f, li: li.set_child(build_cell(li.get_item())))
+    factory.connect("unbind", lambda _f, li: li.set_child(None))
+    grid = Gtk.GridView(model=model, factory=factory)
+    grid.add_css_class("zenbuji-dict-list")
+    grid.set_hexpand(True)
+    grid.set_min_columns(min_columns)
+    grid.set_max_columns(max_columns)
+    grid.set_enable_rubberband(False)
+    grid.set_single_click_activate(False)
+    return grid
+
+
+def _hairline():
+    h = Gtk.Box()
+    h.add_css_class("zenbuji-hairline")
+    return h
+
+
+def scroll_with_edge_shadows(child, *, min_content_width=380):
+    """Wrap a scrollable `child` (GridView/ListView) in a vertical box with top
+    and bottom hairlines packed flush and inset edge shadows shown only when
+    there's more content past that edge. Returns ``(box, scroll)`` — append
+    `box` to the card. The shadows track the scroll's vertical adjustment."""
+    scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
+    scroll.add_css_class("zenbuji-dict-scroll")
+    scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    scroll.set_propagate_natural_width(False)
+    scroll.set_min_content_width(min_content_width)
+    scroll.set_child(child)
+
+    overlay = Gtk.Overlay()
+    overlay.set_vexpand(True)
+    overlay.set_child(scroll)
+    top = Gtk.Box()
+    top.add_css_class("zenbuji-scroll-shadow-top")
+    top.set_valign(Gtk.Align.START)
+    top.set_can_target(False)
+    top.set_visible(False)
+    bot = Gtk.Box()
+    bot.add_css_class("zenbuji-scroll-shadow-bottom")
+    bot.set_valign(Gtk.Align.END)
+    bot.set_can_target(False)
+    bot.set_visible(False)
+    overlay.add_overlay(top)
+    overlay.add_overlay(bot)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    box.set_vexpand(True)
+    box.set_hexpand(True)
+    box.append(_hairline())
+    box.append(overlay)
+    box.append(_hairline())
+
+    vadj = scroll.get_vadjustment()
+
+    def _update(*_a):
+        v, up, pg = vadj.get_value(), vadj.get_upper(), vadj.get_page_size()
+        top.set_visible(v > 0.5)
+        bot.set_visible(v < up - pg - 0.5)
+
+    vadj.connect("value-changed", _update)
+    vadj.connect("changed", _update)
+    return box, scroll

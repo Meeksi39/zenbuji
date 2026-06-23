@@ -242,6 +242,8 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 /* --- dictionary window --- */
 .zenbuji-title { font-size: 17px; font-weight: 700; }
 .zenbuji-dict-jp { font-size: 16px; font-weight: 600; }
+/* Game glance card: bigger kanji for second-screen legibility. */
+.zenbuji-game-jp { font-size: 23px; font-weight: 700; }
 .zenbuji-count { font-size: 11px; font-weight: 700; opacity: 0.6; }
 .zenbuji-meta { font-size: 10px; opacity: 0.5; }
 .zenbuji-dict-list { background: transparent; }
@@ -337,6 +339,15 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     color: #ffffff; padding: 3px 22px;
     transform: skewX(-12deg);
     text-shadow: 0 1px 3px alpha(#000000, 0.7);
+}
+/* Compact corner ribbon for the game cards (small; pairs with the -new/-levelup
+   colour classes below, which set the gradient and, for levelup, a dark text). */
+.zenbuji-card-ribbon {
+    font-size: 10px; font-weight: 800; font-style: italic;
+    color: #ffffff; padding: 1px 12px;
+    margin-top: 6px;
+    transform: skewX(-12deg);
+    text-shadow: 0 1px 2px alpha(#000000, 0.6);
 }
 .zenbuji-ribbon-new {
     background-image: linear-gradient(to right,
