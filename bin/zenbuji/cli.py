@@ -113,16 +113,14 @@ def _write_learn_autostart(enable: bool) -> None:
     """Create/remove the autostart entry that opens the learning window on login."""
     try:
         if enable:
-            paths.AUTOSTART_PATH.parent.mkdir(parents=True, exist_ok=True)
-            paths.AUTOSTART_PATH.write_text(
+            paths.atomic_write_text(
+                paths.AUTOSTART_PATH,
                 "[Desktop Entry]\n"
                 "Type=Application\n"
                 "Name=zenbuji learn\n"
                 f"Exec={_learn_command('learn --on-login')}\n"
                 "X-GNOME-Autostart-enabled=true\n"
-                "NoDisplay=true\n",
-                encoding="utf-8",
-            )
+                "NoDisplay=true\n")
         else:
             paths.AUTOSTART_PATH.unlink(missing_ok=True)
     except OSError:
@@ -769,11 +767,7 @@ def main(argv=None) -> int:
                 seen = ""
             if seen == today:
                 return 0  # already practised today
-            try:
-                paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
-                paths.LAST_LEARN_PATH.write_text(today, encoding="utf-8")
-            except OSError:
-                pass
+            paths.atomic_write_text(paths.LAST_LEARN_PATH, today)
         return launch_learning(cfg)
 
     if command == "stats":
