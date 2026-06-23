@@ -342,6 +342,12 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     transform: skewX(-12deg);
     text-shadow: 0 1px 3px alpha(#000000, 0.7);
 }
+/* Double-size ribbon for the SRS quiz (correct + drill-done) - bigger, bolder
+   payoff on the result screen. The game-helper ribbon keeps the base size. */
+.zenbuji-ribbon-lg {
+    font-size: 30px; padding: 6px 44px;
+    text-shadow: 0 2px 6px alpha(#000000, 0.7);
+}
 /* Compact corner ribbon for the game cards (small; pairs with the -new/-levelup
    colour classes below, which set the gradient and, for levelup, a dark text). */
 .zenbuji-card-ribbon {
@@ -359,6 +365,13 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     color: #3a2600; text-shadow: 0 1px 1px alpha(#ffffff, 0.55);
     background-image: linear-gradient(to right,
         alpha(#f5c211, 0), #ffe27a 28%, #e0a200 72%, alpha(#e0a200, 0));
+}
+/* Drill-complete ribbon: the system accent, so it reads as "finished" without
+   borrowing the new/levelup colours. */
+.zenbuji-ribbon-drill {
+    background-image: linear-gradient(to right,
+        alpha(@accent_bg_color, 0), @accent_bg_color 28%,
+        shade(@accent_bg_color, 0.78) 72%, alpha(@accent_bg_color, 0));
 }
 .zenbuji-dict-scroll { background: transparent; }
 

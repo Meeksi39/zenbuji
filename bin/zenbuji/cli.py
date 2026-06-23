@@ -1227,6 +1227,11 @@ def launch_learning(cfg: dict) -> int:
         match_reading_fn=grade.reading_matches,
         speak_phrase_fn=lambda t: tts.phrase_speaker(t, cfg),
         sfx_fn=lambda name: tts.play_sound(name, cfg),
+        # The drill-done ribbon is announced in the same punchy fanfare voice as
+        # the game-helper "新規ゲット" capture (distinct from the reading voice).
+        fanfare_fn=lambda text: tts.speak(text, {
+            **cfg, "voicevox_speaker": _capture_voice(
+                cfg.get("voicevox_speaker", tts.VOICEVOX_DEFAULT_SPEAKER))}),
         # Cap a single card at 5 min so an afk pause can't balloon the total.
         log_time_fn=lambda ms: store.add_study_time(min(ms, 300000)),
     )
