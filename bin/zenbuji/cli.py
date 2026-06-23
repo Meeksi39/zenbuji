@@ -1074,9 +1074,16 @@ def launch_dictionary(cfg: dict) -> int:
             return entry
         return store.dict_set(text, reading, translations)
 
+    languages = cfg.get("languages", ["en", "de"])
+
+    def add_captured(word):
+        """Translate + store a word staged from captions (translate-on-confirm —
+        nothing hits DeepL until the user picks it from the new-words prompt)."""
+        return pipeline.process(word, languages, cfg, do_translate=True)
+
     return show_dictionary(
         ui_language=cfg.get("ui_language", "en"),
-        languages=cfg.get("languages", ["en", "de"]),
+        languages=languages,
         load_fn=srs.dict_with_srs,
         delete_fn=store.dict_delete,
         clear_fn=store.clear_dict,
@@ -1089,6 +1096,9 @@ def launch_dictionary(cfg: dict) -> int:
         quota_fn=lambda: (translation.deepl_usage(cfg.get("deepl_api_key", ""))
                           if cfg.get("deepl_api_key") else None),
         speak_fn=lambda t: tts.speak(t, cfg),
+        captured_new_fn=store.captured_new,
+        captured_resolve_fn=store.captured_resolve,
+        add_captured_fn=add_captured,
     )
 
 
