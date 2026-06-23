@@ -140,3 +140,52 @@ def test_read_json_offline_no_key(cli):
     r = cli("read", "--json", "--backend", "argos", "日本語")
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout).get("reading")
+
+
+def test_captured_new_json_empty(cli):
+    r = cli("captured", "--new")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == []
+
+
+def test_captured_list_reads_seeded(cli):
+    _seed(cli, "captured.json", {
+        "走る": {"lemma": "走る", "reading": "はしる", "pos": "動詞", "count": 1,
+                 "first_seen": "2026-01-01T00:00:00",
+                 "last_seen": "2026-01-01T00:00:00",
+                 "sample": "犬が走る", "source_title": "", "source_url": ""},
+    })
+    r = cli("captured", "--list")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["走る"]["reading"] == "はしる"
+
+
+def test_captured_new_excludes_dict_and_ignored(cli):
+    _seed(cli, "dictionary.json", {"猫": {"text": "猫"}})
+    _seed(cli, "captured.json", {
+        "猫": {"lemma": "猫", "reading": "ねこ", "count": 1,
+               "last_seen": "2026-01-02T00:00:00"},
+        "走る": {"lemma": "走る", "reading": "はしる", "count": 1,
+                 "last_seen": "2026-01-03T00:00:00"},
+        "犬": {"lemma": "犬", "reading": "いぬ", "count": 1, "ignored": True,
+               "last_seen": "2026-01-01T00:00:00"},
+    })
+    r = cli("captured", "--new")
+    assert r.returncode == 0, r.stderr
+    assert [e["lemma"] for e in json.loads(r.stdout)] == ["走る"]
+
+
+def test_captured_ignore_hides_word(cli):
+    _seed(cli, "captured.json", {
+        "走る": {"lemma": "走る", "reading": "はしる", "count": 1,
+                 "last_seen": "2026-01-01T00:00:00"},
+    })
+    assert cli("captured", "--ignore", "走る").returncode == 0
+    assert json.loads(cli("captured", "--new").stdout) == []
+
+
+def test_captured_clear_removes_file(cli):
+    _seed(cli, "captured.json", {"走る": {"lemma": "走る"}})
+    r = cli("captured", "--clear")
+    assert r.returncode == 0, r.stderr
+    assert not (cli.data / "captured.json").exists()

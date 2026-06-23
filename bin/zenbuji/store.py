@@ -437,6 +437,129 @@ def read_busy(max_age: float = 120.0) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+# --------------------------------------------------------------------------- #
+# Captured words (staged from YouTube captions by the Firefox native-messaging
+# host). Content words land here cheaply — no translation — until the user adds
+# them from the dictionary window. Tokenisation stays in `lang`/`cli`, so this
+# module (and its tests) never need fugashi. See cli.py `captured`/`native-host`.
+# --------------------------------------------------------------------------- #
+def load_captured() -> dict:
+    """Staged caption words: ``{lemma: {reading, pos, count, first_seen,
+    last_seen, sample, source_title, source_url, ignored?}}``."""
+    try:
+        if paths.CAPTURED_PATH.exists():
+            data = json.loads(paths.CAPTURED_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def save_captured(data: dict) -> None:
+    try:
+        paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        paths.CAPTURED_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def capture_words(words, *, sample: str = "", source_title: str = "",
+                  source_url: str = "") -> int:
+    """Stage content words from one caption line.
+
+    `words` is an iterable of ``(lemma, reading, pos)`` tuples (from
+    :func:`zenbuji.lang.content_words`); `sample` is the caption line they came
+    from. A lemma already in the dictionary is skipped (already learned). A
+    repeat bumps `count` and `last_seen`; the reading, sample and source are set
+    once on first sight (first-sight wins, like :func:`dict_record`). Returns how
+    many *new* lemmas were staged.
+    """
+    data = load_captured()
+    learned = load_dict()
+    now = _stamp(data)
+    added = 0
+    changed = False
+    for lemma, reading, pos in words:
+        lemma = (lemma or "").strip()
+        if not lemma or lemma in learned:
+            continue
+        entry = data.get(lemma)
+        if entry is None:
+            data[lemma] = {
+                "lemma": lemma,
+                "reading": reading,
+                "pos": pos,
+                "count": 1,
+                "first_seen": now,
+                "last_seen": now,
+                "sample": sample,
+                "source_title": source_title,
+                "source_url": source_url,
+            }
+            added += 1
+        else:
+            entry["count"] = int(entry.get("count", 0)) + 1
+            entry["last_seen"] = now
+        changed = True
+    if changed:
+        save_captured(data)
+    return added
+
+
+def captured_new() -> list[dict]:
+    """Staged words not yet in the dictionary and not ignored, newest first.
+
+    Re-filters against the dictionary at read time (it grows between capture and
+    this call), so a word added since being captured doesn't resurface."""
+    learned = load_dict()
+    out = [dict(e) for k, e in load_captured().items()
+           if k not in learned and not e.get("ignored")]
+    out.sort(key=lambda e: e.get("last_seen", ""), reverse=True)
+    return out
+
+
+def captured_ignore(word: str) -> None:
+    """Mark a staged word ignored — kept on disk so re-capture can't resurface it."""
+    word = word.strip()
+    data = load_captured()
+    entry = data.get(word)
+    if entry is None:
+        return
+    entry["ignored"] = True
+    save_captured(data)
+
+
+def captured_prune(words) -> None:
+    """Drop staged words (call after the user adds them to the dictionary)."""
+    data = load_captured()
+    changed = False
+    for w in words:
+        if data.pop(w.strip(), None) is not None:
+            changed = True
+    if changed:
+        save_captured(data)
+
+
+def captured_resolve(word: str, action: str) -> None:
+    """Dict-window lifecycle hook: ``"added"`` drops the staged word, ``"ignored"``
+    hides it. The single contract point the GTK prompt calls."""
+    if action == "added":
+        captured_prune([word])
+    elif action == "ignored":
+        captured_ignore(word)
+
+
+def clear_captured() -> None:
+    try:
+        paths.CAPTURED_PATH.unlink()
+    except (FileNotFoundError, OSError):
+        pass
+
+
 def _due_date_dt(iso: str):
     if not iso:
         return None

@@ -77,3 +77,37 @@ def test_dict_form_leaves_non_lone_words(text):
     pytest.importorskip("fugashi")
     pytest.importorskip("unidic_lite")
     assert zenbuji.lang.dict_form(text) is None
+
+
+def test_content_words_keeps_noun_and_verb():
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    words = zenbuji.lang.content_words("猫が走る")
+    lemmas = [w[0] for w in words]
+    assert "猫" in lemmas and "走る" in lemmas
+    assert "が" not in lemmas                 # particle dropped
+    assert all(w[1] for w in words)           # every word has a reading
+
+
+def test_content_words_lemmatizes_inflected():
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    lemmas = [w[0] for w in zenbuji.lang.content_words("ご飯を食べた")]
+    assert "食べる" in lemmas                 # 食べた -> 食べる
+    assert "食べた" not in lemmas
+
+
+def test_content_words_drops_particles_and_punctuation():
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    lemmas = [w[0] for w in zenbuji.lang.content_words("本を、読む。")]
+    assert "読む" in lemmas
+    for junk in ("を", "、", "。"):
+        assert junk not in lemmas
+
+
+def test_content_words_dedups():
+    pytest.importorskip("fugashi")
+    pytest.importorskip("unidic_lite")
+    lemmas = [w[0] for w in zenbuji.lang.content_words("猫と猫と猫")]
+    assert lemmas.count("猫") == 1
