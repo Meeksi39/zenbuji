@@ -134,6 +134,13 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     box-shadow: 0 1px 3px alpha(#000000, 0.22);
 }
 .zenbuji-tab:checked:hover { background-color: shade(@accent_bg_color, 1.08); }
+/* Dictionary grid cell: a faint card so adjacent columns read as separate. */
+.zenbuji-dict-card {
+    background-color: alpha(currentColor, 0.04);
+    border-radius: 12px;
+    margin: 4px;
+}
+.zenbuji-dropdown { min-height: 0; }
 
 /* Default text inputs (popup / dict search): subtle translucent fields that sit
    quietly on the glass. */
