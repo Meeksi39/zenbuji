@@ -140,18 +140,33 @@ def test_about_window(gui):
     _launch_ok(gui.env, ["about"])
 
 
-def test_dict_window_with_captured_prompt(gui):
-    # Staged caption words (not in the dict) should build the "new words from
-    # videos" prompt on open without crashing.
+_CAPTURED = {
+    "走る": {"lemma": "走る", "reading": "はしる", "pos": "動詞", "count": 2,
+             "first_seen": "2026-01-01T00:00:00", "last_seen": "2026-01-03T00:00:00",
+             "sample": "犬が走る", "source_title": "vid", "source_url": ""},
+    "猫": {"lemma": "猫", "reading": "ねこ", "pos": "名詞", "count": 1,
+           "first_seen": "2026-01-01T00:00:00", "last_seen": "2026-01-02T00:00:00",
+           "sample": "猫がいる", "source_title": "vid", "source_url": ""},
+    "鍵": {"lemma": "鍵", "reading": "かぎ", "pos": "名詞", "count": 1, "ignored": True,
+           "first_seen": "2026-01-01T00:00:00", "last_seen": "2026-01-01T00:00:00",
+           "sample": "鍵をかける", "source_title": "vid", "source_url": ""},
+}
+
+
+def test_dict_window_with_captured_button(gui):
+    # With staged caption words present, the dict header shows a "New words (N)"
+    # button — it should still build without crashing.
     _seed(gui, "dictionary.json", _CARD)
-    _seed(gui, "captured.json", {
-        "走る": {"lemma": "走る", "reading": "はしる", "pos": "動詞", "count": 2,
-                 "first_seen": "2026-01-01T00:00:00",
-                 "last_seen": "2026-01-03T00:00:00",
-                 "sample": "犬が走る", "source_title": "vid", "source_url": ""},
-        "猫": {"lemma": "猫", "reading": "ねこ", "pos": "名詞", "count": 1,
-               "first_seen": "2026-01-01T00:00:00",
-               "last_seen": "2026-01-02T00:00:00",
-               "sample": "猫がいる", "source_title": "vid", "source_url": ""},
-    })
+    _seed(gui, "captured.json", _CAPTURED)
     _launch_ok(gui.env, ["dict"])
+
+
+def test_review_window(gui):
+    # The review window builds its New + Ignored tabs from the staging store.
+    _seed(gui, "dictionary.json", _CARD)
+    _seed(gui, "captured.json", _CAPTURED)
+    _launch_ok(gui.env, ["review"])
+
+
+def test_review_window_empty(gui):
+    _launch_ok(gui.env, ["review"])

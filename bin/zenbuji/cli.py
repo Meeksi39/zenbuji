@@ -36,6 +36,7 @@ Usage:
   zenbuji ocr [image]         OCR a screen region (or image file) and look it up
   zenbuji add <words…>        Translate & store words in the dictionary, no GUI
   zenbuji dict                Open the local dictionary (cached DeepL lookups)
+  zenbuji review              Review words captured from YouTube captions
   zenbuji export              Export the dictionary as Anki TSV/CSV (-o FILE)
   zenbuji learn               Practice cached words (spaced repetition quiz)
   zenbuji stats               Show learning statistics (--json for machines)
@@ -600,7 +601,7 @@ def main(argv=None) -> int:
         "read", "furigana", "tr", "translate", "popup", "selection",
         "config", "models", "usage", "ocr", "dict", "export", "learn", "stats",
         "game", "add", "speak", "voices", "voicevox", "about",
-        "captured", "native-host",
+        "captured", "native-host", "review",
     }
 
     # Determine command vs. free text. With no args (e.g. piped stdin), default
@@ -750,6 +751,10 @@ def main(argv=None) -> int:
             print(json.dumps(store.load_dict(), ensure_ascii=False))
             return 0
         return launch_dictionary(cfg)
+
+    if command == "review":
+        argparse.ArgumentParser(prog="zenbuji review").parse_args(rest)
+        return launch_review(cfg)
 
     if command == "learn":
         p = argparse.ArgumentParser(prog="zenbuji learn")
@@ -1085,16 +1090,14 @@ def launch_dictionary(cfg: dict) -> int:
             return entry
         return store.dict_set(text, reading, translations)
 
-    languages = cfg.get("languages", ["en", "de"])
-
-    def add_captured(word):
-        """Translate + store a word staged from captions (translate-on-confirm —
-        nothing hits DeepL until the user picks it from the new-words prompt)."""
-        return pipeline.process(word, languages, cfg, do_translate=True)
+    def captured_count():
+        """How many words are waiting in the review window (for the dict button)."""
+        return len(store.captured_new(
+            ignore_katakana=cfg.get("capture_ignore_katakana", False)))
 
     return show_dictionary(
         ui_language=cfg.get("ui_language", "en"),
-        languages=languages,
+        languages=cfg.get("languages", ["en", "de"]),
         load_fn=srs.dict_with_srs,
         delete_fn=store.dict_delete,
         clear_fn=store.clear_dict,
@@ -1107,9 +1110,41 @@ def launch_dictionary(cfg: dict) -> int:
         quota_fn=lambda: (translation.deepl_usage(cfg.get("deepl_api_key", ""))
                           if cfg.get("deepl_api_key") else None),
         speak_fn=lambda t: tts.speak(t, cfg),
-        captured_new_fn=store.captured_new,
-        captured_resolve_fn=store.captured_resolve,
-        add_captured_fn=add_captured,
+        captured_count_fn=captured_count,
+    )
+
+
+def launch_review(cfg: dict) -> int:
+    """Show the GTK review window (add/ignore words captured from captions)."""
+    try:
+        from zenbuji_review import show_review
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from zenbuji_review import show_review
+
+    languages = cfg.get("languages", ["en", "de"])
+
+    def add_word(word) -> bool:
+        """Translate + store one word; True iff it's now in the dictionary.
+
+        Translate-on-confirm — nothing hits DeepL until the user picks a word.
+        A False return (no backend, network error, blank result) tells the
+        window to slide the row back with a retry warning."""
+        try:
+            pipeline.process(word, languages, cfg, do_translate=True)
+        except Exception:  # noqa: BLE001
+            return False
+        return store.dict_get(word) is not None
+
+    return show_review(
+        ui_language=cfg.get("ui_language", "en"),
+        languages=languages,
+        new_fn=lambda: store.captured_new(
+            ignore_katakana=cfg.get("capture_ignore_katakana", False)),
+        ignored_fn=store.captured_ignored,
+        add_fn=add_word,
+        ignore_fn=lambda w: store.captured_resolve(w, "ignored"),
+        unignore_fn=store.captured_unignore,
     )
 
 
