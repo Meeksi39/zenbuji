@@ -25,6 +25,36 @@ def has_kanji(text: str) -> bool:
     return any(0x4E00 <= ord(ch) <= 0x9FFF or ch == "々" for ch in text)
 
 
+def _has_japanese(text: str) -> bool:
+    """True if `text` has any kana or kanji — so pure romaji/digits are excluded."""
+    for ch in text:
+        c = ord(ch)
+        if (0x3041 <= c <= 0x309F          # hiragana
+                or 0x30A0 <= c <= 0x30FF   # katakana
+                or 0x4E00 <= c <= 0x9FFF   # kanji
+                or ch == "々"):
+            return True
+    return False
+
+
+def is_katakana_only(text: str) -> bool:
+    """True if `text` is written purely in katakana (loanword-style, e.g. コーヒー).
+
+    Requires at least one katakana letter; the long-vowel mark ー and the
+    nakaguro ・ are allowed to ride along, but any hiragana, kanji, or latin
+    makes it False."""
+    saw_kana = False
+    for ch in text:
+        c = ord(ch)
+        if 0x30A1 <= c <= 0x30FA or c in (0x30FD, 0x30FE):  # katakana letters
+            saw_kana = True
+        elif ch in ("ー", "・"):                             # long vowel / separator
+            continue
+        else:
+            return False
+    return saw_kana
+
+
 @dataclass
 class Token:
     surface: str
@@ -119,7 +149,9 @@ def content_words(text: str) -> list[tuple[str, str, str]]:
             continue
         ob = getattr(feat, "orthBase", None) or getattr(feat, "lemma", None)
         lemma = ob if (ob and ob != "*") else word.surface
-        if not lemma or lemma in seen:
+        # Drop pure-romaji / digit tokens MeCab tags as nouns (caption captions
+        # are full of latin words and timestamps) — keep only real Japanese.
+        if not lemma or lemma in seen or not _has_japanese(lemma):
             continue
         kana = None
         for attr in ("kanaBase", "pronBase", "kana", "pron"):

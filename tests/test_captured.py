@@ -90,6 +90,37 @@ def test_clear_captured_removes_file(store):
     assert zenbuji.store.load_captured() == {}
 
 
+def test_captured_ignored_lists_only_ignored(store):
+    zenbuji.store.capture_words([("走る", "はしる", "動詞"), ("猫", "ねこ", "名詞")])
+    zenbuji.store.captured_ignore("猫")
+    assert [e["lemma"] for e in zenbuji.store.captured_new()] == ["走る"]
+    assert [e["lemma"] for e in zenbuji.store.captured_ignored()] == ["猫"]
+
+
+def test_captured_unignore_returns_to_new(store):
+    zenbuji.store.capture_words([("猫", "ねこ", "名詞")])
+    zenbuji.store.captured_ignore("猫")
+    assert zenbuji.store.captured_new() == []
+    zenbuji.store.captured_unignore("猫")
+    assert [e["lemma"] for e in zenbuji.store.captured_new()] == ["猫"]
+    assert zenbuji.store.captured_ignored() == []
+
+
+def test_captured_new_ignore_katakana_filter(store):
+    zenbuji.store.capture_words([("猫", "ねこ", "名詞"), ("コーヒー", "こーひー", "名詞")])
+    assert "コーヒー" in [e["lemma"] for e in zenbuji.store.captured_new()]
+    # katakana-only loanword dropped, kanji word kept
+    assert [e["lemma"] for e in
+            zenbuji.store.captured_new(ignore_katakana=True)] == ["猫"]
+
+
+def test_is_katakana_only():
+    f = zenbuji.lang.is_katakana_only
+    assert f("コーヒー") and f("メール") and f("データー")
+    assert not f("珈琲") and not f("猫") and not f("ねこ")
+    assert not f("test") and not f("") and not f("コーヒー牛乳")
+
+
 # --------------------------------------------------------------------------- #
 # Native-messaging framing
 # --------------------------------------------------------------------------- #

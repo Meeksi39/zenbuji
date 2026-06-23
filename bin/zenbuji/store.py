@@ -510,14 +510,29 @@ def capture_words(words, *, sample: str = "", source_title: str = "",
     return added
 
 
-def captured_new() -> list[dict]:
+def captured_new(ignore_katakana: bool = False) -> list[dict]:
     """Staged words not yet in the dictionary and not ignored, newest first.
 
     Re-filters against the dictionary at read time (it grows between capture and
-    this call), so a word added since being captured doesn't resurface."""
+    this call), so a word added since being captured doesn't resurface. With
+    `ignore_katakana`, katakana-only lemmas (loanwords like コーヒー) are dropped
+    too — a display filter the user can toggle, so the words stay staged and
+    reappear if it's turned back off."""
     learned = load_dict()
     out = [dict(e) for k, e in load_captured().items()
            if k not in learned and not e.get("ignored")]
+    if ignore_katakana:
+        # Lazy import keeps this module (and its tests) fugashi-free — the
+        # katakana check is pure char logic, no tagger.
+        from . import lang
+        out = [e for e in out if not lang.is_katakana_only(e.get("lemma", ""))]
+    out.sort(key=lambda e: e.get("last_seen", ""), reverse=True)
+    return out
+
+
+def captured_ignored() -> list[dict]:
+    """Staged words the user has ignored, newest first (for the Ignored tab)."""
+    out = [dict(e) for e in load_captured().values() if e.get("ignored")]
     out.sort(key=lambda e: e.get("last_seen", ""), reverse=True)
     return out
 
@@ -531,6 +546,17 @@ def captured_ignore(word: str) -> None:
         return
     entry["ignored"] = True
     save_captured(data)
+
+
+def captured_unignore(word: str) -> None:
+    """Un-ignore a staged word so it returns to the New list."""
+    word = word.strip()
+    data = load_captured()
+    entry = data.get(word)
+    if entry is None:
+        return
+    if entry.pop("ignored", None) is not None:
+        save_captured(data)
 
 
 def captured_prune(words) -> None:

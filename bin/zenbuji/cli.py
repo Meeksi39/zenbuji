@@ -157,6 +157,9 @@ def cmd_config(args, cfg) -> int:
     if args.normalize:
         cfg["normalize"] = args.normalize == "on"
         changed = True
+    if args.capture_ignore_katakana:
+        cfg["capture_ignore_katakana"] = args.capture_ignore_katakana == "on"
+        changed = True
     if args.tts:
         cfg["tts"] = args.tts == "on"
         changed = True
@@ -480,7 +483,10 @@ def cmd_captured(args, cfg) -> int:
         store.captured_ignore(args.ignore)
         return 0
     if args.new:
-        print(json.dumps(store.captured_new(), ensure_ascii=False))
+        print(json.dumps(
+            store.captured_new(
+                ignore_katakana=cfg.get("capture_ignore_katakana", False)),
+            ensure_ascii=False))
         return 0
     if args.list:
         print(json.dumps(store.load_captured(), ensure_ascii=False))
@@ -649,6 +655,9 @@ def main(argv=None) -> int:
         p.add_argument("--normalize", choices=["on", "off"],
                        help="fold inflected words to their dictionary form "
                             "(食べた -> 食べる) for lookup/storage")
+        p.add_argument("--capture-ignore-katakana", dest="capture_ignore_katakana",
+                       choices=["on", "off"],
+                       help="hide katakana-only words from the captured 'new words' list")
         p.add_argument("--tts", choices=["on", "off"],
                        help="read words aloud after an OCR/silent add by default")
         p.add_argument("--tts-on-lookup", dest="tts_on_lookup",
