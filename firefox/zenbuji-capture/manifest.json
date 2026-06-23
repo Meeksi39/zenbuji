@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "zenbuji caption capture",
+  "version": "0.1.0",
+  "description": "Harvest the Japanese words you don't know yet from YouTube captions, straight into zenbuji.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "zenbuji-capture@meeksi39",
+      "strict_min_version": "115.0"
+    }
+  },
+  "permissions": ["nativeMessaging", "storage", "tabs"],
+  "host_permissions": ["*://*.youtube.com/*"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/watch*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "zenbuji capture",
+    "default_icon": { "48": "icons/zenbuji-48.png" }
+  },
+  "icons": { "48": "icons/zenbuji-48.png" }
+}
