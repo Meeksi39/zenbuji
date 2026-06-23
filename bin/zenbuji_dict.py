@@ -186,7 +186,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             resizable=True, draggable=True, close_on_focus_loss=False)
         # Drop the card's horizontal padding so the scroll/list spans edge to
         # edge; every non-list row is re-inset by INSET below.
-        card.add_css_class("zenbuji-dict-window")
+        card.add_css_class("zenbuji-flush-window")
         INSET = 18
 
         def make_reading_field(get_surface, value=""):

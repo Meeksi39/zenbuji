@@ -90,6 +90,10 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
         win, card = make_glass_window(
             application, title="zenbuji ゲーム", default_size=(420, 560),
             resizable=True, draggable=True, close_on_focus_loss=False)
+        # Drop the card's horizontal padding so the card grid spans edge to edge
+        # (like the dict); every non-list row is re-inset by INSET below.
+        card.add_css_class("zenbuji-flush-window")
+        INSET = 18
 
         # --- header: title + combo, with the quip as a tied subtitle -------- //
         header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
@@ -447,6 +451,15 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
                     pass
                 GLib.timeout_add_seconds(4, lambda: (update_busy(), True)[1])
             GLib.timeout_add_seconds(18, lambda: (_set_idle_quip(), True)[1])
+
+        # Re-inset every row except the card grid, so the list spans full width
+        # while the header/hero/search/footer keep the window's side padding.
+        child = card.get_first_child()
+        while child is not None:
+            if child is not list_box:
+                child.set_margin_start(INSET)
+                child.set_margin_end(INSET)
+            child = child.get_next_sibling()
 
         rebuild()
         win.present()
