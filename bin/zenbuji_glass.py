@@ -242,8 +242,10 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
 /* --- dictionary window --- */
 .zenbuji-title { font-size: 17px; font-weight: 700; }
 .zenbuji-dict-jp { font-size: 16px; font-weight: 600; }
-/* Game glance card: bigger kanji for second-screen legibility. */
+/* Game glance card: bigger kanji + inner padding (the cell appends content
+   straight into the card holder, so it needs its own padding). */
 .zenbuji-game-jp { font-size: 23px; font-weight: 700; }
+.zenbuji-game-card { padding: 12px 14px; }
 .zenbuji-count { font-size: 11px; font-weight: 700; opacity: 0.6; }
 .zenbuji-meta { font-size: 10px; opacity: 0.5; }
 .zenbuji-dict-list { background: transparent; }
