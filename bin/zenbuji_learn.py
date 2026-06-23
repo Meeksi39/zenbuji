@@ -42,6 +42,10 @@ LANG_NAMES_BY_UI = {
 # with the ~0.3s fly-out the next word loads ~1.4s after a correct answer.
 _BANNER_HOLD_MS = 1100
 
+# Announced (in the punchy fanfare voice) as the drill-done ribbon flies in.
+# VOICEVOX is Japanese-only, so this is the spoken form regardless of UI language.
+_DRILL_DONE_VOICE = "ドリル完了！！"
+
 def _reading_markup(correct: str, typed: str, accent: str) -> str:
     """Pango markup for `correct`: the characters the learner got right are shown
     in the accent colour, the ones they missed are muted (the default colour
@@ -82,6 +86,7 @@ LEARN_STRINGS = {
     "leveled_up":   {"en": "{n} leveled up!", "ja": "{n} 個レベルアップ！"},
     "banner_correct": {"en": "✦ Correct! ✦",  "ja": "✦ 正解！ ✦"},
     "banner_levelup": {"en": "✦ Level up! ✦", "ja": "✦ レベルアップ！ ✦"},
+    "banner_drill":   {"en": "✦ Drill done!! ✦", "ja": "✦ ドリル完了！！ ✦"},
     "drill_prompt":     {"en": "Type the reading to lock it in",
                          "ja": "読みを入力して覚えよう"},
     "drill_progress":   {"en": "{n} / {total}", "ja": "{n} / {total}"},
@@ -314,7 +319,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                   ui_language="en", grade_fn, review_fn, speak_fn=None,
                   auto_speak=False, greeting=True, drill_repeats=5,
                   match_reading_fn=None, speak_phrase_fn=None,
-                  sfx_fn=None, log_time_fn=None) -> int:
+                  sfx_fn=None, fanfare_fn=None, log_time_fn=None) -> int:
     def t(key):
         e = LEARN_STRINGS.get(key, {})
         return e.get(ui_language) or e.get("en") or key
@@ -409,15 +414,19 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
 
         _BANNER_FLY = 90   # px the ribbon travels as it flies in / out
 
-        def _show_banner(levelup=False):
+        def _show_banner(levelup=False, *, text=None, style=None):
             """JRPG-style ribbon over the result on a correct answer (the same
             look as the game-helper capture banner). It flies in from the right
-            to centre; `_hide_banner` flies it back out. Returns the widget."""
-            banner = Gtk.Label(label=t("banner_levelup") if levelup
-                               else t("banner_correct"))
+            to centre; `_hide_banner` flies it back out. Returns the widget.
+
+            `text`/`style` override the default Correct/Level up ribbon so the
+            same fly-in/out can carry other messages (e.g. the drill-done one)."""
+            banner = Gtk.Label(label=text if text is not None else (
+                t("banner_levelup") if levelup else t("banner_correct")))
             banner.add_css_class("zenbuji-ribbon")
-            banner.add_css_class("zenbuji-ribbon-levelup" if levelup
-                                 else "zenbuji-ribbon-new")
+            banner.add_css_class("zenbuji-ribbon-lg")  # SRS ribbons are double-size
+            banner.add_css_class(style if style else (
+                "zenbuji-ribbon-levelup" if levelup else "zenbuji-ribbon-new"))
             banner.set_halign(Gtk.Align.CENTER)
             banner.set_valign(Gtk.Align.CENTER)
             banner.set_can_target(False)
@@ -777,10 +786,11 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                         n=progress["n"], total=drill_repeats))
                     entry.set_text("")
                     if progress["n"] >= drill_repeats:
-                        # Drill cleared — the slash caps it off.
+                        # Drill cleared — the slash caps it off and the accent
+                        # "Drill done!!" ribbon flies in (paced to the slash).
                         if sfx_fn:
                             sfx_fn("sword")
-                        finalize(cur, False)
+                        finalize(cur, False, drill_done=True)
                         return
                     if sfx_fn:
                         sfx_fn("correct")
@@ -808,7 +818,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             except Exception:  # noqa: BLE001 — focus alone is enough
                 pass
 
-        def finalize(cur, correct):
+        def finalize(cur, correct, *, drill_done=False):
             old_status = cur.get("status", "")
             info = review_fn(cur["text"], correct, state.get("recall_ms")) or {}
             state["recall_ms"] = None        # consume so it can't double-count
@@ -837,11 +847,19 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                 else:
                     show_summary()
 
-            if correct:
+            if correct or drill_done:
                 # Celebrate: ribbon flies in, holds a beat, flies out, next word.
-                # (The pass/fail chime already fired at grade time.)
-                state["score"] += 1
-                banner = _show_banner(leveled_up)
+                # (The pass/fail chime / sword slash already fired at grade time.)
+                if correct:
+                    state["score"] += 1
+                    banner = _show_banner(leveled_up)
+                else:
+                    # Finished the retype drill: accent ribbon, same motion,
+                    # announced in the fanfare voice as it flies in (like 新規ゲット).
+                    banner = _show_banner(text=t("banner_drill"),
+                                          style="zenbuji-ribbon-drill")
+                    if fanfare_fn:
+                        fanfare_fn(_DRILL_DONE_VOICE)
 
                 def _out():
                     if win.get_mapped():       # window not closed during the hold
