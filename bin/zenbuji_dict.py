@@ -38,10 +38,10 @@ class DictItem(GObject.Object):
         self.entry = entry
 
 try:
-    from zenbuji_glass import fmt_ms, make_footer, make_glass_window
+    from zenbuji_glass import fmt_ms, make_footer, make_glass_window, make_tabs
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from zenbuji_glass import fmt_ms, make_footer, make_glass_window
+    from zenbuji_glass import fmt_ms, make_footer, make_glass_window, make_tabs
 
 LANG_NAMES_BY_UI = {
     "en": {"en": "English", "de": "Deutsch", "ja": "日本語"},
@@ -81,6 +81,17 @@ DICT_STRINGS = {
     "busy_translating": {"en": "Translating…",  "ja": "翻訳中…"},
     # Header button → the review window, when caption words are waiting ({n} in code).
     "new_words":  {"en": "New words ({n})", "ja": "新着 ({n})"},
+    # Sort orders (dropdown) + filter chips + the shown/total count.
+    "sort_recent": {"en": "Recent",     "ja": "新しい順"},
+    "sort_oldest": {"en": "Oldest",     "ja": "古い順"},
+    "sort_alpha":  {"en": "A–Z",        "ja": "あいうえお順"},
+    "sort_count":  {"en": "Most seen",  "ja": "回数順"},
+    "sort_due":    {"en": "Due first",  "ja": "復習順"},
+    "filt_all":          {"en": "All",          "ja": "すべて"},
+    "filt_due":          {"en": "Due",          "ja": "復習"},
+    "filt_untranslated": {"en": "Untranslated", "ja": "未翻訳"},
+    "filt_excluded":     {"en": "Excluded",     "ja": "除外"},
+    "count_shown": {"en": "{shown} / {total}", "ja": "{shown} / {total}"},
 }
 
 # The game overlay is intentionally Japanese-only for flavour (immersion):
@@ -166,6 +177,53 @@ def _spawn_review():
         pass
 
 
+# Sort orders + filter chips for the dictionary grid. Pure functions so the
+# logic is unit-testable without GTK (the view just calls them via the model).
+SORT_ORDERS = ("recent", "oldest", "alpha", "count", "due")
+DICT_FILTERS = ("all", "due", "untranslated", "excluded")
+
+
+def _is_due(srs) -> bool:
+    due = (srs or {}).get("due")
+    if not due:
+        return False
+    try:
+        return datetime.fromisoformat(due).date() <= datetime.now().date()
+    except (ValueError, TypeError):
+        return False
+
+
+def dict_sort_key(entry: dict, order: str):
+    """An *ascending* comparable key for `order`. "recent" is sorted descending
+    on this key (the only reversed order) — the view's comparator handles that."""
+    text = entry.get("text", "")
+    if order == "alpha":
+        return (entry.get("reading") or text, text)
+    if order == "count":            # most-seen first (negate so ascending works)
+        return (-int(entry.get("count", 0)), entry.get("last_seen", ""))
+    if order == "due":              # soonest due first, no-due entries last
+        due = (entry.get("srs") or {}).get("due") or ""
+        return (0 if due else 1, due, text)
+    return (entry.get("last_seen", ""), text)   # recent (reversed) / oldest
+
+
+def dict_matches(entry: dict, needle: str, filt: str) -> bool:
+    """Whether `entry` passes the active filter chip AND the search needle."""
+    if filt == "excluded" and not entry.get("exclude"):
+        return False
+    if filt == "untranslated" and any(
+            (v or "").strip() for v in (entry.get("translations") or {}).values()):
+        return False
+    if filt == "due" and not _is_due(entry.get("srs")):
+        return False
+    if needle:
+        hay = " ".join([entry.get("text", ""), entry.get("reading", ""),
+                        *(entry.get("translations") or {}).values()]).lower()
+        if needle not in hay:
+            return False
+    return True
+
+
 def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     load_fn, delete_fn, clear_fn, stats_fn,
                     refresh_fn=None, update_fn=None, save_fn=None,
@@ -196,7 +254,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     state = {"editing": False, "editing_key": None, "pending": False,
              "token": 0, "monitors": [], "seen": {}, "primed": False,
              "anims": [], "session": 0, "quip_mode": "idle", "banner_token": 0,
-             "seq_token": 0}
+             "seq_token": 0, "sort": "recent", "filter": "all",
+             "items_by_key": {}, "search_token": 0}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
     app = Adw.Application(application_id="com.meeksi39.zenbuji",
@@ -206,7 +265,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         win, card = make_glass_window(
             application,
             title="zenbuji ゲーム" if game_mode else "zenbuji 辞書",
-            default_size=(420, 560) if game_mode else (500, 640),
+            default_size=(420, 560) if game_mode else (940, 720),
             resizable=True, draggable=True, close_on_focus_loss=False)
 
         stats_label = None
@@ -454,7 +513,36 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
 
         search = Gtk.SearchEntry(hexpand=True)
         search.set_placeholder_text(t("search"))
-        card.append(search)
+
+        # Controls: search alone (game) or search + sort dropdown + filter chips
+        # + a shown/total count (non-game). dict_sorter/dict_filter are created
+        # with the model below; these handlers close over them (resolved at call).
+        sort_keys = ["recent", "oldest", "alpha", "count", "due"]
+        filt_keys = ["all", "due", "untranslated", "excluded"]
+        sort_dd = count_lbl = None
+        if game_mode:
+            card.append(search)
+        else:
+            sort_dd = Gtk.DropDown.new_from_strings([t(f"sort_{k}") for k in sort_keys])
+            sort_dd.add_css_class("zenbuji-dropdown")
+            sort_dd.set_valign(Gtk.Align.CENTER)
+            srow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            srow.append(search)
+            srow.append(sort_dd)
+            card.append(srow)
+
+            tabs_box, _filt_tabs = make_tabs(
+                [(k, t(f"filt_{k}")) for k in filt_keys],
+                lambda name: _set_filter(name))
+            tabs_box.set_hexpand(True)
+            count_lbl = Gtk.Label(xalign=1)
+            count_lbl.add_css_class("zenbuji-meta")
+            count_lbl.set_valign(Gtk.Align.CENTER)
+            chips_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            chips_row.set_margin_top(2)
+            chips_row.append(tabs_box)
+            chips_row.append(count_lbl)
+            card.append(chips_row)
 
         hairline = Gtk.Box()
         hairline.add_css_class("zenbuji-hairline")
@@ -463,57 +551,100 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         scroll = Gtk.ScrolledWindow(vexpand=True)
         scroll.add_css_class("zenbuji-dict-scroll")
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        # Don't let a long entry stretch the window; rows wrap instead.
         scroll.set_propagate_natural_width(False)
         scroll.set_min_content_width(380)
         # The dictionary grows without bound, so the non-game window virtualizes
-        # the list (Gtk.ListView realizes only the visible rows). Game mode keeps
-        # the plain ListBox — it shows a handful of rows with tight animations.
-        listbox = listview = dict_store = empty_label = None
+        # it (Gtk.GridView realizes only visible cells and reflows columns with
+        # width). Game mode keeps the plain single-column ListBox.
+        listbox = gridview = dict_store = empty_label = None
+        dict_filter = dict_sorter = filter_model = None
         if game_mode:
             listbox = Gtk.ListBox()
             listbox.add_css_class("zenbuji-dict-list")
             listbox.set_selection_mode(Gtk.SelectionMode.NONE)
             scroll.set_child(listbox)
             card.append(scroll)
+
+            game_empty = Gtk.Label(label=t("empty"), xalign=0)
+            game_empty.add_css_class("zenbuji-note")
+            listbox.set_placeholder(game_empty)   # auto-shown when no rows
+
+            def filter_func(row):
+                needle = search.get_text().strip().lower()
+                return needle in getattr(row, "_haystack", "") if needle else True
+
+            listbox.set_filter_func(filter_func)
+            search.connect("search-changed",
+                           lambda _s: listbox.invalidate_filter())
         else:
             dict_store = Gio.ListStore(item_type=DictItem)
 
-            def _cmp_last_seen(a, b, _u=None):
-                la, lb = a.entry.get("last_seen", "") or "", b.entry.get("last_seen", "") or ""
-                return (lb > la) - (lb < la)        # newest first
+            def _sort_cmp(a, b, _u=None):
+                order = state["sort"]
+                ka, kb = dict_sort_key(a.entry, order), dict_sort_key(b.entry, order)
+                if order == "recent":
+                    ka, kb = kb, ka              # newest first
+                return (ka > kb) - (ka < kb)
 
-            def _match(item, _u=None):
-                needle = search.get_text().strip().lower()
-                if not needle:
-                    return True
-                e = item.entry
-                hay = " ".join([e.get("text", ""), e.get("reading", ""),
-                                *e.get("translations", {}).values()]).lower()
-                return needle in hay
+            def _filt(item, _u=None):
+                return dict_matches(item.entry, search.get_text().strip().lower(),
+                                    state["filter"])
 
-            dict_filter = Gtk.CustomFilter.new(_match)
-            sorted_model = Gtk.SortListModel(
-                model=dict_store, sorter=Gtk.CustomSorter.new(_cmp_last_seen))
+            dict_sorter = Gtk.CustomSorter.new(_sort_cmp)
+            dict_filter = Gtk.CustomFilter.new(_filt)
+            sorted_model = Gtk.SortListModel(model=dict_store, sorter=dict_sorter)
             filter_model = Gtk.FilterListModel(model=sorted_model, filter=dict_filter)
             factory = Gtk.SignalListItemFactory()
             factory.connect(
                 "bind", lambda _f, li: li.set_child(build_dict_item(li.get_item())))
             factory.connect("unbind", lambda _f, li: li.set_child(None))
-            listview = Gtk.ListView(model=Gtk.NoSelection(model=filter_model),
+            gridview = Gtk.GridView(model=Gtk.NoSelection(model=filter_model),
                                     factory=factory)
-            listview.add_css_class("zenbuji-dict-list")
-            listview.set_single_click_activate(False)
-            scroll.set_child(listview)
+            gridview.add_css_class("zenbuji-dict-list")
+            gridview.set_min_columns(1)
+            gridview.set_max_columns(4)
+            gridview.set_enable_rubberband(False)
+            gridview.set_single_click_activate(False)
+            scroll.set_child(gridview)
             card.append(scroll)
-            # ListView has no placeholder; an empty-state label sits just below
-            # the list and is toggled in repopulate().
+            # GridView has no placeholder; an empty-state label toggled below.
             empty_label = Gtk.Label(label=t("empty"), xalign=0.5, wrap=True)
             empty_label.add_css_class("zenbuji-note")
             empty_label.set_margin_top(18)
             empty_label.set_halign(Gtk.Align.CENTER)
             empty_label.set_visible(False)
             card.append(empty_label)
+
+            def _update_count():
+                if count_lbl is not None and filter_model is not None:
+                    count_lbl.set_text(t("count_shown").format(
+                        shown=filter_model.get_n_items(),
+                        total=dict_store.get_n_items()))
+
+            filter_model.connect("items-changed", lambda *_a: _update_count())
+
+            def _set_filter(name):
+                state["filter"] = name
+                dict_filter.changed(Gtk.FilterChange.DIFFERENT)
+
+            def _on_sort(dd, _p):
+                state["sort"] = sort_keys[dd.get_selected()]
+                dict_sorter.changed(Gtk.SorterChange.DIFFERENT)
+
+            sort_dd.connect("notify::selected", _on_sort)
+
+            def _do_search(_s):
+                state["search_token"] += 1
+                tok = state["search_token"]
+
+                def fire():
+                    if win.get_mapped() and tok == state["search_token"]:
+                        dict_filter.changed(Gtk.FilterChange.DIFFERENT)
+                    return GLib.SOURCE_REMOVE
+
+                GLib.timeout_add(120, fire)
+
+            search.connect("search-changed", _do_search)
 
         if game_footer is not None:
             card.append(game_footer)
@@ -528,24 +659,6 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             footer.set_margin_top(6)
             footer.append(clear_btn)
             card.append(footer)
-
-        # --- Search filtering --------------------------------------------- //
-        if game_mode:
-            game_empty = Gtk.Label(label=t("empty"), xalign=0)
-            game_empty.add_css_class("zenbuji-note")
-            listbox.set_placeholder(game_empty)   # auto-shown when no rows
-
-            def filter_func(row):
-                needle = search.get_text().strip().lower()
-                return needle in getattr(row, "_haystack", "") if needle else True
-
-            listbox.set_filter_func(filter_func)
-            search.connect("search-changed",
-                           lambda _s: listbox.invalidate_filter())
-        else:
-            search.connect(
-                "search-changed",
-                lambda _s: dict_filter.changed(Gtk.FilterChange.DIFFERENT))
 
         def _langs_in(trans):
             return [*languages, *[l for l in trans if l not in languages]]
@@ -565,6 +678,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             reading = entry.get("reading", "")
             trans = entry.get("translations", {})
             row = Gtk.ListBoxRow()
+            row._haystack = " ".join([text, reading, *trans.values()]).lower()
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             outer.set_margin_top(8)
             outer.set_margin_bottom(8)
@@ -608,6 +722,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             reading = entry.get("reading", "")
             trans = entry.get("translations", {})
             holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            holder.add_css_class("zenbuji-dict-card")   # grid cell card
 
             def build_view():
                 outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -857,13 +972,39 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             listbox.invalidate_filter()
 
         def repopulate():
-            # Virtualized path: rebuild only the tiny model (DictItem GObjects);
-            # the ListView realizes just the visible rows. No widget churn.
+            # Virtualized path: update the tiny model incrementally — remove gone
+            # keys, append new ones, refresh existing entries in place — then let
+            # the sort/filter models re-evaluate. No full reallocation, so scroll
+            # position survives a background add. (GridView realizes only visible
+            # cells regardless.)
             data = load_fn()
-            items = [DictItem(k, e) for k, e in data.items()]
-            dict_store.splice(0, dict_store.get_n_items(), items)
+            by_key = state["items_by_key"]
+            if not data:
+                dict_store.remove_all()
+                by_key.clear()
+            else:
+                for k in [k for k in by_key if k not in data]:
+                    ok, pos = dict_store.find(by_key[k])
+                    if ok:
+                        dict_store.remove(pos)
+                    by_key.pop(k, None)
+                added = []
+                for k, e in data.items():
+                    it = by_key.get(k)
+                    if it is None:
+                        it = DictItem(k, e)
+                        by_key[k] = it
+                        added.append(it)
+                    else:
+                        it.entry = e          # refresh in place (count/srs/etc.)
+                for it in added:
+                    dict_store.append(it)
+                if dict_sorter is not None:
+                    dict_sorter.changed(Gtk.SorterChange.DIFFERENT)
+                if dict_filter is not None:
+                    dict_filter.changed(Gtk.FilterChange.DIFFERENT)
             if empty_label is not None:
-                empty_label.set_visible(not items)
+                empty_label.set_visible(not data)
             if stats_label is not None:
                 stats_label.set_text(_stats_text(stats_fn(), ui_language))
 
