@@ -18,6 +18,7 @@ import tempfile
 import threading
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from . import paths
 
@@ -127,6 +128,35 @@ def _play_wav(wav: bytes) -> None:
             os.unlink(path)
         except OSError:
             pass
+
+
+_SOUNDS_DIR = Path(__file__).resolve().parent.parent / "sounds"
+
+
+def _play_file(path) -> None:
+    """Play an existing audio file through the first available player."""
+    player = next((p for p in _AUDIO_PLAYERS if shutil.which(p)), None)
+    if not player:
+        return
+    if player == "ffplay":
+        argv = ["ffplay", "-autoexit", "-nodisp", "-loglevel", "quiet", str(path)]
+    elif player == "aplay":
+        argv = ["aplay", "-q", str(path)]
+    else:  # pw-play / paplay
+        argv = [player, str(path)]
+    subprocess.run(argv, stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def play_sound(name: str, cfg: dict | None = None) -> None:
+    """Play a bundled sound effect (``bin/sounds/<name>.wav``), non-blocking.
+    Gated by ``cfg['sfx']`` (default on). Best-effort — never raises."""
+    if cfg is not None and not cfg.get("sfx", True):
+        return
+    path = _SOUNDS_DIR / f"{name}.wav"
+    if not path.exists():
+        return
+    threading.Thread(target=lambda: _play_file(path), daemon=True).start()
 
 
 def speak(text: str, cfg: dict, block: bool = False) -> None:

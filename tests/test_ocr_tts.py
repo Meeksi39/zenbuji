@@ -169,6 +169,43 @@ def test_play_wav_no_player_is_noop(monkeypatch):
     assert calls == []
 
 
+# --- play_sound: bundled SFX, gated on cfg["sfx"] -------------------------- #
+class _SyncThread:
+    """Run the thread target inline so the test can observe its effect."""
+    def __init__(self, target=None, daemon=None):
+        self._target = target
+
+    def start(self):
+        if self._target:
+            self._target()
+
+
+def test_play_sound_respects_sfx_off(monkeypatch):
+    spawned = []
+    monkeypatch.setattr(zenbuji.tts.threading, "Thread",
+                        lambda *a, **k: spawned.append(k) or _SyncThread())
+    zenbuji.tts.play_sound("correct", {"sfx": False})
+    assert spawned == []  # gated off — never even spawns the player thread
+
+
+def test_play_sound_plays_when_enabled(monkeypatch):
+    played = []
+    monkeypatch.setattr(zenbuji.tts, "_play_file", lambda p: played.append(p))
+    monkeypatch.setattr(zenbuji.tts.threading, "Thread",
+                        lambda target=None, daemon=None: _SyncThread(target=target))
+    zenbuji.tts.play_sound("correct", {"sfx": True})
+    assert played and played[0].name == "correct.wav"
+
+
+def test_play_sound_missing_file_is_noop(monkeypatch):
+    played = []
+    monkeypatch.setattr(zenbuji.tts, "_play_file", lambda p: played.append(p))
+    monkeypatch.setattr(zenbuji.tts.threading, "Thread",
+                        lambda target=None, daemon=None: _SyncThread(target=target))
+    zenbuji.tts.play_sound("nope-not-a-sound", {"sfx": True})
+    assert played == []  # unknown sound name — nothing to play
+
+
 # --- phrase_speaker: render once, replay many (the practice drill) ---------- #
 def test_phrase_speaker_synthesizes_once_then_replays(monkeypatch):
     synth, played = [], []

@@ -220,26 +220,6 @@ def _answer_col(width=300, spacing=12):
     return col
 
 
-_SOUND_CTX = None
-
-
-def _play_correct_sound():
-    """Play the freedesktop 'bell' chime via GSound (no-op if unavailable)."""
-    global _SOUND_CTX
-    if _SOUND_CTX is False:
-        return
-    try:
-        if _SOUND_CTX is None:
-            gi.require_version("GSound", "1.0")
-            from gi.repository import GSound
-            ctx = GSound.Context()
-            ctx.init()
-            _SOUND_CTX = ctx
-        _SOUND_CTX.play_simple({"event.id": "bell"}, None)
-    except Exception:  # noqa: BLE001  (no sound server / GSound missing)
-        _SOUND_CTX = False
-
-
 def _resolve_xkb_engine(bus, gnome_id):
     """Map a GNOME xkb source id (e.g. ``de`` / ``de+nodeadkeys``) to its IBus
     engine name (e.g. ``xkb:de::deu``)."""
@@ -334,7 +314,7 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                   ui_language="en", grade_fn, review_fn, speak_fn=None,
                   auto_speak=False, greeting=True, drill_repeats=5,
                   match_reading_fn=None, speak_phrase_fn=None,
-                  log_time_fn=None) -> int:
+                  sfx_fn=None, log_time_fn=None) -> int:
     def t(key):
         e = LEARN_STRINGS.get(key, {})
         return e.get(ui_language) or e.get("en") or key
@@ -591,6 +571,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
             # actually matched, otherwise "Missed" is the primary/default button.
             reading_ok = bool(res["reading_ok"])
             correct_reading = res["correct_reading"]
+            if sfx_fn:
+                sfx_fn("correct" if reading_ok else "error")
             clear_phase()
 
             # A missed reading with the drill on splits into two columns — the
@@ -795,13 +777,20 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
                         n=progress["n"], total=drill_repeats))
                     entry.set_text("")
                     if progress["n"] >= drill_repeats:
+                        # Drill cleared — the slash caps it off.
+                        if sfx_fn:
+                            sfx_fn("sword")
                         finalize(cur, False)
                         return
+                    if sfx_fn:
+                        sfx_fn("correct")
                     entry.grab_focus()
                 else:
                     # Slipped: flash the counter, reveal the reading again with
                     # this attempt's mistakes in accent (right kana stay plain),
                     # clear the box, and keep focus. No increment.
+                    if sfx_fn:
+                        sfx_fn("error")
                     counter.add_css_class("zenbuji-wrong")
                     if reveal_reading is not None:
                         reveal_reading.remove_css_class("zenbuji-blur")
@@ -850,8 +839,8 @@ def show_learning(*, cards, show_translation=True, languages=("en", "de"),
 
             if correct:
                 # Celebrate: ribbon flies in, holds a beat, flies out, next word.
+                # (The pass/fail chime already fired at grade time.)
                 state["score"] += 1
-                _play_correct_sound()
                 banner = _show_banner(leveled_up)
 
                 def _out():
