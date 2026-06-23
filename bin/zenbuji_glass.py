@@ -49,9 +49,9 @@ window.zenbuji-window { background-color: transparent; box-shadow: none; }
     color: #1c1c1e;
     border: 1px solid rgba(0, 0, 0, 0.22);
 }
-/* Dictionary window drops the card's horizontal padding so the scroll/list
-   spans edge to edge; its other rows are re-inset in code. */
-.zenbuji-card.zenbuji-dict-window { padding-left: 0; padding-right: 0; }
+/* A window that drops the card's horizontal padding so its scroll/list spans
+   edge to edge; the other rows are re-inset in code (dict + game). */
+.zenbuji-card.zenbuji-flush-window { padding-left: 0; padding-right: 0; }
 
 .zenbuji-hairline { min-height: 1px; background-color: alpha(currentColor, 0.12); }
 .zenbuji-add-form { padding: 6px 2px 10px 2px; }
