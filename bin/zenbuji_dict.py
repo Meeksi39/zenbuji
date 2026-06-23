@@ -370,12 +370,13 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         # half-scrolled row is cut right at the line.
         list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         list_box.set_vexpand(True)
+        list_box.set_hexpand(True)
         hairline = Gtk.Box()
         hairline.add_css_class("zenbuji-hairline")
         list_box.append(hairline)
         card.append(list_box)
 
-        scroll = Gtk.ScrolledWindow(vexpand=True)
+        scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
         scroll.add_css_class("zenbuji-dict-scroll")
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_propagate_natural_width(False)
@@ -405,6 +406,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         gridview = Gtk.GridView(model=Gtk.NoSelection(model=filter_model),
                                 factory=factory)
         gridview.add_css_class("zenbuji-dict-list")
+        gridview.set_hexpand(True)
         gridview.set_min_columns(1)
         gridview.set_max_columns(4)
         gridview.set_enable_rubberband(False)
@@ -499,6 +501,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             trans = entry.get("translations", {})
             holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             holder.add_css_class("zenbuji-dict-card")   # grid cell card
+            holder.set_hexpand(True)                    # fill the column width
 
             def build_view():
                 outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
