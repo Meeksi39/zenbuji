@@ -75,10 +75,11 @@ def _read_busy(path, max_age=120.0):
 
 
 def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
-              speak_fn=None, shortcuts=None, busy_path=None,
+              speak_fn=None, sfx_fn=None, shortcuts=None, busy_path=None,
               watch_path=None) -> int:
     """Show the game-helper overlay. `load_fn()` returns the dictionary; a
-    background add rewriting `watch_path` triggers the capture celebration."""
+    background add rewriting `watch_path` triggers the capture celebration.
+    `sfx_fn(name)` plays a sound effect (the sword on a new-word capture)."""
     t = make_tr(GAME_STRINGS, ui_language)
     lang_names = LANG_NAMES_BY_UI.get(ui_language, LANG_NAMES_BY_UI["en"])
     state = {"monitors": [], "seen": {}, "primed": False, "anims": [],
@@ -299,7 +300,8 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
             hero_reading.set_margin_start(v)
 
         def _celebrate(new_entry, any_new):
-            state["session"] += 1
+            # Points: a brand-new word is worth 500, an already-known one 100.
+            state["session"] += 500 if any_new else 100
             combo_lbl.set_text(f"★ {state['session']}")
             _pulse(combo_lbl)
             state["seq_token"] += 1
@@ -341,6 +343,9 @@ def show_game(*, ui_language="en", languages=("en", "de"), load_fn,
             def _banner_in():
                 if alive():
                     _ribbon_slide_in(any_new)
+                    # The slash lands as the 新規ゲット ribbon flies in (new only).
+                    if any_new and sfx_fn:
+                        sfx_fn("sword")
                 return GLib.SOURCE_REMOVE
 
             GLib.timeout_add(out_delay, _word_in)

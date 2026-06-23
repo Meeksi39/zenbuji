@@ -92,6 +92,8 @@ DEFAULT_CONFIG = {
     # if it is reachable, else the system voice), "voicevox", "system"
     # (spd-say/espeak-ng), "command" (run tts_command), or "off".
     "tts": False,
+    # Play the game/quiz sound effects (correct/error/sword). On by default.
+    "sfx": True,
     # Automatically read the reading aloud after a popup lookup (Super+J etc.).
     "tts_on_lookup": False,
     # After a background OCR add (--speak), also read the English translation

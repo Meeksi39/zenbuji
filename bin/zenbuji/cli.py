@@ -162,6 +162,9 @@ def cmd_config(args, cfg) -> int:
     if args.tts:
         cfg["tts"] = args.tts == "on"
         changed = True
+    if args.sfx:
+        cfg["sfx"] = args.sfx == "on"
+        changed = True
     if args.tts_on_lookup:
         cfg["tts_on_lookup"] = args.tts_on_lookup == "on"
         changed = True
@@ -659,6 +662,8 @@ def main(argv=None) -> int:
                        help="hide katakana-only words from the captured 'new words' list")
         p.add_argument("--tts", choices=["on", "off"],
                        help="read words aloud after an OCR/silent add by default")
+        p.add_argument("--sfx", choices=["on", "off"],
+                       help="play the game/quiz sound effects (correct/error/sword)")
         p.add_argument("--tts-on-lookup", dest="tts_on_lookup",
                        choices=["on", "off"],
                        help="read the reading aloud automatically after a popup lookup")
@@ -1044,6 +1049,7 @@ def launch_game(cfg: dict) -> int:
         languages=cfg.get("languages", ["en", "de"]),
         load_fn=srs.dict_with_srs,
         speak_fn=lambda t: tts.speak(t, cfg),
+        sfx_fn=lambda name: tts.play_sound(name, cfg),
         shortcuts=shortcuts_info(cfg.get("ui_language", "en")),
         busy_path=paths.BUSY_PATH,
         watch_path=paths.DICT_PATH,   # live-refresh the overlay as words are added
@@ -1220,6 +1226,7 @@ def launch_learning(cfg: dict) -> int:
         drill_repeats=drill,
         match_reading_fn=grade.reading_matches,
         speak_phrase_fn=lambda t: tts.phrase_speaker(t, cfg),
+        sfx_fn=lambda name: tts.play_sound(name, cfg),
         # Cap a single card at 5 min so an afk pause can't balloon the total.
         log_time_fn=lambda ms: store.add_study_time(min(ms, 300000)),
     )
