@@ -170,3 +170,15 @@ def test_review_window(gui):
 
 def test_review_window_empty(gui):
     _launch_ok(gui.env, ["review"])
+
+
+def test_dict_window_large(gui):
+    # ~300 entries exercises the virtualized ListView build/splice path.
+    big = {}
+    for i in range(300):
+        w = f"語{i}"
+        big[w] = {"text": w, "reading": "ご", "translations": {"en": f"word{i}"},
+                  "count": 1, "first_seen": "2026-01-01T00:00:00",
+                  "last_seen": f"2026-01-01T00:{i % 60:02d}:00"}
+    _seed(gui, "dictionary.json", big)
+    _launch_ok(gui.env, ["dict"])

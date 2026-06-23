@@ -23,7 +23,19 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, GObject, Gtk  # noqa: E402
+
+
+class DictItem(GObject.Object):
+    """Wraps one dictionary entry for the virtualized list model. Holds the live
+    entry dict (mutated in place for the exclude flag) and its key (surface word).
+    """
+    __gtype_name__ = "ZenbujiDictItem"
+
+    def __init__(self, key, entry):
+        super().__init__()
+        self.key = key
+        self.entry = entry
 
 try:
     from zenbuji_glass import fmt_ms, make_footer, make_glass_window
@@ -181,9 +193,9 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
     status_names = STATUS_NAMES.get(ui_language, STATUS_NAMES["en"])
     # `editing` pauses auto-refresh so an external add can't wipe a half-typed
     # correction; the deferred refresh runs when the edit closes.
-    state = {"editing": False, "pending": False, "token": 0, "monitors": [],
-             "seen": {}, "primed": False, "anims": [],
-             "session": 0, "quip_mode": "idle", "banner_token": 0,
+    state = {"editing": False, "editing_key": None, "pending": False,
+             "token": 0, "monitors": [], "seen": {}, "primed": False,
+             "anims": [], "session": 0, "quip_mode": "idle", "banner_token": 0,
              "seq_token": 0}
     # NON_UNIQUE so this can run alongside an open popup (same app-id, kept for
     # the Blur My Shell whitelist).
@@ -406,7 +418,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     except Exception:  # noqa: BLE001
                         pass
                     close_add_form()
-                    rebuild()
+                    refresh_list()
 
                 btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                                homogeneous=True)
@@ -454,11 +466,54 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
         # Don't let a long entry stretch the window; rows wrap instead.
         scroll.set_propagate_natural_width(False)
         scroll.set_min_content_width(380)
-        listbox = Gtk.ListBox()
-        listbox.add_css_class("zenbuji-dict-list")
-        listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        scroll.set_child(listbox)
-        card.append(scroll)
+        # The dictionary grows without bound, so the non-game window virtualizes
+        # the list (Gtk.ListView realizes only the visible rows). Game mode keeps
+        # the plain ListBox — it shows a handful of rows with tight animations.
+        listbox = listview = dict_store = empty_label = None
+        if game_mode:
+            listbox = Gtk.ListBox()
+            listbox.add_css_class("zenbuji-dict-list")
+            listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+            scroll.set_child(listbox)
+            card.append(scroll)
+        else:
+            dict_store = Gio.ListStore(item_type=DictItem)
+
+            def _cmp_last_seen(a, b, _u=None):
+                la, lb = a.entry.get("last_seen", "") or "", b.entry.get("last_seen", "") or ""
+                return (lb > la) - (lb < la)        # newest first
+
+            def _match(item, _u=None):
+                needle = search.get_text().strip().lower()
+                if not needle:
+                    return True
+                e = item.entry
+                hay = " ".join([e.get("text", ""), e.get("reading", ""),
+                                *e.get("translations", {}).values()]).lower()
+                return needle in hay
+
+            dict_filter = Gtk.CustomFilter.new(_match)
+            sorted_model = Gtk.SortListModel(
+                model=dict_store, sorter=Gtk.CustomSorter.new(_cmp_last_seen))
+            filter_model = Gtk.FilterListModel(model=sorted_model, filter=dict_filter)
+            factory = Gtk.SignalListItemFactory()
+            factory.connect(
+                "bind", lambda _f, li: li.set_child(build_dict_item(li.get_item())))
+            factory.connect("unbind", lambda _f, li: li.set_child(None))
+            listview = Gtk.ListView(model=Gtk.NoSelection(model=filter_model),
+                                    factory=factory)
+            listview.add_css_class("zenbuji-dict-list")
+            listview.set_single_click_activate(False)
+            scroll.set_child(listview)
+            card.append(scroll)
+            # ListView has no placeholder; an empty-state label sits just below
+            # the list and is toggled in repopulate().
+            empty_label = Gtk.Label(label=t("empty"), xalign=0.5, wrap=True)
+            empty_label.add_css_class("zenbuji-note")
+            empty_label.set_margin_top(18)
+            empty_label.set_halign(Gtk.Align.CENTER)
+            empty_label.set_visible(False)
+            card.append(empty_label)
 
         if game_footer is not None:
             card.append(game_footer)
@@ -474,72 +529,85 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             footer.append(clear_btn)
             card.append(footer)
 
-        empty_label = Gtk.Label(label=t("empty"), xalign=0)
-        empty_label.add_css_class("zenbuji-note")
-        # Shown automatically by GtkListBox whenever there are no rows.
-        listbox.set_placeholder(empty_label)
-
         # --- Search filtering --------------------------------------------- //
-        def filter_func(row):
-            needle = search.get_text().strip().lower()
-            return needle in getattr(row, "_haystack", "") if needle else True
+        if game_mode:
+            game_empty = Gtk.Label(label=t("empty"), xalign=0)
+            game_empty.add_css_class("zenbuji-note")
+            listbox.set_placeholder(game_empty)   # auto-shown when no rows
 
-        listbox.set_filter_func(filter_func)
-        search.connect("search-changed", lambda _s: listbox.invalidate_filter())
+            def filter_func(row):
+                needle = search.get_text().strip().lower()
+                return needle in getattr(row, "_haystack", "") if needle else True
+
+            listbox.set_filter_func(filter_func)
+            search.connect("search-changed",
+                           lambda _s: listbox.invalidate_filter())
+        else:
+            search.connect(
+                "search-changed",
+                lambda _s: dict_filter.changed(Gtk.FilterChange.DIFFERENT))
 
         def _langs_in(trans):
             return [*languages, *[l for l in trans if l not in languages]]
 
-        def make_row(entry):
+        def _icon_btn(icon, key, cb, danger=False):
+            b = Gtk.Button(icon_name=icon)
+            b.add_css_class("flat")
+            b.add_css_class("zenbuji-icon-danger" if danger else "zenbuji-icon")
+            b.set_valign(Gtk.Align.CENTER)
+            b.set_tooltip_text(t(key))
+            b.connect("clicked", cb)
+            return b
+
+        def make_game_row(entry):
+            # Trimmed read-only card for the game overlay (plain ListBox path).
             text = entry.get("text", "")
             reading = entry.get("reading", "")
             trans = entry.get("translations", {})
             row = Gtk.ListBoxRow()
-            row._haystack = " ".join([text, reading, *trans.values()]).lower()
+            outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            outer.set_margin_top(8)
+            outer.set_margin_bottom(8)
+            outer.set_margin_start(6)
+            outer.set_margin_end(6)
+            top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            jp = Gtk.Label(label=text, xalign=0, wrap=True, selectable=True)
+            jp.add_css_class("zenbuji-dict-jp")
+            jp.set_hexpand(True)
+            jp.set_max_width_chars(26)
+            top.append(jp)
+            if speak_fn is not None:
+                top.append(_icon_btn("audio-volume-high-symbolic", "read_aloud",
+                                     lambda _b, r=(reading or text): speak_fn(r)))
+            outer.append(top)
+            if reading and reading != text:
+                rl = Gtk.Label(label=reading, xalign=0, wrap=True)
+                rl.add_css_class("zenbuji-reading")
+                rl.set_max_width_chars(36)
+                outer.append(rl)
+            for lang in _langs_in(trans):
+                val = trans.get(lang)
+                if not val:
+                    continue
+                line = Gtk.Label(
+                    label=f"{lang_names.get(lang, lang.upper())}:  {val}",
+                    xalign=0, wrap=True, selectable=True)
+                line.add_css_class("zenbuji-translation")
+                line.set_max_width_chars(36)
+                outer.append(line)
+            row.set_child(outer)
+            return row
 
-            def _icon_btn(icon, key, cb, danger=False):
-                b = Gtk.Button(icon_name=icon)
-                b.add_css_class("flat")
-                b.add_css_class("zenbuji-icon-danger" if danger else "zenbuji-icon")
-                b.set_valign(Gtk.Align.CENTER)
-                b.set_tooltip_text(t(key))
-                b.connect("clicked", cb)
-                return b
-
-            if game_mode:
-                # Trimmed read-only card: word + reading + translations + speak.
-                outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-                outer.set_margin_top(8)
-                outer.set_margin_bottom(8)
-                outer.set_margin_start(6)
-                outer.set_margin_end(6)
-                top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-                jp = Gtk.Label(label=text, xalign=0, wrap=True, selectable=True)
-                jp.add_css_class("zenbuji-dict-jp")
-                jp.set_hexpand(True)
-                jp.set_max_width_chars(26)
-                top.append(jp)
-                if speak_fn is not None:
-                    top.append(_icon_btn("audio-volume-high-symbolic", "read_aloud",
-                                         lambda _b, r=(reading or text): speak_fn(r)))
-                outer.append(top)
-                if reading and reading != text:
-                    rl = Gtk.Label(label=reading, xalign=0, wrap=True)
-                    rl.add_css_class("zenbuji-reading")
-                    rl.set_max_width_chars(36)
-                    outer.append(rl)
-                for lang in _langs_in(trans):
-                    val = trans.get(lang)
-                    if not val:
-                        continue
-                    line = Gtk.Label(
-                        label=f"{lang_names.get(lang, lang.upper())}:  {val}",
-                        xalign=0, wrap=True, selectable=True)
-                    line.add_css_class("zenbuji-translation")
-                    line.set_max_width_chars(36)
-                    outer.append(line)
-                row.set_child(outer)
-                return row
+        def build_dict_item(item):
+            # The full editable row for the virtualized list. Rebuilt on bind
+            # (only for visible rows), so handlers close over the current item
+            # with no stale state. The view<->edit swap lives in `holder`, keyed
+            # on state["editing_key"] so an edited row re-enters edit on rebind.
+            entry = item.entry
+            text = item.key
+            reading = entry.get("reading", "")
+            trans = entry.get("translations", {})
+            holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
             def build_view():
                 outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -708,20 +776,31 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 outer.append(btns)
                 return outer
 
+            def _swap(child):
+                old = holder.get_first_child()
+                if old is not None:
+                    holder.remove(old)
+                holder.append(child)
+
             def show_view():
-                state["editing"] = False
-                row.set_child(build_view())
-                _run_pending()
+                _swap(build_view())
 
             def show_edit():
                 state["editing"] = True
-                row.set_child(build_edit())
+                state["editing_key"] = item.key
+                _swap(build_edit())
 
             def cancel_edit():
+                state["editing"] = False
+                state["editing_key"] = None
+                _run_pending()
                 show_view()
 
-            row.set_child(build_view())
-            return row
+            if state.get("editing_key") == item.key:
+                show_edit()
+            else:
+                show_view()
+            return holder
 
         def _animate_in(row):
             row.set_opacity(0.0)
@@ -759,7 +838,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             fresh = []
             for e in list_entries:
                 txt = e.get("text", "")
-                row = make_row(e)
+                row = make_game_row(e)
                 listbox.append(row)
                 if state["primed"] and prev.get(txt) != e.get("last_seen", ""):
                     fresh.append(row)
@@ -777,12 +856,27 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 stats_label.set_text(_stats_text(stats_fn(), ui_language))
             listbox.invalidate_filter()
 
+        def repopulate():
+            # Virtualized path: rebuild only the tiny model (DictItem GObjects);
+            # the ListView realizes just the visible rows. No widget churn.
+            data = load_fn()
+            items = [DictItem(k, e) for k, e in data.items()]
+            dict_store.splice(0, dict_store.get_n_items(), items)
+            if empty_label is not None:
+                empty_label.set_visible(not items)
+            if stats_label is not None:
+                stats_label.set_text(_stats_text(stats_fn(), ui_language))
+
+        def refresh_list():
+            rebuild() if game_mode else repopulate()
+
         def do_delete(text):
             delete_fn(text)
-            rebuild()
+            refresh_list()
 
         def do_save(text, translations, reading=None, original=None):
             state["editing"] = False
+            state["editing_key"] = None
             try:
                 if save_fn is not None:
                     save_fn(text, reading or "", translations, original=original)
@@ -791,15 +885,15 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             except Exception:  # noqa: BLE001
                 pass
             state["pending"] = False
-            rebuild()
+            refresh_list()
 
         def _run_pending():
             if state["pending"] and not state["editing"]:
                 state["pending"] = False
-                rebuild()
+                refresh_list()
 
         def schedule_rebuild():
-            # Debounce a burst of file-monitor events into one rebuild, and hold
+            # Debounce a burst of file-monitor events into one refresh, and hold
             # off entirely while the user is editing a row.
             if state["editing"]:
                 state["pending"] = True
@@ -808,8 +902,10 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             tok = state["token"]
 
             def fire():
+                if not win.get_mapped():
+                    return GLib.SOURCE_REMOVE
                 if tok == state["token"] and not state["editing"]:
-                    rebuild()
+                    refresh_list()
                 return GLib.SOURCE_REMOVE
 
             GLib.timeout_add(300, fire)
@@ -839,6 +935,8 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
             last = {"m": _mtime()}
 
             def poll():
+                if not win.get_mapped():
+                    return GLib.SOURCE_REMOVE
                 m = _mtime()
                 if m != last["m"]:
                     last["m"] = m
@@ -1015,13 +1113,14 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                     refresh_fn(text, targets)
                 except Exception:  # noqa: BLE001
                     pass
-                GLib.idle_add(rebuild)
+                GLib.idle_add(lambda: (refresh_list() if win.get_mapped() else None,
+                                       GLib.SOURCE_REMOVE)[1])
 
             threading.Thread(target=work, daemon=True).start()
 
         def do_clear(_b):
             clear_fn()
-            rebuild()
+            refresh_list()
 
         if not game_mode:
             clear_btn.connect("clicked", do_clear)
@@ -1049,7 +1148,7 @@ def show_dictionary(*, ui_language="en", languages=("en", "de"),
                 quota_label.set_visible(False)
             return GLib.SOURCE_REMOVE
 
-        rebuild()
+        refresh_list()
         win.present()
         refresh_quota()
         setup_watch()
