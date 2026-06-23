@@ -831,8 +831,10 @@ def main(argv=None) -> int:
         return cmd_captured(p.parse_args(rest), cfg)
 
     if command == "native-host":
-        argparse.ArgumentParser(prog="zenbuji native-host",
-                                add_help=False).parse_args(rest)
+        # The browser launches the host with extra argv — Firefox passes the
+        # path to the app manifest (and Chromium the extension id). We don't use
+        # them, so ignore `rest` rather than letting argparse reject it (which
+        # would kill the host before it reads a single message).
         return cmd_native_host(cfg)
 
     # Shared options for the text commands.

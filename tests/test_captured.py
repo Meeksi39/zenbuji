@@ -118,6 +118,23 @@ def test_nm_read_malformed_json_returns_empty_dict():
     assert zenbuji.cli._nm_read(io.BytesIO(raw)) == {}
 
 
+def test_native_host_ignores_browser_args(monkeypatch, tmp_path):
+    # Firefox launches the host as `native-host <manifest-path> <ext-id>`; those
+    # extra argv must NOT make the dispatcher's argparse kill the host before it
+    # reads a message (regression: it used to call parse_args and SystemExit).
+    monkeypatch.setattr(zenbuji.paths, "CONFIG_PATH", tmp_path / "none.json")
+    called = {}
+
+    def fake_native_host(cfg):
+        called["ok"] = True
+        return 0
+
+    monkeypatch.setattr(zenbuji.cli, "cmd_native_host", fake_native_host)
+    rc = zenbuji.cli.main(
+        ["native-host", "/path/to/app.json", "zenbuji-capture@meeksi39"])
+    assert rc == 0 and called.get("ok")
+
+
 def test_cmd_native_host_stages_a_message(store, monkeypatch):
     monkeypatch.setattr(zenbuji.lang, "content_words",
                         lambda line: [("走る", "はしる", "動詞")])

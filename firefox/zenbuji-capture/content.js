@@ -1,10 +1,10 @@
-// zenbuji caption capture — content script.
+// zenbuji caption capture - content script.
 //
 // Scrapes the on-screen YouTube caption text and forwards each new line to the
 // background page, which batches them and ships them to the native host. Capture
 // is opt-in (toggled from the toolbar popup) and only runs while it's enabled.
 //
-// The caption DOM is the one fragile bit — if YouTube renames these classes, fix
+// The caption DOM is the one fragile bit - if YouTube renames these classes, fix
 // them here (and only here). See firefox/README.md.
 
 const SEL_CONTAINER = ".ytp-caption-window-container";
@@ -43,12 +43,12 @@ function emit(line) {
 
 function onMutate() {
   emit(currentCaptionText());
-  // Captions clearly on but our selector never matches? Say so once — an early
+  // Captions clearly on but our selector never matches? Say so once - an early
   // signal that YouTube changed the caption DOM.
   if (enabled && !sawSegment && !warnedEmpty) {
     warnedEmpty = true;
     console.warn(
-      "[zenbuji] capturing, but no caption segments matched yet — is CC on? " +
+      "[zenbuji] capturing, but no caption segments matched yet - is CC on? " +
         "(if it is, the YouTube caption selector may have changed)"
     );
   }
@@ -81,7 +81,7 @@ browser.runtime.onMessage.addListener((msg) => {
   if (msg && msg.kind === "setEnabled") setEnabled(!!msg.enabled);
 });
 
-// Moving between videos keeps this script alive (YouTube is a SPA) — reset the
+// Moving between videos keeps this script alive (YouTube is a SPA) - reset the
 // dedup + diagnostics so the next video starts clean.
 window.addEventListener("yt-navigate-finish", () => {
   lastLine = "";
