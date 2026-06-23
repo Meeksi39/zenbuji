@@ -50,8 +50,9 @@ basically the toolkit I kept wishing for while immersing:
 - Furigana comes from real morphological analysis ([fugashi] + [unidic-lite]), so compounds and irregular readings come out right instead of a character-by-character guess that trips on 今日.
 - Shows English and German side by side. Offline by default with [Argos Translate]; add a free [DeepL] key when you want the sharper output.
 - OCR for text you can't select — subtitles burned into a video, a game UI, manga raws (a total lifesaver for VNs). Draw a box and it reads that too.
-- Caches every DeepL lookup into a searchable word list, so repeats cost no quota and your vocab piles up on its own.
-- A spaced-repetition quiz turns those saved words into recall practice, with levels as a word moves New → Learning → Young → Mature. No separate Anki deck to keep up.
+- Watch YouTube with the companion Firefox extension and it quietly notes the words going by in the captions; next time you open the dictionary it asks which new ones you want to keep.
+- Caches every DeepL lookup into a searchable word list — a fast, scrolling card grid you can sort and filter — so repeats cost no quota and your vocab piles up on its own.
+- A spaced-repetition quiz turns those saved words into recall practice, with levels as a word moves New → Learning → Young → Mature, and a retype drill that burns in the readings you keep missing. No separate Anki deck to keep up.
 - A statistics window for the level breakdown, day streak, accuracy, and a 14-day activity strip; each dictionary entry shows its current level too.
 - Read-aloud on every reading, with [VOICEVOX] so it's an actual voice (ずんだもん by default 💚), not cursed robo-TTS — falls back to the system voice if you skip the setup.
 - The popup is a frosted-glass card that follows your accent color and light/dark theme.
@@ -149,10 +150,13 @@ is faster and protects your free-tier quota, and over time it adds up to a perso
 list. Each entry tracks how often you've looked it up and when you first and last saw it.
 
 Browse it in the dictionary window (the dictionary button in the popup, the top-bar menu, or
-`zenbuji dict`): search, delete an entry, clear all, re-translate, or pop a word back open in
-the lookup popup. It shows your remaining DeepL quota when a key is set. Once a word enters
-practice, its row also shows its SRS level badge, next-due date, and correct/wrong tally, and
-a Statistics button opens the full learning overview.
+`zenbuji dict`): a card grid that fans out into more columns as you widen the window, with a
+search box, a sort dropdown (newest, oldest, most-looked-up, A→Z), and filter tabs for All /
+Review / Untranslated / Excluded. On each card you can delete an entry, clear all, re-translate,
+or pop a word back open in the lookup popup. It shows your remaining DeepL quota when a key is
+set. Once a word enters practice, its card also shows its SRS level badge, next-due date, and
+correct/wrong tally, and a Statistics button opens the full learning overview. The list is
+virtualized, so it stays smooth even at tens of thousands of words.
 
 The window refreshes live, so words you grab with the background OCR-add shortcut
 (`Super+Shift+K`) pop in while it's open on a second monitor — handy mid-game. You can fix a
@@ -160,8 +164,34 @@ translation in place (the edit button on a row), and exclude a word from practic
 exclude toggle) when you don't want it in the quiz.
 
 <div align="center">
-<img src="docs/dictionary.png" alt="zenbuji dictionary window" width="360">
+<img src="docs/dictionary.png" alt="zenbuji dictionary window" width="620">
 </div>
+
+### Caption capture (YouTube → your word list)
+
+So much immersion happens on YouTube, and I didn't want to pause and re-type every word I half-knew.
+There's a little companion **Firefox extension** that rides along on YouTube and quietly logs the
+words scrolling past in the captions — it doesn't translate or interrupt anything, just stashes them.
+Hit *Start capturing* once and it ticks along in the background (it'll tell you how many lines it's
+sent this session).
+
+<div align="center">
+<img src="docs/firefox-capture.png" alt="zenbuji caption-capture Firefox extension popup" width="280">
+</div>
+
+Then, next time you open the dictionary, a review window pops up: *"new words found in the video."*
+You skim the new ones (each shows the line it appeared in for context), tap ＋ to keep the ones you
+care about or ⊘ to ignore the rest — or *Add all* / *Ignore all* in one go. Kept words go straight
+into your dictionary and practice; ignored ones never bug you again.
+
+<div align="center">
+<img src="docs/caption-capture.png" alt="new words found in a video — caption review prompt" width="360">
+</div>
+
+It filters out the obvious noise (katakana-only loanwords are optionally hidden, particles and junk
+dropped) so the list is words actually worth learning. The extension just feeds the words to the
+zenbuji backend over native messaging — works in regular Firefox and Flatpak Firefox alike. Grab it
+from `firefox/zenbuji-capture/` (load it as a temporary add-on, or zip + install).
 
 ### Practice (spaced repetition)
 
@@ -173,9 +203,9 @@ against EN or DE, with a self-grade override (✓/✗) for when your wording was
 
 <div align="center">
 
-| Type the reading… | …and get graded |
-|:---:|:---:|
-| <img src="docs/practice-question.png" alt="practice quiz prompt" width="320"> | <img src="docs/practice-answer.png" alt="practice quiz graded answer" width="320"> |
+| Type the reading… | …get graded, then drill it | …retype from memory |
+|:---:|:---:|:---:|
+| <img src="docs/practice-question.png" alt="practice quiz prompt" width="280"> | <img src="docs/practice-answer.png" alt="practice quiz graded answer with retype drill" width="280"> | <img src="docs/practice-drill.png" alt="retype drill — reading blurred so it's from memory" width="280"> |
 
 </div>
 
@@ -184,10 +214,17 @@ next review drifts further out (New → Learning → Young → Mature), whiff it
 comes right back to haunt you. Each round pulls the most-due/new words (10 by default) and
 ends with a little summary.
 
-When the answer's revealed, the Got it / Missed default follows your reading — match it and
-"Got it" is pre-selected, miss it and "Missed" is. The correct reading is read aloud too
-(right or wrong) if you've got auto-read on. And every round opens with a random casual
-greeting from ずんだもん — cute, silly, or a little bit cursed — and waves you off with a
+**Miss a reading and you don't just move on** — there's a retype drill that burns it in (on by
+default; `--learn-drill-repeats`). The correct reading shows, you retype it a few times, and each
+correct retype is read aloud and blurs the furigana out so the rest are from memory; slip and it
+flashes back clearly. Clear the whole drill and a sword-slash + a "Drill done!!" ribbon flies in to
+cap it off. (No drill? You get the classic Got it / Missed buttons instead, with the default
+following your reading, and an "I was right" escape for an over-strict grade.)
+
+Little **sound effects** mark how it's going — a soft chime when you nail a reading, a buzz when you
+miss, the slash on a finished drill (`zenbuji config --sfx off` to silence them). The correct reading
+is read aloud too (right or wrong) if you've got auto-read on. And every round opens with a random
+casual greeting from ずんだもん — cute, silly, or a little bit cursed — and waves you off with a
 matching goodbye at the end. Switch it off if it's not your thing.
 
 Each card shows its current level as you go, and the end-of-round summary tells you how many
@@ -210,13 +247,20 @@ graph build up from your daily reviews (logged to `~/.local/share/zenbuji/activi
 `zenbuji game` (`Super+Shift+G`, or the top-bar menu) opens 漢字キャプチャー ("Kanji Capture").
 It's the same dictionary, just as a calmer overlay you can leave on a second monitor while you
 play — so you can grab a word out of a game without a popup yanking focus away from it. I gave
-it a little game-inspired look (a combo count of the words you've picked up this session, a
-friendly ずんだもん line, your add shortcuts, the live word list) because studying mid-game
-should feel a bit fun. The extension also keeps zenbuji off your fullscreen game's display.
+it a little game-inspired look because studying mid-game should feel a bit fun: a big-kanji hero
+card for the word you just grabbed, a running score, a friendly ずんだもん line, your add
+shortcuts, and a live grid of recent words (same cards as the dictionary, ribbon-tagged 新規 for a
+brand-new word or レベルアップ for one you've seen before). The extension also keeps zenbuji off
+your fullscreen game's display.
 
 <div align="center">
 <img src="docs/game-helper.png" alt="漢字キャプチャー — zenbuji's game-helper overlay" width="380">
 </div>
+
+Banking a word is a tiny hit of dopamine on purpose — a new word lands with a sword-slash, an
+energetic 新規ゲット！ shout from a punchy voice, and a ribbon flying in over the hero card. Score
+ticks up **+500 for a brand-new word, +100 for one you already knew**, so the count actually means
+something.
 
 Two silent, no-popup ways to bank a word while you play (both read it aloud, neither steals focus):
 
@@ -333,6 +377,8 @@ zenbuji config --translation-char-limit 200   # max characters per lookup
 zenbuji config --learn-show-translation off   # quiz reading AND translation
 zenbuji config --learn-on-login on      # open a practice round once a day on login
 zenbuji config --learn-greeting off     # turn off the random opening greeting
+zenbuji config --learn-drill-repeats 5  # retype a missed reading N times (0 = off)
+zenbuji config --sfx off                # mute the quiz/game sound effects
 zenbuji config --tts-engine voicevox    # auto | voicevox | system | command | off
 zenbuji config --voicevox-speaker 3     # voice id (see: zenbuji voices)
 zenbuji config --tts-speed 0.9          # speaking rate, 1.0 = normal (0.5–2.0)
@@ -428,6 +474,7 @@ zenbuji stands on a whole pile of other people's hard work — go show them some
 - **[fugashi] + [unidic-lite]** — MeCab-powered morphological analysis, aka the reason the furigana is actually *correct* and not vibes-based.
 - **[Argos Translate]** — offline neural translation · **[DeepL]** — the optional online backend when you want it crisper.
 - **[manga-ocr]** — the Japanese-tuned OCR model that reads text right off your screen.
+- **[Springin' Sound Stock]** — the quiz/game sound effects (the chime, buzz, and sword-slash) come from their free sound-effect library. ありがとう！
 - **[Blur My Shell]** — supplies the real frosted-glass blur behind the popup.
 - **GTK 4 / libadwaita / PyGObject / GNOME Shell** — the toolkit and platform it all rides on. Plus `jaconv`, `speech-dispatcher` / `espeak-ng` for fallback TTS, and `podman` for running VOICEVOX.
 
@@ -442,6 +489,7 @@ mine to answer for though (´･ω･`)
 [unidic-lite]: https://github.com/polm/unidic-lite
 [Argos Translate]: https://github.com/argosopentech/argos-translate
 [manga-ocr]: https://github.com/kha-white/manga-ocr
+[Springin' Sound Stock]: https://www.springin.org/sound-stock/
 [DeepL]: https://www.deepl.com/pro-api
 [Blur My Shell]: https://extensions.gnome.org/extension/3193/blur-my-shell/
 [VOICEVOX]: https://voicevox.hiroshiba.jp/
